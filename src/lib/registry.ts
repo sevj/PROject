@@ -12,6 +12,8 @@ export type RegistryRow = {
   path: string;
   parentId: number | null;
   parentName: string | null;
+  /** Measured on the parent folder itself, so it counts the files outside any project. */
+  parentSizeBytes: number | null;
   kind: "project" | "folder";
   missing: boolean;
   stacks: string[];
@@ -108,8 +110,9 @@ function sumWeeks(rows: RegistryRow[]): number[] | null {
   return series[0].map((_, week) => series.reduce((sum, weeks) => sum + (weeks[week] ?? 0), 0));
 }
 
-function toGroup(parentId: number, name: string, rows: RegistryRow[]): ProjectGroup {
+function toGroup(parentId: number, name: string, rows: RegistryRow[], useFolderSize: boolean): ProjectGroup {
   const sizes = rows.flatMap((row) => row.sizeBytes ?? []);
+  const summed = sizes.length > 0 ? sizes.reduce((sum, size) => sum + size, 0) : null;
   const commits = rows.flatMap((row) => row.lastCommitAt ?? []);
   return {
     parentId,
@@ -117,7 +120,7 @@ function toGroup(parentId: number, name: string, rows: RegistryRow[]): ProjectGr
     rows,
     dirtyCount: rows.reduce((sum, row) => sum + (row.dirtyCount ?? 0), 0),
     running: rows.reduce((sum, row) => sum + runningCount(row), 0),
-    sizeBytes: sizes.length > 0 ? sizes.reduce((sum, size) => sum + size, 0) : null,
+    sizeBytes: (useFolderSize ? rows[0].parentSizeBytes : null) ?? summed,
     lastCommitAt: commits.length > 0 ? Math.max(...commits) : null,
     weeklyCommits: sumWeeks(rows),
   };
@@ -127,7 +130,7 @@ function toGroup(parentId: number, name: string, rows: RegistryRow[]): ProjectGr
  * Gathers the projects of a parent folder into one block, placed where its first
  * project would be: the order of `rows` decides, including inside the block.
  */
-export function groupRows(rows: RegistryRow[]): RegistryItem[] {
+export function groupRows(rows: RegistryRow[], { useFolderSize = true } = {}): RegistryItem[] {
   const children = new Map<number, RegistryRow[]>();
   for (const row of rows) {
     if (row.parentId !== null) children.set(row.parentId, [...(children.get(row.parentId) ?? []), row]);
@@ -142,7 +145,7 @@ export function groupRows(rows: RegistryRow[]): RegistryItem[] {
       placed.add(parentId);
       items.push({
         kind: "group",
-        group: toGroup(parentId, row.parentName ?? "Dossier parent", children.get(parentId) ?? []),
+        group: toGroup(parentId, row.parentName ?? "Dossier parent", children.get(parentId) ?? [], useFolderSize),
       });
     }
   }

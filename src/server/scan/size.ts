@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { projectFacts, projects } from "../db/schema";
 import { mapLimit } from "./limit";
@@ -12,9 +12,20 @@ export function parseDuOutput(output: string): number | null {
   return Number.isNaN(size) ? null : size;
 }
 
+/** du reads its exclusions as patterns, so a path must not be taken for one. */
+function escapePattern(path: string): string {
+  return path.replace(/[\\*?[]/g, "\\$&");
+}
+
 /** Disk usage without regenerable dependencies. Null when it could not be measured. */
-export function readSize(path: string): Promise<number | null> {
-  const args = ["-s", "--block-size=1", ...EXCLUDED.map((name) => `--exclude=${name}`), path];
+export function readSize(path: string, excludedPaths: string[] = []): Promise<number | null> {
+  const args = [
+    "-s",
+    "--block-size=1",
+    ...EXCLUDED.map((name) => `--exclude=${name}`),
+    ...excludedPaths.map((excluded) => `--exclude=${escapePattern(excluded)}`),
+    path,
+  ];
   return new Promise((resolve) => {
     execFile("du", args, { timeout: 180_000 }, (error, stdout) => {
       // du exits with 1 on a root-owned subfolder (Docker volumes) and still prints
@@ -24,22 +35,38 @@ export function readSize(path: string): Promise<number | null> {
   });
 }
 
+/**
+ * Measures folders one by one, parent folders included: files can live directly in
+ * them, outside any project. Asking for a project also refreshes its parent's total.
+ */
 export async function runSizeScan(db: Db, projectIds?: number[]): Promise<void> {
-  const targets = db
-    .select({ id: projects.id, path: projects.path })
+  const all = db
+    .select({
+      id: projects.id,
+      path: projects.path,
+      parentId: projects.parentId,
+      abandoned: projects.abandoned,
+      missingAt: projects.missingAt,
+    })
     .from(projects)
-    .where(
-      and(
-        isNull(projects.missingAt),
-        eq(projects.abandoned, false),
-        inArray(projects.kind, ["project", "folder"]),
-        projectIds ? inArray(projects.id, projectIds) : undefined,
-      ),
-    )
     .all();
 
+  let wanted: Set<number> | null = null;
+  if (projectIds) {
+    wanted = new Set(projectIds);
+    for (const { id, parentId } of all) {
+      if (parentId !== null && wanted.has(id)) wanted.add(parentId);
+    }
+  }
+
+  const targets = all.filter(
+    ({ id, abandoned, missingAt }) => !abandoned && missingAt === null && (wanted === null || wanted.has(id)),
+  );
+
   await mapLimit(targets, SIZE_CONCURRENCY, async ({ id, path }) => {
-    const sizeBytes = await readSize(path);
+    // An abandoned sub-project is never read again, not even through its parent.
+    const abandonedChildren = all.filter((item) => item.parentId === id && item.abandoned).map((item) => item.path);
+    const sizeBytes = await readSize(path, abandonedChildren);
     db.update(projectFacts)
       .set({ sizeBytes, sizeScannedAt: new Date() })
       .where(eq(projectFacts.projectId, id))

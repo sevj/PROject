@@ -50,7 +50,7 @@ function loadKnownTags(db: Db): string[] {
 
 function toRow(
   { project, facts }: Joined,
-  parentName: string | null,
+  parent: { name: string; sizeBytes: number | null } | null,
   { meta, tags: rowTags }: Classification,
   ideCommands: Record<string, string>,
 ): RegistryRow {
@@ -59,7 +59,8 @@ function toRow(
     name: project.name,
     path: displayPath(project.path),
     parentId: project.parentId,
-    parentName,
+    parentName: parent?.name ?? null,
+    parentSizeBytes: parent?.sizeBytes ?? null,
     kind: project.kind === "folder" ? "folder" : "project",
     missing: project.missingAt !== null,
     stacks: facts.stacks,
@@ -96,10 +97,15 @@ export function getProject(db: Db, id: number) {
     .get();
   if (!joined) return null;
   const parent = joined.project.parentId
-    ? db.select().from(projects).where(eq(projects.id, joined.project.parentId)).get()
+    ? db
+        .select({ name: projects.name, sizeBytes: projectFacts.sizeBytes })
+        .from(projects)
+        .innerJoin(projectFacts, eq(projectFacts.projectId, projects.id))
+        .where(eq(projects.id, joined.project.parentId))
+        .get()
     : undefined;
   return {
-    row: toRow(joined, parent?.name ?? null, loadClassification(db, id)(id), getSettings(db).ideCommands),
+    row: toRow(joined, parent ?? null, loadClassification(db, id)(id), getSettings(db).ideCommands),
     compose: { hasCompose: joined.facts.hasCompose, containers: joined.facts.containers },
     knownTags: loadKnownTags(db),
     absolutePath: joined.project.path,
@@ -115,7 +121,9 @@ export function getRegistry(db: Db) {
     .from(projects)
     .innerJoin(projectFacts, eq(projectFacts.projectId, projects.id))
     .all();
-  const names = new Map(all.map(({ project }) => [project.id, project.name]));
+  const parents = new Map(
+    all.map(({ project, facts }) => [project.id, { name: project.name, sizeBytes: facts.sizeBytes }]),
+  );
 
   const classificationOf = loadClassification(db);
   const { root, ideCommands } = getSettings(db);
@@ -127,8 +135,8 @@ export function getRegistry(db: Db) {
     if (project.kind === "group") continue;
     // Rows from a previous root stay in the database, ready if it is restored.
     if (!project.path.startsWith(`${root}/`)) continue;
-    const parentName = project.parentId ? (names.get(project.parentId) ?? null) : null;
-    rows.push(toRow(joined, parentName, classificationOf(project.id), ideCommands));
+    const parent = project.parentId ? (parents.get(project.parentId) ?? null) : null;
+    rows.push(toRow(joined, parent, classificationOf(project.id), ideCommands));
   }
 
   const lastScan = db.select().from(scans).orderBy(desc(scans.id)).limit(1).get();

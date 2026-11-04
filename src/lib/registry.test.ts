@@ -20,6 +20,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     path: `~/Projects/${name}`,
     parentId: null,
     parentName: null,
+    parentSizeBytes: null,
     kind: "project",
     missing: false,
     stacks: [],
@@ -161,6 +162,15 @@ describe("groupRows", () => {
       lastCommitAt: NOW - DAY,
     });
     expect(item.group.weeklyCommits?.at(-1)).toBe(7);
+  });
+
+  it("prefers the measured size of the folder, which counts its own files", () => {
+    const list = [child("core", { sizeBytes: 100, parentSizeBytes: 9000 }), child("form", { sizeBytes: 50, parentSizeBytes: 9000 })];
+    const [item] = groupRows(list);
+    const [summed] = groupRows(list, { useFolderSize: false });
+    if (item.kind !== "group" || summed.kind !== "group") throw new Error("expected a group");
+    expect(item.group.sizeBytes).toBe(9000);
+    expect(summed.group.sizeBytes).toBe(150);
   });
 
   it("has no total when nothing was measured", () => {

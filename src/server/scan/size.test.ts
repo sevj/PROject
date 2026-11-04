@@ -2,7 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseDuOutput, readSize } from "./size";
+import { openDb } from "../db/client";
+import { projectFacts, projects } from "../db/schema";
+import { parseDuOutput, readSize, runSizeScan } from "./size";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -27,5 +29,60 @@ describe("size", () => {
     writeFileSync(join(dir, "src", "big.bin"), "x".repeat(200_000));
     expect(await readSize(dir)).toBeGreaterThan(before ?? 0);
     expect(await readSize(join(dir, "nope"))).toBeNull();
+  });
+
+  it("excludes the given paths, even with characters that look like a pattern", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pm-size-"));
+    dirs.push(dir);
+    const excluded = join(dir, "odd[name]*");
+    mkdirSync(excluded);
+    const before = await readSize(dir, [excluded]);
+    writeFileSync(join(excluded, "big.bin"), "x".repeat(200_000));
+    expect(await readSize(dir, [excluded])).toBe(before);
+    expect(await readSize(dir)).toBeGreaterThan(before ?? 0);
+  });
+
+  describe("runSizeScan", () => {
+    function setup() {
+      const dir = mkdtempSync(join(tmpdir(), "pm-size-"));
+      dirs.push(dir);
+      const db = openDb(":memory:");
+      const add = (path: string, kind: "project" | "group", parentId: number | null, abandoned = false) => {
+        mkdirSync(path, { recursive: true });
+        const { id } = db.insert(projects).values({ path, name: path, kind, parentId, abandoned }).returning().get();
+        db.insert(projectFacts).values({ projectId: id }).run();
+        return id;
+      };
+      const group = add(join(dir, "group"), "group", null);
+      const kept = add(join(dir, "group", "kept"), "project", group);
+      const dropped = add(join(dir, "group", "dropped"), "project", group, true);
+      const other = add(join(dir, "other"), "project", null);
+      const size = (id: number) => db.select().from(projectFacts).all().find((f) => f.projectId === id)?.sizeBytes;
+      return { dir, db, group, kept, dropped, other, size };
+    }
+
+    it("measures parent folders with their own files, but not abandoned sub-projects", async () => {
+      const { dir, db, group, kept, dropped, size } = setup();
+      await runSizeScan(db);
+      const empty = size(group) ?? 0;
+
+      writeFileSync(join(dir, "group", "dump.sql"), "x".repeat(300_000));
+      writeFileSync(join(dir, "group", "kept", "a.bin"), "x".repeat(100_000));
+      writeFileSync(join(dir, "group", "dropped", "b.bin"), "x".repeat(5_000_000));
+      await runSizeScan(db);
+
+      expect(size(group)).toBeGreaterThan(empty + 390_000);
+      expect(size(group)).toBeLessThan(empty + 1_000_000);
+      expect(size(kept)).toBeGreaterThan(90_000);
+      expect(size(dropped)).toBeNull();
+    });
+
+    it("refreshes the parent along with a requested project, and nothing else", async () => {
+      const { db, group, kept, other, size } = setup();
+      await runSizeScan(db, [kept]);
+      expect(size(kept)).not.toBeNull();
+      expect(size(group)).not.toBeNull();
+      expect(size(other)).toBeNull();
+    });
   });
 });

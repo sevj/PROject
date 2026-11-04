@@ -365,7 +365,8 @@ export function RegistryView({
       return next;
     });
   };
-  const items = useMemo(() => groupRows(visible), [visible]);
+  // In the abandoned view, the folder's size would describe what was left behind, not these projects.
+  const items = useMemo(() => groupRows(visible, { useFolderSize: view !== "abandoned" }), [visible, view]);
   const toggleGroup = (parentId: number) => {
     setCollapsedGroups((current) => {
       const next = new Set(current);
