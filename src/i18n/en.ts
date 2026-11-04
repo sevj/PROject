@@ -494,8 +494,6 @@ export const en = {
       shortcuts:
         "Ctrl+Shift+C / Ctrl+Shift+V copy and paste · Ctrl+C copies when text is selected · Ctrl+W, Ctrl+T and Ctrl+N belong to the browser unless you use full screen",
     },
-    environment: "Environment variables",
-    noEnv: "No .env file found.",
     tabs: "Project sections",
     env: "Env-Var",
     general: "General",

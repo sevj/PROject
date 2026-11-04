@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { formatSize } from "@/lib/registry";
-import type { ContainerStat } from "@/lib/resources";
 import type { DiskReport, VolumeRow } from "@/server/resources";
 import { useFlash } from "../flash";
 import { Modal } from "../modal";
@@ -24,47 +23,7 @@ import {
   SECTION_TITLE,
 } from "../ui";
 import { deleteVolume, runCleanup } from "./actions";
-
-const POLL_MS = 2000;
-
-type Live = { stats: ContainerStat[]; error: string | null } | null;
-
-/** One sample every 2 seconds while the page is open and visible. Never overlaps itself. */
-function useLiveStats(): Live {
-  const [live, setLive] = useState<Live>(null);
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = async () => {
-      if (!document.hidden) {
-        try {
-          const response = await fetch("/api/resources/stats", { cache: "no-store" });
-          if (response.ok && !stopped) setLive((await response.json()) as Live);
-        } catch {
-          // The server restarting for a moment: the next sample will do.
-        }
-      }
-      if (!stopped) timer = setTimeout(tick, POLL_MS);
-    };
-    void tick();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, []);
-  return live;
-}
-
-function Bar({ value, label }: { value: number; label: string }) {
-  return (
-    <span className="flex items-center gap-2">
-      <span className="h-1.5 w-24 shrink-0 bg-sel" aria-hidden="true">
-        <span className="block h-full bg-accent" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
-      </span>
-      <span className={`${DATA} w-28`}>{label}</span>
-    </span>
-  );
-}
+import { Bar, useLiveStats } from "./live-stats";
 
 function LiveSection() {
   const messages = useMessages();

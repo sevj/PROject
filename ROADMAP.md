@@ -9,7 +9,7 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [ ] API Docker étendue : stats, réseaux, volumes, `system df`.
 - [ ] Table générique d'analyses en cache (résultats datés).
 
-## 1. Ressources (entrée de menu ; section dans l'onglet Docker pas encore faite)
+## 1. Ressources (entrée de menu + section dans l'onglet Docker)
 - [x] `docker stats` CPU/mémoire toutes les 2 s tant que la page est ouverte.
 - [x] Disque occupé : images, conteneurs, volumes, cache de build.
 - [x] Boutons de nettoyage avec aperçu avant.
@@ -39,4 +39,4 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [x] React Flow, disposition en couches : projets / services / bases (flèches depends_on). Version simple, pour juger.
 
 ## Reste à faire hors chantiers
-- Supprimer `src/app/projects/[id]/env-files.tsx` (orphelin), la ligne « Env files » de `project-facts.tsx` et les clés i18n `environment` / `noEnv`.
+- Fait : `env-files.tsx` orphelin et clés `environment` / `noEnv` supprimés. La ligne « .env files » de `project-facts.tsx` est gardée : elle sert encore dans le panneau latéral de la liste.

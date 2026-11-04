@@ -9,6 +9,7 @@ import { DumpJobs } from "@/app/dump-jobs";
 import type { DumpRow } from "@/lib/dumps";
 import type { JobView } from "@/server/dumps/jobs";
 import { ContainerControls, ProjectControls } from "./docker-controls";
+import { DockerResources } from "./docker-resources";
 import { StateBadge, StateGlyph, TONE_BG, TONE_EDGE, TONE_TEXT } from "./state-badge";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -266,6 +267,10 @@ export function DockerTab({
           </>
         ) : null}
       </div>
+
+      {error === null && running > 0 ? (
+        <DockerResources containerNames={containers.filter((container) => container.running).map(({ name }) => name)} />
+      ) : null}
 
       {error !== null ? (
         <p role="alert" className={`${DATA} border border-alert px-3 py-2 break-words text-alert`}>

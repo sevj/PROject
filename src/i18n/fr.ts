@@ -489,8 +489,6 @@ export const fr: Messages = {
       shortcuts:
         "Ctrl+Maj+C / Ctrl+Maj+V copier et coller · Ctrl+C copie quand du texte est sélectionné · Ctrl+W, Ctrl+T et Ctrl+N restent ceux du navigateur, sauf en plein écran",
     },
-    environment: "Variables d'environnement",
-    noEnv: "Aucun fichier .env détecté.",
     tabs: "Sections du projet",
     env: "Env-Var",
     general: "Général",
