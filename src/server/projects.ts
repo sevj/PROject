@@ -11,7 +11,7 @@ export type ProjectInput = { name: string; description: string; directory: strin
 export type SubProjectInput = { name: string; description: string; subdirectory: string };
 export type Registered = { ids: number[] } | { error: string };
 
-const expandHome = (value: string) =>
+export const expandHome = (value: string) =>
   value === "~" ? homedir() : value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
 
 function isDirectory(path: string): boolean {

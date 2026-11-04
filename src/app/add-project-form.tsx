@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { addMultiProject, addProject, addSubProject } from "./actions";
+import { DirectoryInput } from "./directory-input";
 import { BUTTON, DATA, FIELD, LABEL } from "./ui";
 
 const MODE =
@@ -11,14 +12,10 @@ const MODE =
 function TextField({
   label,
   name,
-  placeholder,
-  mono = false,
   autoFocus = false,
 }: {
   label: string;
   name: string;
-  placeholder?: string;
-  mono?: boolean;
   autoFocus?: boolean;
 }) {
   return (
@@ -27,12 +24,11 @@ function TextField({
       <input
         name={name}
         required
-        maxLength={mono ? 1024 : 80}
+        maxLength={80}
         autoFocus={autoFocus}
-        placeholder={placeholder}
         autoComplete="off"
         spellCheck={false}
-        className={`${FIELD} ${mono ? DATA : ""} placeholder:text-mut`}
+        className={`${FIELD} placeholder:text-mut`}
       />
     </label>
   );
@@ -54,13 +50,34 @@ function DescriptionField({ name }: { name: string }) {
   );
 }
 
-function SubProjectFields({ prefix, autoFocus = false }: { prefix: string; autoFocus?: boolean }) {
+function SubProjectFields({
+  prefix,
+  autoFocus = false,
+  root,
+  rootField,
+}: {
+  prefix: string;
+  autoFocus?: boolean;
+  root?: string;
+  rootField?: string;
+}) {
   const m = useMessages().form;
   return (
     <>
       <TextField label={m.name} name={`${prefix}name`} autoFocus={autoFocus} />
       <DescriptionField name={`${prefix}description`} />
-      <TextField label={m.subdirectory} name={`${prefix}subdirectory`} placeholder="front" mono />
+      <div>
+        <label htmlFor={`${prefix}subdirectory-field`} className={`${LABEL} block pb-1`}>
+          {m.subdirectory}
+        </label>
+        <DirectoryInput
+          id={`${prefix}subdirectory-field`}
+          name={`${prefix}subdirectory`}
+          placeholder="front"
+          root={root}
+          rootField={rootField}
+        />
+      </div>
     </>
   );
 }
@@ -132,12 +149,12 @@ export function AddProjectForm({
 
       <TextField label={m.name} name="name" autoFocus />
       <DescriptionField name="description" />
-      <TextField
-        label={multi ? m.rootDirectory : m.directory}
-        name="directory"
-        placeholder={m.directoryPlaceholder}
-        mono
-      />
+      <div>
+        <label htmlFor="project-directory-field" className={`${LABEL} block pb-1`}>
+          {multi ? m.rootDirectory : m.directory}
+        </label>
+        <DirectoryInput id="project-directory-field" name="directory" placeholder={m.directoryPlaceholder} />
+      </div>
 
       {multi ? (
         <>
@@ -156,7 +173,7 @@ export function AddProjectForm({
                   </button>
                 ) : null}
               </div>
-              <SubProjectFields prefix={`repo-${key}-`} />
+              <SubProjectFields prefix={`repo-${key}-`} rootField="directory" />
             </fieldset>
           ))}
           <button
@@ -191,10 +208,12 @@ export function AddProjectForm({
 
 export function AddSubProjectForm({
   groupId,
+  root,
   onCreated,
   onCancel,
 }: {
   groupId: number;
+  root: string;
   onCreated: (id: number) => void;
   onCancel: () => void;
 }) {
@@ -216,7 +235,7 @@ export function AddSubProjectForm({
         });
       }}
     >
-      <SubProjectFields prefix="" autoFocus />
+      <SubProjectFields prefix="" autoFocus root={root} />
       <FormError message={error} />
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending} className={BUTTON}>

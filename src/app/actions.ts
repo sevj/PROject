@@ -17,6 +17,7 @@ import {
   setStatus,
 } from "@/server/classification";
 import { getDb } from "@/server/db/client";
+import { type DirectoryListing, listDirectories } from "@/server/directory-browser";
 import { serverMessages } from "@/server/i18n";
 import type { ProjectStatus } from "@/server/db/schema";
 import { isLocale } from "@/i18n";
@@ -69,6 +70,10 @@ export async function addMultiProject(input: ProjectInput, subProjects: SubProje
 
 export async function addSubProject(groupId: number, input: SubProjectInput): Promise<Registered> {
   return readRegistered(registerSubProject(getDb(), groupId, input));
+}
+
+export async function browseDirectories(path: string, root?: string): Promise<DirectoryListing> {
+  return listDirectories(String(path ?? ""), root === undefined ? undefined : String(root));
 }
 
 export async function moveProject(projectId: number, directory: string): Promise<string | null> {

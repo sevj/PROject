@@ -118,6 +118,15 @@ export const en = {
     subdirectoryOf: (path: string) => `Subdirectory of ${path}`,
     notFound: "not found",
   },
+  picker: {
+    browse: "Browse…",
+    title: "Choose a folder",
+    parent: "Parent folder",
+    select: "Select this folder",
+    empty: "No subfolders.",
+    unreadable: "This folder could not be read.",
+    rootFirst: "Choose the root directory first.",
+  },
   name: {
     rename: "Rename",
     label: "Project name, empty to use the folder name",

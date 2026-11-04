@@ -243,6 +243,7 @@ function GroupInspector({
       {adding ? (
         <AddSubProjectForm
           groupId={group.parentId}
+          root={group.path}
           onCancel={() => setAdding(false)}
           onCreated={(id) => {
             setAdding(false);

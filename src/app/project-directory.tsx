@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { moveProject } from "./actions";
-import { BUTTON, DATA, FIELD } from "./ui";
+import { DirectoryInput } from "./directory-input";
+import { BUTTON, DATA } from "./ui";
 
 /** Shows where a project lives, and follows a folder that was moved. */
 export function ProjectDirectory({
@@ -56,23 +57,21 @@ export function ProjectDirectory({
         });
       }}
     >
-      <label>
-        <span className={`${DATA} block pb-1 break-all text-mut`}>
+      <div>
+        <label htmlFor={`directory-${projectId}`} className={`${DATA} block pb-1 break-all text-mut`}>
           {parentPath ? m.directory.subdirectoryOf(parentPath) : m.directory.label}
-        </span>
-        <input
+        </label>
+        <DirectoryInput
+          id={`directory-${projectId}`}
           name="directory"
-          required
-          maxLength={1024}
           autoFocus
-          spellCheck={false}
           defaultValue={subdirectory ?? path}
+          root={parentPath ?? undefined}
           onKeyDown={(event) => {
             if (event.key === "Escape") setEditing(false);
           }}
-          className={`${FIELD} ${DATA}`}
         />
-      </label>
+      </div>
       {error ? (
         <p role="alert" className={`${DATA} break-words text-alert`}>
           {error}

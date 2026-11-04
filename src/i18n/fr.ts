@@ -115,6 +115,15 @@ export const fr: Messages = {
     subdirectoryOf: (path) => `Sous-répertoire de ${path}`,
     notFound: "introuvable",
   },
+  picker: {
+    browse: "Ouvrir…",
+    title: "Choisir un dossier",
+    parent: "Dossier parent",
+    select: "Choisir ce dossier",
+    empty: "Aucun sous-dossier.",
+    unreadable: "Ce dossier n'a pas pu être lu.",
+    rootFirst: "Choisis d'abord le répertoire racine.",
+  },
   name: {
     rename: "Renommer",
     label: "Nom du projet, vide pour reprendre le nom du dossier",
