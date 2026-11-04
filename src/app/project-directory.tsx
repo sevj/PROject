@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { moveProject } from "./actions";
 import { DirectoryInput } from "./directory-input";
-import { BUTTON, DATA } from "./ui";
+import { PencilIcon } from "./icons";
+import { BUTTON, BUTTON_ICON, BUTTON_PRIMARY, DATA } from "./ui";
 
 /** Shows where a project lives, and follows a folder that was moved. */
 export function ProjectDirectory({
@@ -28,16 +29,19 @@ export function ProjectDirectory({
 
   if (!editing) {
     return (
-      <div className={`${DATA} break-all`}>
-        <span className={missing ? "text-alert" : "text-mut"}>{path}</span>{" "}
-        {missing ? <span className="text-alert">{m.directory.notFound} </span> : null}
+      <div className={`${DATA} flex items-start gap-1`}>
+        <span className={`min-w-0 pt-1.5 break-all ${missing ? "text-alert" : "text-mut"}`}>
+          {path}
+          {missing ? ` · ${m.directory.notFound}` : ""}
+        </span>
         <button
           type="button"
           onClick={() => setEditing(true)}
           aria-label={m.directory.editLabel}
-          className="cursor-pointer text-mut underline hover:text-ink"
+          title={m.directory.editLabel}
+          className={BUTTON_ICON}
         >
-          {m.directory.edit}
+          <PencilIcon />
         </button>
       </div>
     );
@@ -78,7 +82,7 @@ export function ProjectDirectory({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={pending} className={BUTTON}>
+        <button type="submit" disabled={pending} className={BUTTON_PRIMARY}>
           {pending ? m.common.saving : m.common.save}
         </button>
         <button type="button" onClick={() => setEditing(false)} className={BUTTON}>

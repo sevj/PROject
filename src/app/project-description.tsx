@@ -3,7 +3,8 @@
 import { useOptimistic, useRef, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { saveDescription } from "./actions";
-import { FIELD } from "./ui";
+import { PencilIcon, PlusIcon } from "./icons";
+import { BUTTON_ICON, BUTTON_QUIET, FIELD } from "./ui";
 
 export function ProjectDescription({
   projectId,
@@ -67,13 +68,18 @@ export function ProjectDescription({
 
   const text = shown ?? detected;
   return (
-    <p className="break-words">
-      {text ? (
-        <span className={`whitespace-pre-line ${shown ? "" : "text-mut"}`}>{text} </span>
-      ) : null}
-      <button type="button" onClick={open} className="min-h-8 cursor-pointer text-mut underline hover:text-ink">
-        {text ? m.edit : m.add}
+    text ? (
+      <div className="flex items-start gap-1.5">
+        <p className={`min-w-0 pt-1 break-words whitespace-pre-line ${shown ? "" : "text-mut"}`}>{text}</p>
+        <button type="button" onClick={open} aria-label={m.edit} title={m.edit} className={BUTTON_ICON}>
+          <PencilIcon />
+        </button>
+      </div>
+    ) : (
+      <button type="button" onClick={open} className={BUTTON_QUIET}>
+        <PlusIcon />
+        {m.add}
       </button>
-    </p>
+    )
   );
 }

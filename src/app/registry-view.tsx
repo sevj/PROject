@@ -29,7 +29,8 @@ import { ProjectFacts } from "./project-facts";
 import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
-import { BUTTON, CHECKBOX, DATA, LABEL } from "./ui";
+import { BackIcon, OpenIcon, PlusIcon } from "./icons";
+import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_QUIET, CHECKBOX, DATA, LABEL, SEGMENT } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
 const COLUMNS =
@@ -42,8 +43,6 @@ const PANEL =
 const PANEL_TITLE = "text-[32px] leading-[1.05] font-bold tracking-tight";
 const FILTER =
   "group inline-flex min-h-9 max-w-full cursor-pointer items-center gap-2 border border-rule px-2.5 hover:border-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-bg";
-const VIEW_TAB =
-  "group -ml-px inline-flex min-h-10 cursor-pointer items-center gap-2 border border-ink px-3 font-medium first:ml-0 aria-pressed:bg-ink aria-pressed:text-bg";
 
 function cellColor(commits: number): string {
   if (commits === 0) return "var(--r0)";
@@ -182,7 +181,7 @@ function RemoveButton({ projectId, subject }: { projectId: number; subject: stri
     <button
       type="button"
       disabled={pending}
-      className="mt-3 flex min-h-11 cursor-pointer items-center text-mut underline hover:text-alert"
+      className={`${BUTTON_DANGER} mt-3`}
       onClick={() => {
         if (window.confirm(m.confirmRemoval(subject))) start(() => removeFromList([projectId]));
       }}
@@ -255,6 +254,7 @@ function GroupInspector({
         />
       ) : (
         <button type="button" onClick={() => setAdding(true)} className={BUTTON}>
+          <PlusIcon />
           {m.addRepository}
         </button>
       )}
@@ -359,15 +359,24 @@ function Inspector({
   const m = useMessages().panel;
   return (
     <section aria-label={m.selectedProject} className={PANEL}>
-      {row.parentId !== null ? (
-        <button
-          type="button"
-          onClick={() => row.parentId !== null && onSelect(row.parentId)}
-          className="mb-1 block max-w-full cursor-pointer truncate text-mut underline hover:text-ink"
-        >
-          {row.parentName}
-        </button>
-      ) : null}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        {row.parentId !== null ? (
+          <button
+            type="button"
+            onClick={() => row.parentId !== null && onSelect(row.parentId)}
+            className={`${BUTTON_QUIET} min-w-0`}
+          >
+            <BackIcon />
+            <span className="truncate">{row.parentName}</span>
+          </button>
+        ) : (
+          <span />
+        )}
+        <Link href={`/projects/${row.id}`} className={`${BUTTON} shrink-0`}>
+          {m.openSheet}
+          <OpenIcon />
+        </Link>
+      </div>
       <ProjectDirectory
         key={`path-${row.id}`}
         projectId={row.id}
@@ -419,9 +428,6 @@ function Inspector({
       <div className="mt-5">
         <ClassificationEditor key={row.id} row={row} />
       </div>
-      <Link href={`/projects/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-medium underline">
-        {m.openSheet}
-      </Link>
       <RemoveButton projectId={row.id} subject={row.name} />
     </section>
   );
@@ -628,9 +634,9 @@ export function RegistryView({
 
         <div role="group" aria-label={m.view} className="flex">
           {VIEWS.map((id) => (
-            <button key={id} type="button" aria-pressed={view === id} onClick={() => switchView(id)} className={VIEW_TAB}>
+            <button key={id} type="button" aria-pressed={view === id} onClick={() => switchView(id)} className={SEGMENT}>
               <span>{m[id]}</span>
-              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{countView(rows, id)}</span>
+              <span className={`${DATA} text-mut`}>{countView(rows, id)}</span>
             </button>
           ))}
         </div>
@@ -652,8 +658,9 @@ export function RegistryView({
             type="button"
             aria-pressed={showForm}
             onClick={() => setAdding(true)}
-            className={`${BUTTON} bg-ink text-bg hover:bg-transparent hover:text-ink`}
+            className={BUTTON_PRIMARY}
           >
+            <PlusIcon />
             {m.addProject}
           </button>
         </div>

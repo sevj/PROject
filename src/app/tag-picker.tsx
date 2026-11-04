@@ -3,7 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { addTagTo, removeTagFrom } from "./actions";
-import { FIELD, LABEL } from "./ui";
+import { BUTTON, FIELD, LABEL } from "./ui";
 
 const TAG =
   "min-h-8 max-w-full cursor-pointer truncate border px-2.5 text-[13px] border-rule hover:border-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:font-medium aria-pressed:text-bg aria-[pressed=mixed]:border-dashed aria-[pressed=mixed]:bg-transparent aria-[pressed=mixed]:text-ink";
@@ -107,7 +107,7 @@ export function TagPicker({
           />
         </label>
         {clean && !exact ? (
-          <button type="submit" className="min-h-10 max-w-[55%] cursor-pointer truncate border border-ink px-3 font-medium hover:bg-ink hover:text-bg">
+          <button type="submit" className={`${BUTTON} max-w-[55%] truncate`}>
             {m.create(clean)}
           </button>
         ) : null}

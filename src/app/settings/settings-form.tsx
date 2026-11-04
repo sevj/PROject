@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { type Locale, LANGUAGES } from "@/i18n";
 import { useMessages } from "@/i18n/provider";
 import { deleteTagByName, renameTagByName, saveSettingsForm } from "../actions";
-import { BUTTON, DATA, FIELD, LABEL } from "../ui";
+import { BUTTON, BUTTON_PRIMARY, DATA, FIELD, LABEL } from "../ui";
 
 const SECTION = "border-b border-rule px-5 pt-5 pb-6";
 
@@ -73,7 +73,7 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
           <code className={DATA}>{"{path}"}</code> {m.pathHint}
         </p>
         <div className="flex items-center gap-3">
-          <button type="submit" disabled={pending} className={BUTTON}>
+          <button type="submit" disabled={pending} className={BUTTON_PRIMARY}>
             {pending ? messages.common.saving : messages.common.save}
           </button>
           {message || saved ? (

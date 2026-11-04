@@ -9,7 +9,6 @@ export function NavLinks() {
   const m = useMessages().nav;
   const links = [
     { href: "/", label: m.projects },
-    { href: "/board", label: m.board },
     { href: "/settings", label: m.settings },
   ];
   return (

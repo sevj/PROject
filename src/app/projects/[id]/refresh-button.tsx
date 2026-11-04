@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useTransition } from "react";
 import { refreshProject } from "@/app/actions";
+import { BUTTON } from "@/app/ui";
 import { useMessages } from "@/i18n/provider";
 
 export function RefreshButton({ projectId, sizing }: { projectId: number; sizing: boolean }) {
@@ -27,7 +28,7 @@ export function RefreshButton({ projectId, sizing }: { projectId: number; sizing
         type="button"
         disabled={pending}
         onClick={() => start(() => refreshProject(projectId))}
-        className="min-h-11 cursor-pointer border border-ink px-4 font-medium hover:bg-ink hover:text-bg disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-ink"
+        className={BUTTON}
       >
         {pending ? m.refreshing : m.refresh}
       </button>

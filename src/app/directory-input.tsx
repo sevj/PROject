@@ -4,7 +4,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useMessages } from "@/i18n/provider";
 import type { DirectoryListing } from "@/server/directory-browser";
 import { browseDirectories } from "./actions";
-import { BUTTON, DATA, FIELD } from "./ui";
+import { BUTTON, BUTTON_PRIMARY, DATA, FIELD } from "./ui";
 
 // Projects tend to sit side by side: the next pick starts where the last one ended.
 let lastLocation = "";
@@ -72,7 +72,7 @@ function DirectoryPicker({
             // The root itself is not a sub-project.
             disabled={!listing || listing.target !== target || (root !== undefined && listing.value === "")}
             onClick={() => listing && onPick(listing.value, listing.path)}
-            className={`${BUTTON} bg-ink text-bg hover:bg-transparent hover:text-ink disabled:hover:bg-ink disabled:hover:text-bg`}
+            className={BUTTON_PRIMARY}
           >
             {m.picker.select}
           </button>

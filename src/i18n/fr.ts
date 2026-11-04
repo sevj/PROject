@@ -10,7 +10,7 @@ export const fr: Messages = {
     cancel: "Annuler",
     adding: "Ajout…",
   },
-  nav: { label: "Vues principales", projects: "Projets", board: "Organisation", settings: "Réglages" },
+  nav: { label: "Vues principales", projects: "Projets", settings: "Réglages" },
   status: { active: "Actif", paused: "En pause", resume: "À reprendre", none: "Sans statut" },
   age: {
     none: "aucun",
@@ -103,13 +103,11 @@ export const fr: Messages = {
     directoryPlaceholder: "~/Projects/mon-projet",
     subdirectory: "Sous-répertoire",
     repository: (position) => `Dépôt ${position}`,
-    removeRepository: "Enlever",
     removeRepositoryLabel: (position) => `Enlever le dépôt ${position}`,
     addProject: "Ajouter le projet",
     addMultiProject: "Ajouter le multi-projet",
   },
   directory: {
-    edit: "Modifier",
     editLabel: "Modifier le répertoire",
     label: "Répertoire",
     subdirectoryOf: (path) => `Sous-répertoire de ${path}`,
@@ -231,21 +229,6 @@ export const fr: Messages = {
     confirmAbandon: (count) =>
       `${plural(count, "conteneur")} ${count > 1 ? "tournent" : "tourne"} encore pour ce projet et ne ${count > 1 ? "seront" : "sera"} plus suivi${count > 1 ? "s" : ""}. Abandonner quand même ?`,
   },
-  board: {
-    filterByTag: "Filtrer par tag",
-    all: "Tous",
-    noProjects: "Aucun projet",
-    previous: (name) => `Déplacer ${name} vers la colonne précédente`,
-    next: (name) => `Déplacer ${name} vers la colonne suivante`,
-    noGit: "sans git",
-    changes: (count) => plural(count, "modif"),
-    export: "Exporter",
-    import: "Importer",
-    importing: "Import…",
-    importLabel: "Importer un export de classement",
-    restored: (imported, unknown) =>
-      `${plural(imported, "projet")} restauré${imported > 1 ? "s" : ""}${unknown > 0 ? `, ${plural(unknown, "chemin inconnu", "chemins inconnus")} ignoré${unknown > 1 ? "s" : ""}` : ""}.`,
-  },
   settings: {
     title: "Réglages",
     language: "Langue",
@@ -279,8 +262,6 @@ export const fr: Messages = {
     tagInvalid: "Ce nom de tag n'est pas valide.",
     tagGone: "Ce tag n'existe plus.",
     tagExists: (name) => `Le tag « ${name} » existe déjà.`,
-    importNotJson: "Ce fichier n'est pas du JSON valide.",
-    importNotExport: "Ce fichier n'est pas un export de Project Manager.",
     unknownAction: "Action inconnue.",
     abandonedProject: "Ce projet est abandonné : restaure-le d'abord.",
     commandsRequired: "Toutes les commandes requises doivent être remplies.",

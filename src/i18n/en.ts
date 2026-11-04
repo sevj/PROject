@@ -13,7 +13,7 @@ export const en = {
     cancel: "Cancel",
     adding: "Adding…",
   },
-  nav: { label: "Main views", projects: "Projects", board: "Board", settings: "Settings" },
+  nav: { label: "Main views", projects: "Projects", settings: "Settings" },
   status: { active: "Active", paused: "Paused", resume: "To resume", none: "No status" },
   age: {
     none: "none",
@@ -106,13 +106,11 @@ export const en = {
     directoryPlaceholder: "~/Projects/my-project",
     subdirectory: "Subdirectory",
     repository: (position: number) => `Repository ${position}`,
-    removeRepository: "Remove",
     removeRepositoryLabel: (position: number) => `Remove repository ${position}`,
     addProject: "Add project",
     addMultiProject: "Add multi-project",
   },
   directory: {
-    edit: "Edit",
     editLabel: "Edit directory",
     label: "Directory",
     subdirectoryOf: (path: string) => `Subdirectory of ${path}`,
@@ -234,21 +232,6 @@ export const en = {
     confirmAbandon: (count: number) =>
       `${plural(count, "container")} still running for this project and will no longer be tracked. Abandon anyway?`,
   },
-  board: {
-    filterByTag: "Filter by tag",
-    all: "All",
-    noProjects: "No projects",
-    previous: (name: string) => `Move ${name} to the previous column`,
-    next: (name: string) => `Move ${name} to the next column`,
-    noGit: "no git",
-    changes: (count: number) => plural(count, "change"),
-    export: "Export",
-    import: "Import",
-    importing: "Importing…",
-    importLabel: "Import a classification export",
-    restored: (imported: number, unknown: number) =>
-      `${plural(imported, "project")} restored${unknown > 0 ? `, ${plural(unknown, "unknown path")} ignored` : ""}.`,
-  },
   settings: {
     title: "Settings",
     language: "Language",
@@ -282,8 +265,6 @@ export const en = {
     tagInvalid: "This tag name is not valid.",
     tagGone: "This tag no longer exists.",
     tagExists: (name: string) => `The tag "${name}" already exists.`,
-    importNotJson: "This file is not valid JSON.",
-    importNotExport: "This file is not a Project Manager export.",
     unknownAction: "Unknown action.",
     abandonedProject: "This project is abandoned: restore it first.",
     commandsRequired: "All the required commands must be filled in.",

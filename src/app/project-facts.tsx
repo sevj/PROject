@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useMessages } from "@/i18n/provider";
 import { dockerLabel, formatAge, formatSize, type RegistryRow, runningCount } from "@/lib/registry";
 import { parseRemote, publishedPorts } from "@/lib/remote";
+import { OpenIcon } from "./icons";
 import { DATA, LABEL } from "./ui";
 
 function Fact({ label, children, alert }: { label: string; children: ReactNode; alert?: boolean }) {
@@ -63,8 +64,9 @@ export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
             {remote === null ? (
               m.none
             ) : remote.url ? (
-              <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="underline hover:text-ink">
-                {remote.label}
+              <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="inline-flex max-w-full items-center gap-1 hover:text-alert">
+                <span className="truncate">{remote.label}</span>
+                <OpenIcon />
               </a>
             ) : (
               remote.label

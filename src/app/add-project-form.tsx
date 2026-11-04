@@ -4,10 +4,8 @@ import { useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { addMultiProject, addProject, addSubProject } from "./actions";
 import { DirectoryInput } from "./directory-input";
-import { BUTTON, DATA, FIELD, LABEL } from "./ui";
-
-const MODE =
-  "-ml-px min-h-10 flex-1 cursor-pointer border border-ink px-3 font-medium first:ml-0 aria-pressed:bg-ink aria-pressed:text-bg";
+import { CloseIcon, PlusIcon } from "./icons";
+import { BUTTON, BUTTON_ICON, BUTTON_PRIMARY, DATA, FIELD, LABEL, SEGMENT } from "./ui";
 
 function TextField({
   label,
@@ -167,10 +165,10 @@ export function AddProjectForm({
       <h2 className="text-[32px] leading-[1.05] font-bold tracking-tight">{m.title}</h2>
 
       <div role="group" aria-label={m.type} className="flex">
-        <button type="button" aria-pressed={!multi} onClick={() => setMulti(false)} className={MODE}>
+        <button type="button" aria-pressed={!multi} onClick={() => setMulti(false)} className={`${SEGMENT} flex-1`}>
           {m.project}
         </button>
-        <button type="button" aria-pressed={multi} onClick={() => setMulti(true)} className={MODE}>
+        <button type="button" aria-pressed={multi} onClick={() => setMulti(true)} className={`${SEGMENT} flex-1`}>
           {m.multiProject}
         </button>
       </div>
@@ -197,9 +195,10 @@ export function AddProjectForm({
                     type="button"
                     onClick={() => setRepoKeys((keys) => keys.filter((item) => item !== key))}
                     aria-label={m.removeRepositoryLabel(index + 1)}
-                    className="min-h-8 cursor-pointer text-mut underline hover:text-ink"
+                    title={m.removeRepositoryLabel(index + 1)}
+                    className={BUTTON_ICON}
                   >
-                    {m.removeRepository}
+                    <CloseIcon />
                   </button>
                 ) : null}
               </div>
@@ -211,6 +210,7 @@ export function AddProjectForm({
             className={BUTTON}
             onClick={() => setRepoKeys((keys) => [...keys, Math.max(...keys) + 1])}
           >
+            <PlusIcon />
             {messages.panel.addRepository}
           </button>
         </>
@@ -222,7 +222,7 @@ export function AddProjectForm({
         <button
           type="submit"
           disabled={pending}
-          className={`${BUTTON} bg-ink text-bg hover:bg-transparent hover:text-ink`}
+          className={BUTTON_PRIMARY}
         >
           {pending ? messages.common.adding : multi ? m.addMultiProject : m.addProject}
         </button>
@@ -270,7 +270,7 @@ export function AddSubProjectForm({
       <SubProjectFields prefix="" autoFocus root={root} knownTags={knownTags} />
       <FormError message={error} />
       <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={pending} className={BUTTON}>
+        <button type="submit" disabled={pending} className={BUTTON_PRIMARY}>
           {pending ? m.common.adding : m.panel.addRepository}
         </button>
         <button type="button" onClick={onCancel} className={BUTTON}>

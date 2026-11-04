@@ -18,7 +18,8 @@ import { ProjectDirectory } from "../../project-directory";
 import { ProjectFacts } from "../../project-facts";
 import { ProjectName } from "../../project-name";
 import { TagPicker } from "../../tag-picker";
-import { DATA, LABEL } from "../../ui";
+import { BackIcon } from "../../icons";
+import { BUTTON_QUIET, DATA, LABEL } from "../../ui";
 import { EnvFiles } from "./env-files";
 import { RefreshButton } from "./refresh-button";
 
@@ -85,7 +86,8 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
     <main className="flex-1">
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b border-ink px-5 pt-7 pb-6">
         <div className="min-w-0">
-          <Link href="/" className="inline-flex min-h-8 items-center text-mut underline hover:text-ink">
+          <Link href="/" className={BUTTON_QUIET}>
+            <BackIcon />
             {m.back}
           </Link>
           <ProjectDirectory
@@ -164,7 +166,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                       key={file}
                       href={`/projects/${row.id}?doc=${encodeURIComponent(file)}`}
                       aria-current={file === selectedDoc ? "page" : undefined}
-                      className="inline-flex min-h-8 items-center text-mut hover:text-ink aria-[current=page]:text-ink aria-[current=page]:underline"
+                      className="-mx-1 inline-flex min-h-8 items-center px-1 text-mut hover:text-ink aria-[current=page]:bg-sel aria-[current=page]:text-ink"
                     >
                       {file}
                     </Link>

@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   addTag,
   deleteTag,
-  exportClassification,
-  importClassification,
   removeTag,
   renameTag,
   setAbandoned,
@@ -129,104 +127,5 @@ describe("tags", () => {
     expect(db.select().from(projectTags).all()).toEqual([]);
     expect(db.select().from(projects).all()).toHaveLength(2);
     expect(db.select().from(projectMeta).get()?.status).toBe("active");
-  });
-});
-
-describe("export and import", () => {
-  function classify() {
-    setStatus(db, [a], "active");
-    setFavorite(db, a, true);
-    setNote(db, a, "note");
-    setDisplayName(db, a, "Le projet A");
-    setDescription(db, a, "Une description");
-    addTag(db, [a], "php");
-    setAbandoned(db, [b], true);
-  }
-
-  const exportedA = {
-    path: "/p/a",
-    status: "active",
-    favorite: true,
-    note: "note",
-    displayName: "Le projet A",
-    description: "Une description",
-    abandoned: false,
-    tags: ["php"],
-  };
-  const exportedB = { path: "/p/b", status: null, favorite: false, note: null, displayName: null, description: null, abandoned: true, tags: [] };
-
-  it("exports only what the user decided, including abandoned projects", () => {
-    db.insert(projects).values({ path: "/p/untouched", name: "untouched" }).run();
-    classify();
-    expect(exportClassification(db)).toEqual({ version: 2, projects: [exportedA, exportedB] });
-  });
-
-  it("restores everything into an empty database and reports unknown paths", () => {
-    classify();
-    const json = JSON.stringify(exportClassification(db));
-
-    const target = openDb(":memory:");
-    target.insert(projects).values({ path: "/p/a", name: "a" }).run();
-    target.insert(projects).values({ path: "/p/b", name: "b" }).run();
-    expect(importClassification(target, json)).toEqual({ imported: 2, unknownPaths: [] });
-    expect(exportClassification(target)).toEqual(JSON.parse(json));
-
-    expect(importClassification(openDb(":memory:"), json)).toEqual({
-      imported: 0,
-      unknownPaths: ["/p/a", "/p/b"],
-    });
-  });
-
-  it("converts an export made while collections existed", () => {
-    const old = {
-      version: 1,
-      collections: ["Abandonnés", "Perso"],
-      projects: [
-        { path: "/p/a", status: null, favorite: false, note: null, collections: ["Abandonnés", "Perso"], tags: ["php"] },
-      ],
-    };
-    expect(importClassification(db, JSON.stringify(old))).toEqual({ imported: 1, unknownPaths: [] });
-    expect(exportClassification(db).projects).toEqual([
-      { path: "/p/a", status: null, favorite: false, note: null, displayName: null, description: null, abandoned: true, tags: ["Perso", "php"] },
-    ]);
-  });
-
-  it("imports the former archived status as no status", () => {
-    const old = {
-      version: 2,
-      projects: [{ path: "/p/a", status: "archived", favorite: false, note: "garder", abandoned: false, tags: [] }],
-    };
-    expect(importClassification(db, JSON.stringify(old))).toEqual({ imported: 1, unknownPaths: [] });
-    expect(db.select().from(projectMeta).get()).toMatchObject({ status: null, note: "garder" });
-  });
-
-  it("replaces listed projects and leaves the others alone", () => {
-    classify();
-    const result = importClassification(
-      db,
-      JSON.stringify({
-        version: 2,
-        projects: [{ path: "/p/a", status: null, favorite: false, note: null, abandoned: false, tags: ["neuf"] }],
-      }),
-    );
-    expect(result).toEqual({ imported: 1, unknownPaths: [] });
-    const exported = exportClassification(db).projects;
-    expect(exported.find((p) => p.path === "/p/a")?.tags).toEqual(["neuf"]);
-    expect(exported.find((p) => p.path === "/p/b")?.abandoned).toBe(true);
-  });
-
-  it.each([
-    ["pas du json", "not valid JSON"],
-    ["{}", "not a Project Manager export"],
-    ['{"version":3,"projects":[]}', "not a Project Manager export"],
-    ['{"version":2,"projects":[{"path":"/p/a","status":"x","favorite":false,"note":null,"abandoned":false,"tags":[]}]}', "not a Project Manager export"],
-    ['{"version":2,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "not a Project Manager export"],
-    ['{"version":1,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "not a Project Manager export"],
-  ])("refuses %s without changing anything", (json, message) => {
-    classify();
-    const before = exportClassification(db);
-    const result = importClassification(db, json);
-    expect("error" in result && result.error).toContain(message);
-    expect(exportClassification(db)).toEqual(before);
   });
 });

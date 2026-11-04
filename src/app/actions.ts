@@ -4,8 +4,6 @@ import { revalidatePath } from "next/cache";
 import {
   addTag,
   deleteTag,
-  importClassification,
-  type ImportResult,
   isStatus,
   removeTag,
   renameTag,
@@ -164,12 +162,6 @@ export async function markAbandoned(projectIds: number[], abandoned: boolean): P
   }
   refreshAll();
   return null;
-}
-
-export async function importBackup(json: string): Promise<ImportResult> {
-  const result = importClassification(getDb(), String(json));
-  refreshAll();
-  return result;
 }
 
 function launchable(projectId: number) {

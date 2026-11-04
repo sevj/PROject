@@ -3,6 +3,8 @@
 import { useOptimistic, useRef, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { renameProject } from "./actions";
+import { PencilIcon } from "./icons";
+import { BUTTON_ICON } from "./ui";
 
 export function ProjectName({
   projectId,
@@ -70,10 +72,10 @@ export function ProjectName({
   }
 
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3">
+    <div className="flex items-start gap-1.5">
       <h1 className={`${className} min-w-0 break-words`}>{shownName}</h1>
-      <button type="button" onClick={open} className="min-h-8 cursor-pointer text-mut underline hover:text-ink">
-        {m.rename}
+      <button type="button" onClick={open} aria-label={m.rename} title={m.rename} className={BUTTON_ICON}>
+        <PencilIcon />
       </button>
     </div>
   );

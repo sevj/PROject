@@ -18,7 +18,6 @@ L'interface est en anglais par défaut, et la langue se choisit dans Settings. P
 ## Données et sécurité
 
 - **Base :** SQLite dans `~/.local/share/project-manager/pm.db`. `PM_DB_PATH` permet de pointer ailleurs.
-- **Sauvegarde :** le classement est saisi à la main et ne peut pas être recalculé. L'écran Organisation permet de l'exporter et de l'importer en JSON.
 - **Projets abandonnés :** ils ne sont plus lus du tout et n'apparaissent que dans la vue « Abandonnés », d'où on peut les restaurer.
 - **Lecture seule :** l'actualisation n'écrit rien dans les projets, et retirer un projet de la liste ne touche pas au disque. Seules les actions Docker et les commandes configurées agissent sur la machine.
 - **`.env` :** les valeurs sont lues à la demande, à la racine du projet, sans jamais être stockées ni journalisées.
