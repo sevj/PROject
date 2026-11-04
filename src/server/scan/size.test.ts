@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openDb } from "../db/client";
 import { projectFacts, projects } from "../db/schema";
-import { parseDuOutput, readSize, runSizeScan } from "./size";
+import { dependencySize, parseDuOutput, readSize, runSizeScan } from "./size";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -42,6 +42,13 @@ describe("size", () => {
     expect(await readSize(dir)).toBeGreaterThan(before ?? 0);
   });
 
+  it("computes the dependency size, without ever going negative", () => {
+    expect(dependencySize(500, 200)).toBe(300);
+    expect(dependencySize(100, 200)).toBe(0);
+    expect(dependencySize(null, 200)).toBeNull();
+    expect(dependencySize(500, null)).toBeNull();
+  });
+
   describe("runSizeScan", () => {
     function setup() {
       const dir = mkdtempSync(join(tmpdir(), "pm-size-"));
@@ -75,6 +82,20 @@ describe("size", () => {
       expect(size(group)).toBeLessThan(empty + 1_000_000);
       expect(size(kept)).toBeGreaterThan(90_000);
       expect(size(dropped)).toBeNull();
+    });
+
+    it("measures dependencies and .git on projects, not on parent folders", async () => {
+      const { dir, db, group, kept } = setup();
+      mkdirSync(join(dir, "group", "kept", "node_modules"));
+      writeFileSync(join(dir, "group", "kept", "node_modules", "lib.js"), "x".repeat(400_000));
+      mkdirSync(join(dir, "group", "kept", ".git"));
+      writeFileSync(join(dir, "group", "kept", ".git", "HEAD"), "x".repeat(100_000));
+      await runSizeScan(db);
+      const facts = (id: number) => db.select().from(projectFacts).all().find((f) => f.projectId === id);
+      expect(facts(kept)?.depsBytes).toBeGreaterThan(390_000);
+      expect(facts(kept)?.gitBytes).toBeGreaterThan(90_000);
+      expect(facts(group)?.depsBytes).toBeNull();
+      expect(facts(group)?.gitBytes).toBeNull();
     });
 
     it("refreshes the parent along with a requested project, and nothing else", async () => {

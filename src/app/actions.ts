@@ -10,6 +10,7 @@ import {
   removeTag,
   renameTag,
   setAbandoned,
+  setDescription,
   setDisplayName,
   setFavorite,
   setNote,
@@ -74,6 +75,11 @@ export async function saveNote(projectId: number, note: string): Promise<void> {
 
 export async function renameProject(projectId: number, name: string): Promise<void> {
   setDisplayName(getDb(), projectId, String(name));
+  refreshAll();
+}
+
+export async function saveDescription(projectId: number, description: string): Promise<void> {
+  setDescription(getDb(), projectId, String(description));
   refreshAll();
 }
 

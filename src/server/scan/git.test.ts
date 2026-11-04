@@ -108,8 +108,30 @@ describe("readGitFacts", () => {
       dirtyCount: 1,
       commitCount: 2,
       lastCommitSubject: "second subject",
+      lastCommitAuthor: "t",
+      branchCount: 1,
+      stashCount: 0,
     });
+    expect(facts.firstCommitAt).toBeInstanceOf(Date);
     expect(facts.weeklyCommits?.at(-1)).toBe(2);
+  });
+
+  it("counts branches and stashes", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    git(dir, "branch", "other");
+    writeFileSync(join(dir, "a.txt"), "changed");
+    git(dir, "stash", "push", "-q");
+    expect(await readGitFacts(dir)).toMatchObject({ branchCount: 2, stashCount: 1 });
+  });
+
+  it("has no dates for a repository without commits", async () => {
+    expect(await readGitFacts(tempRepo())).toMatchObject({
+      firstCommitAt: null,
+      lastCommitAuthor: null,
+      branchCount: 0,
+      stashCount: 0,
+    });
   });
 
   it("does not rewrite the index when reading status", async () => {

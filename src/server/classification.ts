@@ -12,6 +12,7 @@ import {
 
 const MAX_NAME = 80;
 const MAX_NOTE = 20_000;
+const MAX_DESCRIPTION = 500;
 
 export function cleanName(name: unknown): string | null {
   if (typeof name !== "string") return null;
@@ -23,7 +24,7 @@ export function isStatus(value: unknown): value is ProjectStatus {
   return PROJECT_STATUSES.includes(value as ProjectStatus);
 }
 
-type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "status" | "favorite" | "note" | "displayName">>;
+type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "status" | "favorite" | "note" | "displayName" | "description">>;
 
 function patchMeta(db: Db, projectIds: number[], patch: MetaPatch) {
   db.transaction((tx) => {
@@ -57,6 +58,10 @@ export function setDisplayName(db: Db, projectId: number, name: string) {
   if (!project) return;
   const clean = cleanName(name);
   patchMeta(db, [projectId], { displayName: clean && clean !== project.name ? clean : null });
+}
+
+export function setDescription(db: Db, projectId: number, description: string) {
+  patchMeta(db, [projectId], { description: description.trim().slice(0, MAX_DESCRIPTION) || null });
 }
 
 export function setAbandoned(db: Db, projectIds: number[], abandoned: boolean) {
@@ -123,6 +128,7 @@ export type ExportedProject = {
   favorite: boolean;
   note: string | null;
   displayName: string | null;
+  description: string | null;
   abandoned: boolean;
   tags: string[];
 };
@@ -149,6 +155,7 @@ export function exportClassification(db: Db): ClassificationExport {
       favorite: meta?.favorite ?? false,
       note: meta?.note ?? null,
       displayName: meta?.displayName ?? null,
+      description: meta?.description ?? null,
       abandoned: project.abandoned,
       tags: withTags,
     });
@@ -174,8 +181,17 @@ function parseProject(input: unknown, version: number): ExportedProject | null {
   }
   // Absent from exports made before project names existed.
   const displayName = item.displayName ?? null;
+  const description = item.description ?? null;
   if (displayName !== null && typeof displayName !== "string") return null;
-  const base = { path: item.path, status: item.status, favorite: item.favorite, note: item.note, displayName };
+  if (description !== null && typeof description !== "string") return null;
+  const base = {
+    path: item.path,
+    status: item.status,
+    favorite: item.favorite,
+    note: item.note,
+    displayName,
+    description,
+  };
   if (version === 2) {
     return typeof item.abandoned === "boolean" ? { ...base, abandoned: item.abandoned, tags: item.tags } : null;
   }
@@ -225,6 +241,7 @@ export function importClassification(db: Db, json: string): ImportResult {
         favorite: item.favorite,
         note: item.note,
         displayName: item.displayName,
+        description: item.description,
       });
       setAbandoned(txDb, [projectId], item.abandoned);
       tx.delete(projectTags).where(eq(projectTags.projectId, projectId)).run();

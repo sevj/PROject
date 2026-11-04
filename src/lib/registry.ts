@@ -1,4 +1,4 @@
-import type { ContainerFact, ProjectStatus } from "@/server/db/schema";
+import type { ContainerFact, ProjectStatus, VersionFact } from "@/server/db/schema";
 
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
   active: "Actif",
@@ -14,6 +14,7 @@ export type RegistryRow = {
   path: string;
   parentId: number | null;
   parentName: string | null;
+  parentFolderName: string | null;
   /** Measured on the parent folder itself, so it counts the files outside any project. */
   parentSizeBytes: number | null;
   kind: "project" | "folder";
@@ -27,12 +28,26 @@ export type RegistryRow = {
   dirtyCount: number | null;
   remoteUrl: string | null;
   commitCount: number | null;
+  branchCount: number | null;
+  stashCount: number | null;
+  firstCommitAt: number | null;
+  lastCommitAuthor: string | null;
   lastCommitAt: number | null;
   lastCommitSubject: string | null;
   weeklyCommits: number[] | null;
   hasCompose: boolean;
   containers: ContainerFact[];
   sizeBytes: number | null;
+  depsBytes: number | null;
+  gitBytes: number | null;
+  versions: VersionFact[];
+  packageManagers: string[];
+  ci: string[];
+  testTools: string[];
+  docs: string[];
+  envFiles: string[];
+  manifestDescription: string | null;
+  description: string | null;
   scanError: string | null;
   ideLabel: string;
   status: ProjectStatus | null;
@@ -47,6 +62,12 @@ export type RegistrySort = "commit" | "name" | "dirty" | "size";
 
 export function runningCount(row: RegistryRow): number {
   return row.containers.filter((container) => container.state === "running").length;
+}
+
+export function dockerLabel(row: RegistryRow): string {
+  const running = runningCount(row);
+  if (running > 0) return `${running} up`;
+  return row.hasCompose || row.containers.length > 0 ? "arrêté" : "—";
 }
 
 const VIEW_TESTS: Record<RegistryView, (row: RegistryRow) => boolean> = {
@@ -86,6 +107,7 @@ export function selectRows(
       (row) =>
         !needle ||
         row.name.toLowerCase().includes(needle) ||
+        (row.description ?? row.manifestDescription ?? "").toLowerCase().includes(needle) ||
         row.path.toLowerCase().includes(needle) ||
         row.tags.some((tag) => tag.toLowerCase().includes(needle)),
     )
@@ -95,6 +117,7 @@ export function selectRows(
 export type ProjectGroup = {
   parentId: number;
   name: string;
+  folderName: string;
   rows: RegistryRow[];
   dirtyCount: number;
   running: number;
@@ -111,13 +134,15 @@ function sumWeeks(rows: RegistryRow[]): number[] | null {
   return series[0].map((_, week) => series.reduce((sum, weeks) => sum + (weeks[week] ?? 0), 0));
 }
 
-function toGroup(parentId: number, name: string, rows: RegistryRow[], useFolderSize: boolean): ProjectGroup {
+function toGroup(parentId: number, rows: RegistryRow[], useFolderSize: boolean): ProjectGroup {
+  const folderName = rows[0].parentFolderName ?? "Dossier parent";
   const sizes = rows.flatMap((row) => row.sizeBytes ?? []);
   const summed = sizes.length > 0 ? sizes.reduce((sum, size) => sum + size, 0) : null;
   const commits = rows.flatMap((row) => row.lastCommitAt ?? []);
   return {
     parentId,
-    name,
+    name: rows[0].parentName ?? folderName,
+    folderName,
     rows,
     dirtyCount: rows.reduce((sum, row) => sum + (row.dirtyCount ?? 0), 0),
     running: rows.reduce((sum, row) => sum + runningCount(row), 0),
@@ -144,10 +169,7 @@ export function groupRows(rows: RegistryRow[], { useFolderSize = true } = {}): R
       items.push({ kind: "project", row });
     } else if (!placed.has(parentId)) {
       placed.add(parentId);
-      items.push({
-        kind: "group",
-        group: toGroup(parentId, row.parentName ?? "Dossier parent", children.get(parentId) ?? [], useFolderSize),
-      });
+      items.push({ kind: "group", group: toGroup(parentId, children.get(parentId) ?? [], useFolderSize) });
     }
   }
   return items;

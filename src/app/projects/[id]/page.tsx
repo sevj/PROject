@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { formatAge, formatSize, runningCount } from "@/lib/registry";
+import { formatAge, runningCount } from "@/lib/registry";
 import { getDb } from "@/server/db/client";
 import { readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
@@ -10,6 +10,8 @@ import { readRecentCommits } from "@/server/scan/git";
 import { isSizing } from "@/server/scan/jobs";
 import { ClassificationEditor } from "../../classification-editor";
 import { ProjectButtons } from "../../project-buttons";
+import { ProjectDescription } from "../../project-description";
+import { ProjectFacts } from "../../project-facts";
 import { ProjectName } from "../../project-name";
 import { TagPicker } from "../../tag-picker";
 import { DATA, LABEL } from "../../ui";
@@ -17,17 +19,6 @@ import { EnvFiles } from "./env-files";
 import { RefreshButton } from "./refresh-button";
 
 const SECTION = "border-b border-rule px-5 pt-[18px] pb-[22px]";
-
-function Fact({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
-  return (
-    <div className="min-w-0 border-r border-rule px-5 py-3 last:border-r-0">
-      <dt className={LABEL}>{label}</dt>
-      <dd className={`${DATA} truncate pt-1 ${alert ? "font-medium text-alert" : ""}`} title={value}>
-        {value}
-      </dd>
-    </div>
-  );
-}
 
 function ActivityChart({ weeks }: { weeks: number[] }) {
   const peak = Math.max(...weeks, 1);
@@ -82,7 +73,6 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const selectedDoc = typeof doc === "string" && docs.includes(doc) ? doc : defaultDoc;
   const docContent = selectedDoc && !row.missing ? await readProjectDoc(absolutePath, selectedDoc) : null;
 
-  const tracking = row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : "pas de suivi";
   const running = runningCount(row);
 
   return (
@@ -100,6 +90,9 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               folderName={row.folderName}
               className="text-[72px] leading-none font-bold tracking-[-.04em] max-sm:text-[44px]"
             />
+          </div>
+          <div className="mt-2 max-w-3xl">
+            <ProjectDescription projectId={row.id} description={row.description} detected={row.manifestDescription} />
           </div>
         </div>
         <div className="flex flex-wrap items-start gap-2">
@@ -123,20 +116,6 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
           {row.scanError}
         </p>
       ) : null}
-
-      <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] border-b border-ink">
-        <Fact label="Stack" value={row.stacks.join(" + ") || "—"} />
-        <Fact label="Branche" value={row.hasGit ? (row.branch ?? "HEAD détachée") : "sans git"} />
-        <Fact label="Distant" value={row.remoteUrl ?? "aucun"} />
-        <Fact label="Écart" value={row.hasGit ? tracking : "—"} />
-        <Fact label="Commits" value={row.hasGit ? String(row.commitCount ?? 0) : "—"} />
-        <Fact
-          label="Fichiers modifiés"
-          value={row.hasGit ? String(row.dirtyCount ?? 0) : "—"}
-          alert={(row.dirtyCount ?? 0) > 0}
-        />
-        <Fact label="Taille hors dépendances" value={formatSize(row.sizeBytes)} />
-      </dl>
 
       <div className="flex flex-wrap items-stretch">
         <div className="min-w-0 flex-[999_1_620px] border-r border-rule">
@@ -202,6 +181,9 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               />
               <ClassificationEditor key={row.id} row={row} />
             </div>
+          </section>
+          <section className={SECTION}>
+            <ProjectFacts row={row} now={now} />
           </section>
           <section className={SECTION}>
             <h2 className={`${LABEL} mb-3.5`}>

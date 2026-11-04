@@ -14,6 +14,8 @@ export const PROJECT_STATUSES = ["active", "paused", "resume"] as const;
 
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
+export type VersionFact = { label: string; value: string };
+
 export type ContainerFact = {
   name: string;
   service: string;
@@ -53,6 +55,10 @@ export const projectFacts = sqliteTable("project_facts", {
   dirtyCount: integer("dirty_count"),
   remoteUrl: text("remote_url"),
   commitCount: integer("commit_count"),
+  branchCount: integer("branch_count"),
+  stashCount: integer("stash_count"),
+  firstCommitAt: integer("first_commit_at", { mode: "timestamp" }),
+  lastCommitAuthor: text("last_commit_author"),
   lastCommitAt: integer("last_commit_at", { mode: "timestamp" }),
   lastCommitSubject: text("last_commit_subject"),
   weeklyCommits: text("weekly_commits", { mode: "json" }).$type<number[]>(),
@@ -60,7 +66,14 @@ export const projectFacts = sqliteTable("project_facts", {
   containers: text("containers", { mode: "json" }).$type<ContainerFact[]>().notNull().default([]),
   docs: text("docs", { mode: "json" }).$type<string[]>().notNull().default([]),
   envFiles: text("env_files", { mode: "json" }).$type<string[]>().notNull().default([]),
+  versions: text("versions", { mode: "json" }).$type<VersionFact[]>().notNull().default([]),
+  packageManagers: text("package_managers", { mode: "json" }).$type<string[]>().notNull().default([]),
+  ci: text("ci", { mode: "json" }).$type<string[]>().notNull().default([]),
+  testTools: text("test_tools", { mode: "json" }).$type<string[]>().notNull().default([]),
+  manifestDescription: text("manifest_description"),
   sizeBytes: integer("size_bytes"),
+  depsBytes: integer("deps_bytes"),
+  gitBytes: integer("git_bytes"),
   sizeScannedAt: integer("size_scanned_at", { mode: "timestamp" }),
   scanError: text("scan_error"),
   scannedAt: integer("scanned_at", { mode: "timestamp" }).notNull().default(now),
@@ -76,6 +89,7 @@ export const projectMeta = sqliteTable("project_meta", {
   note: text("note"),
   /** Replaces the folder name on screen. The folder itself is never renamed. */
   displayName: text("display_name"),
+  description: text("description"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
 });
 

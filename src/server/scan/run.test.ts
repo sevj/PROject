@@ -58,6 +58,28 @@ describe("runScan", () => {
     expect(JSON.stringify(facts)).not.toContain("SECRET");
   });
 
+  it("records tooling, and reads it from subfolders when the root has no manifest", async () => {
+    make("app/composer.json", JSON.stringify({ description: "Mon appli", require: { php: "^8" } }));
+    make("app/composer.lock");
+    mkdirSync(join(root, "mono"));
+    execFileSync("git", ["init", "-q"], { cwd: join(root, "mono") });
+    make("mono/.gitlab-ci.yml", "");
+    make("mono/front/package.json", JSON.stringify({ dependencies: { next: "16" } }));
+    make("mono/front/pnpm-lock.yaml", "");
+    await runScan(db, root);
+
+    expect(row("app").facts).toMatchObject({
+      versions: [{ label: "PHP", value: "^8" }],
+      packageManagers: ["Composer"],
+      manifestDescription: "Mon appli",
+    });
+    expect(row("mono").facts).toMatchObject({
+      versions: [{ label: "Next.js", value: "16" }],
+      packageManagers: ["pnpm"],
+      ci: ["GitLab CI"],
+    });
+  });
+
   it("reads the stack of a repository from its subfolders", async () => {
     mkdirSync(join(root, "mono"));
     execFileSync("git", ["init", "-q"], { cwd: join(root, "mono") });

@@ -20,6 +20,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     path: `~/Projects/${name}`,
     parentId: null,
     parentName: null,
+    parentFolderName: null,
     parentSizeBytes: null,
     kind: "project",
     missing: false,
@@ -32,12 +33,26 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     dirtyCount: 0,
     remoteUrl: null,
     commitCount: 1,
+    branchCount: 1,
+    stashCount: 0,
+    firstCommitAt: null,
+    lastCommitAuthor: null,
     lastCommitAt: NOW - DAY,
     lastCommitSubject: "x",
     weeklyCommits: null,
     hasCompose: false,
     containers: [],
     sizeBytes: null,
+    depsBytes: null,
+    gitBytes: null,
+    versions: [],
+    packageManagers: [],
+    ci: [],
+    testTools: [],
+    docs: [],
+    envFiles: [],
+    manifestDescription: null,
+    description: null,
     scanError: null,
     ideLabel: "VS Code",
     status: null,
@@ -101,6 +116,15 @@ describe("selectRows", () => {
     expect(names(selectRows(named, { view: "all", query: "tool", sort: "name" }))).toEqual(["Mon outil"]);
   });
 
+  it("searches the description, the user's first", () => {
+    const list = [
+      row("a", { description: "Outil interne", manifestDescription: "Autre chose" }),
+      row("b", { manifestDescription: "Autre chose" }),
+    ];
+    expect(names(selectRows(list, { view: "all", query: "interne", sort: "name" }))).toEqual(["a"]);
+    expect(names(selectRows(list, { view: "all", query: "autre", sort: "name" }))).toEqual(["b"]);
+  });
+
   it("does not change the input order", () => {
     const before = names(rows);
     selectRows(rows, { view: "all", query: "", sort: "name" });
@@ -143,7 +167,7 @@ describe("tag filters", () => {
 
 describe("groupRows", () => {
   const child = (name: string, patch: Partial<RegistryRow> = {}) =>
-    row(name, { parentId: 7, parentName: "platform", ...patch });
+    row(name, { parentId: 7, parentName: "platform", parentFolderName: "platform", ...patch });
   const week = (commits: number) => Array<number>(26).fill(0).with(25, commits);
   const summary = (list: ReturnType<typeof groupRows>) =>
     list.map((item) => (item.kind === "project" ? item.row.name : `[${item.group.rows.map((r) => r.name).join(",")}]`));
@@ -179,6 +203,12 @@ describe("groupRows", () => {
     if (item.kind !== "group" || summed.kind !== "group") throw new Error("expected a group");
     expect(item.group.sizeBytes).toBe(9000);
     expect(summed.group.sizeBytes).toBe(150);
+  });
+
+  it("names the block after the name chosen for the folder", () => {
+    const [item] = groupRows([child("core", { parentName: "Plateforme", parentFolderName: "platform" })]);
+    if (item.kind !== "group") throw new Error("expected a group");
+    expect(item.group).toMatchObject({ name: "Plateforme", folderName: "platform" });
   });
 
   it("has no total when nothing was measured", () => {

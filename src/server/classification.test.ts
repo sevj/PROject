@@ -7,6 +7,7 @@ import {
   removeTag,
   renameTag,
   setAbandoned,
+  setDescription,
   setDisplayName,
   setFavorite,
   setNote,
@@ -59,6 +60,18 @@ describe("display name", () => {
   it("ignores an unknown project", () => {
     setDisplayName(db, 9999, "x");
     expect(db.select().from(projectMeta).all()).toEqual([]);
+  });
+});
+
+describe("description", () => {
+  it("trims and limits the text, and clears it when empty", () => {
+    const stored = () => db.select().from(projectMeta).get()?.description;
+    setDescription(db, a, "  Une appli\nde test ");
+    expect(stored()).toBe("Une appli\nde test");
+    setDescription(db, a, "x".repeat(600));
+    expect(stored()).toHaveLength(500);
+    setDescription(db, a, "   ");
+    expect(stored()).toBeNull();
   });
 });
 
@@ -125,6 +138,7 @@ describe("export and import", () => {
     setFavorite(db, a, true);
     setNote(db, a, "note");
     setDisplayName(db, a, "Le projet A");
+    setDescription(db, a, "Une description");
     addTag(db, [a], "php");
     setAbandoned(db, [b], true);
   }
@@ -135,10 +149,11 @@ describe("export and import", () => {
     favorite: true,
     note: "note",
     displayName: "Le projet A",
+    description: "Une description",
     abandoned: false,
     tags: ["php"],
   };
-  const exportedB = { path: "/p/b", status: null, favorite: false, note: null, displayName: null, abandoned: true, tags: [] };
+  const exportedB = { path: "/p/b", status: null, favorite: false, note: null, displayName: null, description: null, abandoned: true, tags: [] };
 
   it("exports only what the user decided, including abandoned projects", () => {
     db.insert(projects).values({ path: "/p/untouched", name: "untouched" }).run();
@@ -172,7 +187,7 @@ describe("export and import", () => {
     };
     expect(importClassification(db, JSON.stringify(old))).toEqual({ imported: 1, unknownPaths: [] });
     expect(exportClassification(db).projects).toEqual([
-      { path: "/p/a", status: null, favorite: false, note: null, displayName: null, abandoned: true, tags: ["Perso", "php"] },
+      { path: "/p/a", status: null, favorite: false, note: null, displayName: null, description: null, abandoned: true, tags: ["Perso", "php"] },
     ]);
   });
 

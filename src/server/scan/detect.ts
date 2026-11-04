@@ -2,6 +2,7 @@ import { type Dirent, existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { ENV_FILE } from "../project-files";
+import { readTooling, type Tooling } from "./tooling";
 
 export type DetectedKind = "project" | "group" | "folder";
 
@@ -15,8 +16,11 @@ export type DetectedFolder = {
   stacks: string[];
   docs: string[];
   envFiles: string[];
+  tooling: Tooling;
   error: string | null;
 };
+
+const NO_TOOLING: Tooling = { versions: [], packageManagers: [], ci: [], testTools: [], description: null };
 
 const MANIFESTS: Record<string, string> = {
   "composer.json": "PHP",
@@ -70,17 +74,18 @@ function isVisitable(dir: string): boolean {
 }
 
 /** A repository can keep its manifests in `backend/` and `frontend/`. */
-async function nestedStacks(path: string, dirs: string[]): Promise<string[]> {
+async function nestedFolders(path: string, dirs: string[]): Promise<{ path: string; files: string[] }[]> {
   const found = await Promise.all(
     dirs.filter(isVisitable).map(async (dir) => {
+      const childPath = join(path, dir);
       try {
-        return stacksOf((await list(join(path, dir))).files);
+        return { path: childPath, files: (await list(childPath)).files };
       } catch {
-        return [];
+        return null;
       }
     }),
   );
-  return [...new Set(found.flat())].sort();
+  return found.filter((item) => item !== null);
 }
 
 async function docsOf(path: string, listing: Listing): Promise<string[]> {
@@ -103,6 +108,7 @@ async function describeProject(
   listing: Listing,
 ): Promise<DetectedFolder> {
   const rootStacks = stacksOf(listing.files);
+  const nested = rootStacks.length > 0 ? [] : await nestedFolders(path, listing.dirs);
   return {
     path,
     name,
@@ -110,10 +116,11 @@ async function describeProject(
     parentPath,
     hasGit: listing.hasGit,
     hasCompose: listing.files.some((file) => COMPOSE_FILE.test(file)),
-    stacks: rootStacks.length > 0 ? rootStacks : await nestedStacks(path, listing.dirs),
+    stacks: rootStacks.length > 0 ? rootStacks : [...new Set(nested.flatMap(({ files }) => stacksOf(files)))].sort(),
     docs: await docsOf(path, listing),
     // Names only: values are read on demand and never stored.
     envFiles: listing.files.filter((file) => ENV_FILE.test(file)).sort(),
+    tooling: await readTooling([{ path, files: listing.files }, ...nested]),
     error: null,
   };
 }
@@ -129,6 +136,7 @@ function emptyFolder(path: string, name: string, kind: DetectedKind, error: stri
     stacks: [],
     docs: [],
     envFiles: [],
+    tooling: NO_TOOLING,
     error,
   };
 }

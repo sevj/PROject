@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   countTags,
   countView,
+  dockerLabel,
   formatAge,
   formatSize,
   groupRows,
@@ -20,6 +21,8 @@ import {
 import type { ProjectStatus } from "@/server/db/schema";
 import { markAbandoned, scanNow, updateStatus } from "./actions";
 import { ClassificationEditor } from "./classification-editor";
+import { ProjectDescription } from "./project-description";
+import { ProjectFacts } from "./project-facts";
 import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
@@ -90,15 +93,6 @@ function SortButton({
   );
 }
 
-function Fact({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
-  return (
-    <div className="flex justify-between gap-4 border-b border-rule py-2">
-      <dt className="text-mut">{label}</dt>
-      <dd className={`${DATA} truncate ${alert ? "font-medium text-alert" : ""}`}>{value}</dd>
-    </div>
-  );
-}
-
 function GroupHeader({
   group,
   collapsed,
@@ -129,17 +123,30 @@ function GroupHeader({
           onChange={(event) => onCheck(event.target.checked)}
         />
       </label>
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        onClick={onToggle}
-        className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}
-      >
-        <span className="flex min-w-0 items-baseline gap-2 font-bold">
-          <span aria-hidden="true" className="font-mono text-mut">
+      {/* A click anywhere folds the block; the chevron is the real control for the keyboard. */}
+      <div onClick={onToggle} className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}>
+        <span className="flex min-w-0 items-baseline gap-2">
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            aria-label={`${collapsed ? "Déplier" : "Replier"} ${group.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle();
+            }}
+            className="shrink-0 cursor-pointer font-mono text-mut hover:text-ink"
+          >
             {collapsed ? "▸" : "▾"}
+          </button>
+          <span className="min-w-0 flex-1" onClick={(event) => event.stopPropagation()}>
+            <ProjectName
+              projectId={group.parentId}
+              name={group.name}
+              folderName={group.folderName}
+              className="font-bold"
+              compact
+            />
           </span>
-          <span className="truncate">{group.name}</span>
         </span>
         <span className={`${DATA} col-span-2 text-mut`}>
           {total} sous-projet{total > 1 ? "s" : ""}
@@ -151,15 +158,9 @@ function GroupHeader({
         <ActivityStrip weeks={group.weeklyCommits} />
         <span className={`${DATA} ${group.running > 0 ? "" : "text-mut"}`}>{group.running > 0 ? `${group.running} up` : "—"}</span>
         <span className={`${DATA} text-right text-mut`}>{formatSize(group.sizeBytes)}</span>
-      </button>
+      </div>
     </div>
   );
-}
-
-function dockerLabel(row: RegistryRow): string {
-  const running = runningCount(row);
-  if (running > 0) return `${running} up`;
-  return row.hasCompose || row.containers.length > 0 ? "arrêté" : "—";
 }
 
 function BulkBar({
@@ -229,7 +230,6 @@ function BulkBar({
 }
 
 function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; knownTags: string[] }) {
-  const ahead = row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : "pas de suivi distant";
   return (
     <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6">
       <div className={`${DATA} break-all text-mut`}>{row.path}</div>
@@ -240,6 +240,14 @@ function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; kno
           name={row.name}
           folderName={row.folderName}
           className="text-[32px] leading-[1.05] font-bold tracking-tight"
+        />
+      </div>
+      <div className="mb-4">
+        <ProjectDescription
+          key={row.id}
+          projectId={row.id}
+          description={row.description}
+          detected={row.manifestDescription}
         />
       </div>
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
@@ -264,30 +272,7 @@ function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; kno
           />
         </div>
       </details>
-      {row.hasGit ? (
-        <>
-          <div className={`${LABEL} pb-1.5`}>Dernier commit</div>
-          <p className="mb-5 break-words">
-            {row.lastCommitSubject ?? "Pas encore de commit"}{" "}
-            {row.lastCommitAt ? <span className={`${DATA} text-mut`}>{formatAge(row.lastCommitAt, now)}</span> : null}
-          </p>
-        </>
-      ) : null}
-      <dl className="border-t border-rule">
-        <Fact label="Stack" value={row.stacks.join(" + ") || "—"} />
-        <Fact label="Git" value={row.hasGit ? "oui" : "non"} />
-        {row.hasGit ? (
-          <>
-            <Fact label="Branche" value={row.branch ?? "HEAD détachée"} />
-            <Fact label="Distant" value={row.remoteUrl ?? "aucun"} />
-            <Fact label="Écart" value={ahead} />
-            <Fact label="Commits" value={String(row.commitCount ?? 0)} />
-            <Fact label="Fichiers modifiés" value={String(row.dirtyCount ?? 0)} alert={(row.dirtyCount ?? 0) > 0} />
-          </>
-        ) : null}
-        <Fact label="Docker" value={dockerLabel(row)} />
-        <Fact label="Taille hors dépendances" value={formatSize(row.sizeBytes)} />
-      </dl>
+      <ProjectFacts row={row} now={now} />
       <div className="mt-5">
         <ClassificationEditor key={row.id} row={row} />
       </div>

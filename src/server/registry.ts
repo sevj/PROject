@@ -50,7 +50,7 @@ function loadKnownTags(db: Db): string[] {
 
 function toRow(
   { project, facts }: Joined,
-  parent: { name: string; sizeBytes: number | null } | null,
+  parent: { name: string; folderName: string; sizeBytes: number | null } | null,
   { meta, tags: rowTags }: Classification,
   ideCommands: Record<string, string>,
 ): RegistryRow {
@@ -61,6 +61,7 @@ function toRow(
     path: displayPath(project.path),
     parentId: project.parentId,
     parentName: parent?.name ?? null,
+    parentFolderName: parent?.folderName ?? null,
     parentSizeBytes: parent?.sizeBytes ?? null,
     kind: project.kind === "folder" ? "folder" : "project",
     missing: project.missingAt !== null,
@@ -73,12 +74,26 @@ function toRow(
     dirtyCount: facts.dirtyCount,
     remoteUrl: facts.remoteUrl,
     commitCount: facts.commitCount,
+    branchCount: facts.branchCount,
+    stashCount: facts.stashCount,
+    firstCommitAt: facts.firstCommitAt?.getTime() ?? null,
+    lastCommitAuthor: facts.lastCommitAuthor,
     lastCommitAt: facts.lastCommitAt?.getTime() ?? null,
     lastCommitSubject: facts.lastCommitSubject,
     weeklyCommits: facts.weeklyCommits,
     hasCompose: facts.hasCompose,
     containers: facts.containers,
     sizeBytes: facts.sizeBytes,
+    depsBytes: facts.depsBytes,
+    gitBytes: facts.gitBytes,
+    versions: facts.versions,
+    packageManagers: facts.packageManagers,
+    ci: facts.ci,
+    testTools: facts.testTools,
+    docs: facts.docs,
+    envFiles: facts.envFiles,
+    manifestDescription: facts.manifestDescription,
+    description: meta?.description ?? null,
     scanError: facts.scanError,
     ideLabel: ideLabel(ideCommandFor(facts.stacks, ideCommands)),
     status: meta?.status ?? null,
@@ -97,16 +112,20 @@ export function getProject(db: Db, id: number) {
     .where(eq(projects.id, id))
     .get();
   if (!joined) return null;
-  const parent = joined.project.parentId
+  const parentRow = joined.project.parentId
     ? db
-        .select({ name: projects.name, sizeBytes: projectFacts.sizeBytes })
+        .select({ name: projects.name, sizeBytes: projectFacts.sizeBytes, displayName: projectMeta.displayName })
         .from(projects)
         .innerJoin(projectFacts, eq(projectFacts.projectId, projects.id))
+        .leftJoin(projectMeta, eq(projectMeta.projectId, projects.id))
         .where(eq(projects.id, joined.project.parentId))
         .get()
     : undefined;
+  const parent = parentRow
+    ? { name: parentRow.displayName ?? parentRow.name, folderName: parentRow.name, sizeBytes: parentRow.sizeBytes }
+    : null;
   return {
-    row: toRow(joined, parent ?? null, loadClassification(db, id)(id), getSettings(db).ideCommands),
+    row: toRow(joined, parent, loadClassification(db, id)(id), getSettings(db).ideCommands),
     compose: { hasCompose: joined.facts.hasCompose, containers: joined.facts.containers },
     knownTags: loadKnownTags(db),
     absolutePath: joined.project.path,
@@ -122,12 +141,19 @@ export function getRegistry(db: Db) {
     .from(projects)
     .innerJoin(projectFacts, eq(projectFacts.projectId, projects.id))
     .all();
-  const parents = new Map(
-    all.map(({ project, facts }) => [project.id, { name: project.name, sizeBytes: facts.sizeBytes }]),
-  );
 
   const classificationOf = loadClassification(db);
   const { root, ideCommands } = getSettings(db);
+  const parents = new Map(
+    all.map(({ project, facts }) => [
+      project.id,
+      {
+        name: classificationOf(project.id).meta?.displayName ?? project.name,
+        folderName: project.name,
+        sizeBytes: facts.sizeBytes,
+      },
+    ]),
+  );
 
   const rows: RegistryRow[] = [];
   for (const joined of all) {

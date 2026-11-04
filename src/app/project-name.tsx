@@ -8,11 +8,14 @@ export function ProjectName({
   name,
   folderName,
   className,
+  compact = false,
 }: {
   projectId: number;
   name: string;
   folderName: string;
   className: string;
+  /** For a table row: one line, and not a page heading. */
+  compact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [, start] = useTransition();
@@ -64,6 +67,22 @@ export function ProjectName({
           />
         </label>
       </form>
+    );
+  }
+
+  if (compact) {
+    return (
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className={`${className} truncate`}>{shownName}</span>
+        <button
+          type="button"
+          onClick={open}
+          aria-label={`Renommer ${shownName}`}
+          className="shrink-0 cursor-pointer text-[12px] text-mut underline hover:text-ink"
+        >
+          Renommer
+        </button>
+      </span>
     );
   }
 

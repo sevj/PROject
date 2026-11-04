@@ -16,6 +16,10 @@ export type GitFacts = {
   commitCount: number;
   lastCommitAt: Date | null;
   lastCommitSubject: string | null;
+  lastCommitAuthor: string | null;
+  firstCommitAt: Date | null;
+  branchCount: number;
+  stashCount: number;
   weeklyCommits: number[];
 };
 
@@ -82,6 +86,10 @@ export function sanitizeRemoteUrl(url: string): string {
   return trimmed;
 }
 
+function countLines(output: string | undefined): number {
+  return (output ?? "").split("\n").filter(Boolean).length;
+}
+
 /** Oldest week first; the last bucket is the current week. */
 export function bucketWeeks(timestamps: number[], nowSeconds: number): number[] {
   const weeks = Array<number>(ACTIVITY_WEEKS).fill(0);
@@ -99,14 +107,19 @@ export async function readGitFacts(path: string, now = new Date()): Promise<GitF
   const nowSeconds = Math.floor(now.getTime() / 1000);
   const status = parseStatus(await git(path, ["status", "--porcelain=v2", "--branch"]));
 
-  const [last, count, remote, recent] = await Promise.all([
-    gitOptional(path, ["log", "-1", "--format=%ct%x00%s"]),
+  const [last, count, remote, recent, roots, branches, stashes] = await Promise.all([
+    gitOptional(path, ["log", "-1", "--format=%ct%x00%an%x00%s"]),
     gitOptional(path, ["rev-list", "--count", "HEAD"]),
     gitOptional(path, ["remote", "get-url", "origin"]),
     gitOptional(path, ["log", `--since=${nowSeconds - ACTIVITY_WEEKS * WEEK_SECONDS}`, "--format=%ct"]),
+    // A history can have several roots, after a merge of unrelated repositories.
+    gitOptional(path, ["log", "--max-parents=0", "--format=%ct", "HEAD"]),
+    gitOptional(path, ["for-each-ref", "--format=%(refname)", "refs/heads"]),
+    gitOptional(path, ["stash", "list"]),
   ]);
 
-  const [lastTimestamp, lastSubject] = last?.trimEnd().split("\0") ?? [];
+  const [lastTimestamp, lastAuthor, lastSubject] = last?.trimEnd().split("\0") ?? [];
+  const rootTimestamps = (roots ?? "").split("\n").filter(Boolean).map(Number);
 
   return {
     ...status,
@@ -114,6 +127,10 @@ export async function readGitFacts(path: string, now = new Date()): Promise<GitF
     commitCount: count ? Number(count.trim()) : 0,
     lastCommitAt: lastTimestamp ? new Date(Number(lastTimestamp) * 1000) : null,
     lastCommitSubject: lastSubject ?? null,
+    lastCommitAuthor: lastAuthor ?? null,
+    firstCommitAt: rootTimestamps.length > 0 ? new Date(Math.min(...rootTimestamps) * 1000) : null,
+    branchCount: countLines(branches),
+    stashCount: countLines(stashes),
     weeklyCommits: bucketWeeks(
       (recent ?? "").split("\n").filter(Boolean).map(Number),
       nowSeconds,
