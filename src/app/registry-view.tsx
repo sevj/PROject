@@ -231,7 +231,7 @@ function BulkBar({
 function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; knownTags: string[] }) {
   const ahead = row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : "pas de suivi distant";
   return (
-    <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_340px] bg-panel px-5 pt-5 pb-6">
+    <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6">
       <div className={`${DATA} break-all text-mut`}>{row.path}</div>
       <h1 className="mt-1 mb-4 text-[32px] leading-[1.05] font-bold tracking-tight break-words">{row.name}</h1>
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
