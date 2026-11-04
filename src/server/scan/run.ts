@@ -1,0 +1,135 @@
+import { and, eq, isNull, like, notInArray, or } from "drizzle-orm";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { Db } from "../db/client";
+import { projectFacts, projects, scans } from "../db/schema";
+import { type DetectedFolder, detectFolders } from "./detect";
+import { type GitFacts, readGitFacts } from "./git";
+
+const GIT_CONCURRENCY = 8;
+
+export function defaultRoot(): string {
+  return process.env.PM_ROOT || join(homedir(), "Projects");
+}
+
+async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await task(items[index]);
+      }
+    }),
+  );
+  return results;
+}
+
+type Scanned = { folder: DetectedFolder; git: GitFacts | null; error: string | null };
+
+async function scanFolder(folder: DetectedFolder): Promise<Scanned> {
+  if (!folder.hasGit) return { folder, git: null, error: folder.error };
+  try {
+    return { folder, git: await readGitFacts(folder.path), error: folder.error };
+  } catch (error) {
+    const message = (error as { stderr?: string }).stderr?.trim() || String(error);
+    return { folder, git: null, error: message };
+  }
+}
+
+function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | null, now: Date): number {
+  const { id } = db
+    .insert(projects)
+    .values({ path: folder.path, name: folder.name, kind: folder.kind, parentId, lastSeenAt: now })
+    .onConflictDoUpdate({
+      target: projects.path,
+      // `hidden` belongs to the user and stays untouched.
+      set: { name: folder.name, kind: folder.kind, parentId, lastSeenAt: now, missingAt: null },
+    })
+    .returning({ id: projects.id })
+    .get();
+
+  // Containers and size have their own scan steps, so they are not part of this write.
+  const facts = {
+    stacks: folder.stacks,
+    hasGit: folder.hasGit,
+    hasCompose: folder.hasCompose,
+    docs: folder.docs,
+    envFiles: folder.envFiles,
+    branch: git?.branch ?? null,
+    upstream: git?.upstream ?? null,
+    ahead: git?.ahead ?? null,
+    behind: git?.behind ?? null,
+    dirtyCount: git?.dirtyCount ?? null,
+    remoteUrl: git?.remoteUrl ?? null,
+    commitCount: git?.commitCount ?? null,
+    lastCommitAt: git?.lastCommitAt ?? null,
+    lastCommitSubject: git?.lastCommitSubject ?? null,
+    weeklyCommits: git?.weeklyCommits ?? null,
+    scanError: error,
+    scannedAt: now,
+  };
+  db.insert(projectFacts)
+    .values({ projectId: id, ...facts })
+    .onConflictDoUpdate({ target: projectFacts.projectId, set: facts })
+    .run();
+  return id;
+}
+
+export type ScanResult = { scanId: number; projectCount: number; errorCount: number };
+
+export async function runScan(db: Db, root: string, now = new Date()): Promise<ScanResult> {
+  // A running row can only be a leftover here: the server stopped during that scan.
+  db.update(scans)
+    .set({ status: "failed", finishedAt: now, error: "Scan interrompu" })
+    .where(eq(scans.status, "running"))
+    .run();
+  const { id: scanId } = db.insert(scans).values({ startedAt: now }).returning().get();
+
+  try {
+    const scanned = await mapLimit(await detectFolders(root), GIT_CONCURRENCY, scanFolder);
+
+    const result = db.transaction((tx) => {
+      const ids = new Map<string, number>();
+      // Top-level folders first: children need the id of their parent.
+      const ordered = [...scanned].sort(
+        (a, b) => Number(a.folder.parentPath !== null) - Number(b.folder.parentPath !== null),
+      );
+      for (const item of ordered) {
+        const parentId = item.folder.parentPath ? (ids.get(item.folder.parentPath) ?? null) : null;
+        ids.set(item.folder.path, saveFolder(tx as unknown as Db, item, parentId, now));
+      }
+
+      // Rows are kept: the user's classification must survive a folder that disappears.
+      const seen = [...ids.values()];
+      tx.update(projects)
+        .set({ missingAt: now })
+        .where(
+          and(
+            isNull(projects.missingAt),
+            or(eq(projects.path, root), like(projects.path, `${root}/%`)),
+            seen.length > 0 ? notInArray(projects.id, seen) : undefined,
+          ),
+        )
+        .run();
+
+      return {
+        projectCount: scanned.filter((item) => item.folder.kind === "project").length,
+        errorCount: scanned.filter((item) => item.error !== null).length,
+      };
+    });
+
+    db.update(scans)
+      .set({ status: "done", finishedAt: new Date(), ...result })
+      .where(eq(scans.id, scanId))
+      .run();
+    return { scanId, ...result };
+  } catch (error) {
+    db.update(scans)
+      .set({ status: "failed", finishedAt: new Date(), error: String(error) })
+      .where(eq(scans.id, scanId))
+      .run();
+    throw error;
+  }
+}
