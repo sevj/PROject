@@ -3,9 +3,10 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useMessages } from "@/i18n/provider";
 
-export type Flash = (kind: "success" | "error", text: string) => void;
+/** `seconds` overrides the default: 6 for a success, none for an error, which stays until it is read. */
+export type Flash = (kind: "success" | "error", text: string, options?: { seconds?: number }) => void;
 
-type Toast = { id: number; kind: "success" | "error"; text: string; leaving: boolean };
+type Toast = { id: number; kind: "success" | "error"; text: string; leaving: boolean; seconds: number | null };
 
 const FlashContext = createContext<Flash>(() => {});
 
@@ -32,8 +33,15 @@ function ToastItem({ toast, onLeave, onGone }: { toast: Toast; onLeave: () => vo
       <button type="button" className="toast__close" aria-label={close} onClick={onLeave}>
         ×
       </button>
-      {/* The animation is the timer: it pauses when pointed at. An error stays until it is read. */}
-      {success ? <span className="toast__timer" aria-hidden="true" onAnimationEnd={onLeave} /> : null}
+      {/* The animation is the timer: it pauses when pointed at. */}
+      {toast.seconds === null ? null : (
+        <span
+          className="toast__timer"
+          aria-hidden="true"
+          style={{ animationDuration: `${toast.seconds}s` }}
+          onAnimationEnd={onLeave}
+        />
+      )}
     </div>
   );
 }
@@ -43,10 +51,10 @@ export function FlashProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(0);
   const host = useRef<HTMLDivElement>(null);
 
-  const flash = useCallback<Flash>((kind, text) => {
+  const flash = useCallback<Flash>((kind, text, options) => {
     nextId.current += 1;
     const id = nextId.current;
-    setToasts((current) => [...current.filter((toast) => toast.text !== text), { id, kind, text, leaving: false }]);
+    setToasts((current) => [...current.filter((toast) => toast.text !== text), { id, kind, text, leaving: false, seconds: options?.seconds ?? (kind === "success" ? 6 : null) }]);
   }, []);
 
   const lastId = toasts.at(-1)?.id;

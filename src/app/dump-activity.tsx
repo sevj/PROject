@@ -39,7 +39,9 @@ export function DumpActivityProvider({ children }: { children: ReactNode }) {
     let busy = false;
 
     const announce = (job: JobView) => {
-      const { messages: current, flash: tell } = latest.current;
+      const { messages: current, flash } = latest.current;
+      // Every dump notice leaves by itself after 5 seconds, errors included.
+      const tell: typeof flash = (kind, text) => flash(kind, text, { seconds: 5 });
       const m = current.dumps.jobs;
       const target = `${job.containerName} · ${job.database ?? current.dumps.allDatabases}`;
       const kind = job.kind === "dump" ? m.dump : m.load;

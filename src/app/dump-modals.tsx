@@ -140,6 +140,12 @@ export function DumpModal({ target, onClose }: { target: DatabaseTarget; onClose
   );
 }
 
+/** A dump goes back into a container of its own project; a removed project leaves the choice open. */
+const targetsFor = (dump: DumpRow | undefined, targets: DatabaseTarget[]) =>
+  targets.filter(
+    (item) => !dump || (isCompatible(dump.engine, item.engine) && (dump.projectId === null || item.projectId === dump.projectId)),
+  );
+
 const describe = (dump: DumpRow, all: string) =>
   `${dump.projectName} · ${dump.containerName} · ${dump.database ?? all} · ${formatStamp(dump.createdAt)}`;
 
@@ -165,7 +171,12 @@ export function LoadModal({
   const listId = useId();
   const finished = dumps.filter((dump) => dump.status === "done");
   const [pickedDump, setPickedDump] = useState<number | null>(dumpId ?? null);
-  const [pickedTarget, setPickedTarget] = useState<string | null>(targetId ?? null);
+  const [pickedTarget, setPickedTarget] = useState<string | null>(() => {
+    if (targetId) return targetId;
+    // The only container of the dump's project is the one to load into.
+    const own = targetsFor(finished.find((item) => item.id === dumpId), targets);
+    return dumpId !== undefined && own.length === 1 ? own[0].id : null;
+  });
   const [database, setDatabase] = useState(() => finished.find((item) => item.id === dumpId)?.database ?? "");
   const [existing, setExisting] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState(false);
@@ -175,13 +186,19 @@ export function LoadModal({
   const target = targets.find(({ id }) => id === pickedTarget) ?? null;
   const dump = finished.find(({ id }) => id === pickedDump) ?? null;
   const dumpChoices = finished.filter((item) => !target || isCompatible(item.engine, target.engine));
-  const targetChoices = targets.filter((item) => !dump || isCompatible(dump.engine, item.engine));
+  const targetChoices = targetsFor(dump ?? undefined, targets);
 
   // The database proposed is the one the dump came from: the usual case is to put it back.
   const chooseDump = (id: number | null) => {
     setPickedDump(id);
-    setDatabase(finished.find((item) => item.id === id)?.database ?? "");
+    const chosen = finished.find((item) => item.id === id);
+    setDatabase(chosen?.database ?? "");
     setConfirmed(false);
+    // Keep the container when it still fits, otherwise take the project's only one.
+    const fits = targetsFor(chosen, targets);
+    if (!fits.some(({ id: containerId }) => containerId === pickedTarget)) {
+      setPickedTarget(chosen && fits.length === 1 ? fits[0].id : null);
+    }
   };
   useEffect(() => {
     if (!pickedTarget) return;
