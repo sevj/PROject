@@ -1,4 +1,4 @@
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 
 export const ENV_FILE = /^\.env(\.[\w-]+)*$/;
@@ -46,4 +46,53 @@ export async function readEnvFile(projectPath: string, fileName: string): Promis
   if (!ENV_FILE.test(fileName)) return null;
   const content = await readRegularFile(join(projectPath, fileName), MAX_ENV_BYTES);
   return content === null ? null : parseEnv(content);
+}
+
+/** Regenerable or internal folders: shown so that they are known to exist, never opened. */
+const OPAQUE_DIRECTORIES = new Set([".git", "node_modules", "vendor", "target"]);
+const MAX_TREE_ENTRIES = 500;
+
+export type TreeEntry = {
+  name: string;
+  /** From the project root, which is what asks for the content of a folder. */
+  path: string;
+  kind: "directory" | "file" | "link";
+  sizeBytes: number | null;
+  opaque: boolean;
+};
+
+export type TreeListing = { entries: TreeEntry[]; hiddenCount: number };
+
+/** One level at a time, folders first. Null when it is outside the project or unreadable. */
+export async function listProjectFolder(projectPath: string, relative: string): Promise<TreeListing | null> {
+  if (!isInside(relative)) return null;
+  const clean = normalize(relative);
+  const folder = join(projectPath, clean);
+  try {
+    // A link on the way must not lead out of the project.
+    const [realRoot, realFolder] = await Promise.all([realpath(projectPath), realpath(folder)]);
+    if (realFolder !== realRoot && !realFolder.startsWith(`${realRoot}/`)) return null;
+
+    const all = await readdir(folder, { withFileTypes: true });
+    const sorted = all.sort(
+      (a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name, "fr"),
+    );
+    const shown = sorted.slice(0, MAX_TREE_ENTRIES);
+    const entries = await Promise.all(
+      shown.map(async (entry): Promise<TreeEntry> => {
+        const path = clean === "." ? entry.name : join(clean, entry.name);
+        const directory = entry.isDirectory();
+        return {
+          name: entry.name,
+          path,
+          kind: directory ? "directory" : entry.isSymbolicLink() ? "link" : "file",
+          sizeBytes: entry.isFile() ? await lstat(join(folder, entry.name)).then(({ size }) => size, () => null) : null,
+          opaque: directory && OPAQUE_DIRECTORIES.has(entry.name),
+        };
+      }),
+    );
+    return { entries, hiddenCount: sorted.length - shown.length };
+  } catch {
+    return null;
+  }
 }

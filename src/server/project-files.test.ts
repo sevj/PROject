@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseEnv, readEnvFile, readProjectDoc } from "./project-files";
+import { listProjectFolder, parseEnv, readEnvFile, readProjectDoc } from "./project-files";
 
 let base: string;
 let project: string;
@@ -84,5 +84,51 @@ describe("readProjectDoc", () => {
   it("refuses a symlink leaving the project", async () => {
     symlinkSync(join(base, "secret.txt"), join(project, "README.md"));
     expect(await readProjectDoc(project, "README.md")).toBeNull();
+  });
+});
+
+describe("listProjectFolder", () => {
+  const names = async (relative: string) => (await listProjectFolder(project, relative))?.entries.map(({ name }) => name);
+
+  it("lists folders first, with sizes for files only, and goes down on request", async () => {
+    mkdirSync(join(project, "src/deep"), { recursive: true });
+    writeFileSync(join(project, "a.txt"), "12345");
+    writeFileSync(join(project, ".env"), "SECRET=value");
+    const listing = await listProjectFolder(project, ".");
+    expect(listing?.entries.map(({ name, kind, sizeBytes }) => [name, kind, sizeBytes])).toEqual([
+      ["docs", "directory", null],
+      ["src", "directory", null],
+      [".env", "file", 12],
+      ["a.txt", "file", 5],
+    ]);
+    expect(JSON.stringify(listing)).not.toContain("SECRET");
+    expect((await listProjectFolder(project, "src"))?.entries[0]).toMatchObject({ name: "deep", path: "src/deep" });
+  });
+
+  it("marks dependencies and .git as not to be opened", async () => {
+    mkdirSync(join(project, "node_modules"));
+    mkdirSync(join(project, ".git"));
+    const listing = await listProjectFolder(project, ".");
+    const opaque = listing?.entries.filter((entry) => entry.opaque).map(({ name }) => name);
+    expect(opaque).toEqual([".git", "node_modules"]);
+  });
+
+  it("refuses anything outside the project, through a path or a link", async () => {
+    expect(await listProjectFolder(project, "..")).toBeNull();
+    expect(await listProjectFolder(project, "docs/../..")).toBeNull();
+    expect(await listProjectFolder(project, base)).toBeNull();
+    symlinkSync(base, join(project, "out"));
+    expect(await names("out")).toBeUndefined();
+    const link = (await listProjectFolder(project, "."))?.entries.find(({ name }) => name === "out");
+    expect(link?.kind).toBe("link");
+  });
+
+  it("returns null for a folder that does not exist, and caps a huge one", async () => {
+    expect(await listProjectFolder(project, "nope")).toBeNull();
+    mkdirSync(join(project, "many"));
+    for (let index = 0; index < 505; index += 1) writeFileSync(join(project, "many", `${index}.txt`), "");
+    const listing = await listProjectFolder(project, "many");
+    expect(listing?.entries).toHaveLength(500);
+    expect(listing?.hiddenCount).toBe(5);
   });
 });

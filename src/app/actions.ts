@@ -21,7 +21,7 @@ import type { ProjectStatus } from "@/server/db/schema";
 import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
 import { composeDirectories, launch, runCompose } from "@/server/project-actions";
-import { type EnvEntry, readEnvFile } from "@/server/project-files";
+import { type EnvEntry, listProjectFolder, readEnvFile, type TreeListing } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import {
   changeDirectory,
@@ -89,6 +89,12 @@ export async function refreshProject(projectId: number): Promise<void> {
   if (exists) startSizing([projectId]);
   revalidatePath("/");
   revalidatePath(`/projects/${projectId}`);
+}
+
+/** The path comes from the browser: only what is inside this project can be listed. */
+export async function listProjectTree(projectId: number, relative: string): Promise<TreeListing | null> {
+  const project = getProject(getDb(), projectId);
+  return project ? listProjectFolder(project.absolutePath, String(relative)) : null;
 }
 
 export async function revealEnvFile(projectId: number, fileName: string): Promise<EnvEntry[] | null> {
