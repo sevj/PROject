@@ -216,7 +216,7 @@ export function TerminalPanel({
       terminal.current = term;
       fitter.current = fit;
 
-      const send = (data: Uint8Array) => {
+      const send = (data: Uint8Array<ArrayBuffer>) => {
         const ws = socket.current;
         if (ws?.readyState === WebSocket.OPEN) ws.send(data);
       };
