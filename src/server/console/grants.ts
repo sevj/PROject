@@ -2,9 +2,11 @@ import { randomBytes } from "node:crypto";
 import type { ConsoleOptions } from "@/lib/console-options";
 import { hostnameOf, LOOPBACK_HOSTNAMES } from "@/lib/local-request";
 
-export type Grant = {
-  containerId: string;
-  options: ConsoleOptions;
+export type GrantTarget =
+  | { kind: "docker"; containerId: string; options: ConsoleOptions }
+  | { kind: "claude"; cwd: string; sessionId: string; resume: boolean };
+
+export type Grant = GrantTarget & {
   /** `Host` of the page that asked, which the WebSocket's `Origin` must match. */
   appHost: string;
   expiresAt: number;
@@ -17,7 +19,7 @@ const holder = globalThis as unknown as { __pmConsoleGrants?: Map<string, Grant>
 const grants = () => (holder.__pmConsoleGrants ??= new Map());
 
 /** One use, a short life, and nothing to guess: a token is the whole key to a shell. */
-export function issueGrant(grant: Omit<Grant, "expiresAt">, now = Date.now()): string {
+export function issueGrant(grant: GrantTarget & { appHost: string }, now = Date.now()): string {
   const store = grants();
   for (const [token, { expiresAt }] of store) if (expiresAt <= now) store.delete(token);
   const token = randomBytes(32).toString("base64url");

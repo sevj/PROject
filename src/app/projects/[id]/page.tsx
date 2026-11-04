@@ -5,7 +5,8 @@ import { Suspense } from "react";
 import { isMarkdown } from "@/lib/docs";
 import { formatAge } from "@/lib/registry";
 import type { Messages } from "@/i18n";
-import { readClaudeUsage } from "@/server/claude-usage/report";
+import { readClaudeUsage, SESSIONS_SHOWN } from "@/server/claude-usage/report";
+import { readSessionTitles } from "@/server/claude-usage/session-titles";
 import { getDb } from "@/server/db/client";
 import { readEnvView } from "@/server/env-vars";
 import { listProjectContainers } from "@/server/docker-containers";
@@ -16,6 +17,7 @@ import { serverMessages } from "@/server/i18n";
 import { listProjectFolder, readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import { readGitDetails, readRecentCommits } from "@/server/scan/git";
+import { ClaudeConsoleButton } from "../../claude-console-button";
 import { LoadingFallback } from "../../loading-fallback";
 import { ProjectDescription } from "../../project-description";
 import { ProjectDirectory } from "../../project-directory";
@@ -92,6 +94,10 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const commits =
     tab === "general" && row.hasGit && !row.missing && !row.abandoned ? await readRecentCommits(absolutePath) : [];
   const claudeUsage = tab === "general" || tab === "claude" ? readClaudeUsage(getDb(), projectId, now) : null;
+  const sessionTitles =
+    tab === "claude" && claudeUsage
+      ? await readSessionTitles(getDb(), claudeUsage.sessions.slice(0, SESSIONS_SHOWN).map(({ sessionId }) => sessionId))
+      : {};
   const gitDetails =
     tab === "git" && row.hasGit && !row.missing && !row.abandoned ? await readGitDetails(absolutePath) : null;
   const readsDocker = (tab === "general" || tab === "docker") && !row.missing && !row.abandoned;
@@ -131,6 +137,11 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
           <div className="mt-2 max-w-3xl">
             <ProjectDescription projectId={row.id} description={row.description} detected={row.manifestDescription} />
           </div>
+          {!row.missing && !row.abandoned ? (
+            <div className="mt-3">
+              <ClaudeConsoleButton projectId={row.id} projectName={row.name} />
+            </div>
+          ) : null}
         </div>
         <ProjectOrganizer key={row.id} row={row} knownTags={knownTags} />
       </div>
@@ -215,7 +226,11 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
           {tab === "claude" ? (
             <ClaudeTab
               usage={claudeUsage}
+              titles={sessionTitles}
+              projectId={row.id}
+              projectName={row.name}
               projectPath={absolutePath}
+              canOpen={!row.missing && !row.abandoned}
               now={now}
               m={m.claudeUsage}
               age={messages.age}

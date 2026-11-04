@@ -21,7 +21,11 @@ import { serverMessages } from "@/server/i18n";
 import type { ProjectStatus } from "@/server/db/schema";
 import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
+import { randomUUID } from "node:crypto";
+import { isSessionId } from "@/lib/claude-console";
 import { parseConsoleOptions } from "@/lib/console-options";
+import { findSessionStart, readClaudeUsage } from "@/server/claude-usage/report";
+import { syncClaudeUsageNow } from "@/server/claude-usage/scheduler";
 import { ensureConsoleServer } from "@/server/console/server";
 import { issueGrant } from "@/server/console/grants";
 import { listProjectContainers } from "@/server/docker-containers";
@@ -282,10 +286,55 @@ export async function openConsole(
   if (!appHost) return { error: m.consoleUnavailable("no host") };
   try {
     const port = await ensureConsoleServer();
-    return { port, token: issueGrant({ containerId: container.id, options: parsed.options, appHost }) };
+    return { port, token: issueGrant({ kind: "docker", containerId: container.id, options: parsed.options, appHost }) };
   } catch (error) {
     return { error: m.consoleUnavailable(error instanceof Error ? error.message : String(error)) };
   }
+}
+
+/**
+ * Claude in the folder of the project. A session to resume is honoured only if it is known
+ * to be of this project: otherwise a new conversation starts, as it does when a console
+ * that was never spoken to is reopened.
+ */
+export async function openClaudeConsole(
+  projectId: number,
+  resumeId: unknown,
+): Promise<{ port: number; token: string; sessionId: string } | { error: string }> {
+  const db = getDb();
+  const m = serverMessages(db).errors;
+  const project = launchable(projectId);
+  if (!project) return { error: m.projectGone };
+  if (project.row.abandoned) return { error: m.abandonedProject };
+
+  const appHost = (await headers()).get("host");
+  if (!appHost) return { error: m.consoleUnavailable("no host") };
+
+  let resumeFrom: string | null = null;
+  if (isSessionId(resumeId)) {
+    // What was said a moment ago in this console may not have been read yet.
+    await syncClaudeUsageNow();
+    resumeFrom = findSessionStart(db, projectId, resumeId);
+  }
+  const resume = resumeFrom !== null;
+  const sessionId = resume ? (resumeId as string) : randomUUID();
+  try {
+    const port = await ensureConsoleServer();
+    const cwd = resumeFrom ?? project.absolutePath;
+    return { port, sessionId, token: issueGrant({ kind: "claude", cwd, sessionId, resume, appHost }) };
+  } catch (error) {
+    return { error: m.consoleUnavailable(error instanceof Error ? error.message : String(error)) };
+  }
+}
+
+/** What has been consumed in this project since a console was opened. */
+export async function readClaudeConsoleUsage(
+  projectId: number,
+  since: number,
+): Promise<{ costInDollars: number; calls: number }> {
+  await syncClaudeUsageNow();
+  const usage = readClaudeUsage(getDb(), projectId, Date.now(), since);
+  return { costInDollars: usage?.costInDollars ?? 0, calls: usage?.calls ?? 0 };
 }
 
 export async function saveSettingsForm(form: Record<string, string>): Promise<string | null> {

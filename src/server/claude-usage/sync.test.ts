@@ -129,6 +129,17 @@ describe("syncClaudeUsage", () => {
     expect(rows().map((row) => row.messageId).sort()).toEqual(["a", "b", "c"]);
   });
 
+  it("starts over on a file rewritten past what was read, rather than from the middle of a line", async () => {
+    const path = file("p/s.jsonl");
+    writeFileSync(path, line("a"));
+    await syncClaudeUsage(db, dir);
+
+    writeFileSync(path, `${line("b", 10, { padding: "x".repeat(40) })}${line("c")}`);
+    const report = await syncClaudeUsage(db, dir);
+    expect(report).toMatchObject({ unreadableLines: 0 });
+    expect(rows().map((row) => row.messageId).sort()).toEqual(["a", "b", "c"]);
+  });
+
   it("keeps the calls of a transcript that was purged", async () => {
     const path = file("p/s.jsonl");
     writeFileSync(path, line("a"));

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_CONSOLE_OPTIONS } from "@/lib/console-options";
 import { authorizeUpgrade, GRANT_TTL_MS, issueGrant, takeGrant } from "./grants";
 
-const grant = { containerId: "c1", options: DEFAULT_CONSOLE_OPTIONS, appHost: "127.0.0.1:4300" };
+const grant = { kind: "docker" as const, containerId: "c1", options: DEFAULT_CONSOLE_OPTIONS, appHost: "127.0.0.1:4300" };
 const headers = { host: "127.0.0.1:5000", origin: "http://127.0.0.1:4300" };
 
 describe("grants", () => {

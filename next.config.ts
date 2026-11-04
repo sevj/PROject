@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   // Loaded by Node as it is: its optional native parts must not be bundled.
-  serverExternalPackages: ["ws"],
+  serverExternalPackages: ["ws", "node-pty"],
   turbopack: {
     rules: {
       "*.css": {

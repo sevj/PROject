@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import type { Messages } from "@/i18n";
 import { formatAge } from "@/lib/registry";
-import type { ClaudeUsage, UsageGroup } from "@/server/claude-usage/report";
+import { type ClaudeUsage, SESSIONS_SHOWN, type UsageGroup } from "@/server/claude-usage/report";
+import { ClaudeConsoleButton } from "../../claude-console-button";
 import { CARD, DATA, LABEL, SECTION_TITLE } from "../../ui";
 import { CostBars, type UsageMessages, usageFormats } from "./claude-usage";
 
-const SESSIONS_SHOWN = 25;
 const CELL = "border-b border-rule py-2 pr-4 align-top";
 const NUMBER = `${CELL} ${DATA} text-right`;
 
@@ -39,14 +39,22 @@ function Table({ headers, minWidth, children }: { headers: string[]; minWidth: n
 
 export function ClaudeTab({
   usage,
+  titles,
+  projectId,
+  projectName,
   projectPath,
+  canOpen,
   now,
   m,
   age,
   locale,
 }: {
   usage: ClaudeUsage | null;
+  titles: Record<string, string>;
+  projectId: number;
+  projectName: string;
   projectPath: string;
+  canOpen: boolean;
   now: number;
   m: UsageMessages;
   age: Messages["age"];
@@ -202,13 +210,15 @@ export function ClaudeTab({
             m.cacheReadTokens,
             m.subagentsShort,
             m.cost,
+            ...(canOpen ? [""] : []),
           ]}
-          minWidth={960}
+          minWidth={1100}
         >
           {usage.sessions.slice(0, SESSIONS_SHOWN).map((session) => (
             <tr key={session.sessionId}>
-              <th scope="row" className={`${CELL} ${DATA} font-normal`} title={session.sessionId}>
-                {session.sessionId.slice(0, 8)}
+              <th scope="row" className={`${CELL} min-w-[220px] font-normal`} title={session.sessionId}>
+                {titles[session.sessionId] ? <span className="block break-words">{titles[session.sessionId]}</span> : null}
+                <span className={`${DATA} text-mut`}>{session.sessionId.slice(0, 8)}</span>
               </th>
               <td className={NUMBER}>{format.moment(session.firstCallAt)}</td>
               <td className={NUMBER}>{formatAge(session.lastCallAt, now, age)}</td>
@@ -218,6 +228,11 @@ export function ClaudeTab({
               <Tokens value={session.cacheReadTokens} />
               <td className={NUMBER}>{session.subagentCostInDollars > 0 ? format.money(session.subagentCostInDollars) : "—"}</td>
               <td className={NUMBER}>{cost(session)}</td>
+              {canOpen ? (
+                <td className={`${CELL} pr-0 text-right`}>
+                  <ClaudeConsoleButton projectId={projectId} projectName={projectName} resumeId={session.sessionId} small />
+                </td>
+              ) : null}
             </tr>
           ))}
         </Table>

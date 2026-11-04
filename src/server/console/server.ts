@@ -1,12 +1,21 @@
 import http from "node:http";
 import { type WebSocket, WebSocketServer } from "ws";
-import { authorizeUpgrade } from "./grants";
+import { openDockerTerminal } from "./docker-terminal";
+import { authorizeUpgrade, type Grant } from "./grants";
 import { startSession } from "./session";
+import type { Terminal } from "./terminal";
 
 const MAX_SESSIONS = 8;
 const PING_MS = 30_000;
 
 type ConsoleServer = { port: number };
+
+async function openTerminal(grant: Grant): Promise<Terminal> {
+  if (grant.kind === "docker") return openDockerTerminal(grant.containerId, grant.options);
+  // Loaded when needed: a native module that failed to build must not take Docker consoles with it.
+  const { openClaudeTerminal } = await import("./claude-terminal");
+  return openClaudeTerminal(grant);
+}
 
 // Kept on globalThis so that a hot reload in dev does not open a second server.
 const holder = globalThis as unknown as { __pmConsoleServer?: Promise<ConsoleServer> };
@@ -32,7 +41,7 @@ async function start(): Promise<ConsoleServer> {
     wss.handleUpgrade(req, socket, head, (ws) => {
       alive.add(ws);
       ws.on("pong", () => alive.add(ws));
-      startSession(ws, grant);
+      startSession(ws, () => openTerminal(grant));
     });
   });
 
@@ -51,7 +60,7 @@ async function start(): Promise<ConsoleServer> {
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    // Loopback only: this port opens a shell in a container.
+    // Loopback only: this port opens a shell in a container, and Claude on this machine.
     server.listen(0, "127.0.0.1", resolve);
   });
   port = (server.address() as { port: number }).port;

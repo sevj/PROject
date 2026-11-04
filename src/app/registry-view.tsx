@@ -393,10 +393,13 @@ function Inspector({
         ) : (
           <span />
         )}
-        <Link href={`/projects/${row.id}`} className={`${BUTTON} shrink-0`}>
-          {m.openSheet}
-          <OpenIcon />
-        </Link>
+        <div className="flex flex-wrap justify-end gap-2">
+          {!row.missing && !row.abandoned ? <ClaudeConsoleButton projectId={row.id} projectName={row.name} /> : null}
+          <Link href={`/projects/${row.id}`} className={`${BUTTON} shrink-0`}>
+            {m.openSheet}
+            <OpenIcon />
+          </Link>
+        </div>
       </div>
       <ProjectDirectory
         key={`path-${row.id}`}

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "../db/client";
 import { claudeApiCalls, claudeTranscripts, projects } from "../db/schema";
-import { readClaudeUsage, USAGE_DAYS, USAGE_WEEKS } from "./report";
+import { findSessionStart, readClaudeUsage, USAGE_DAYS, USAGE_WEEKS } from "./report";
 
 const NOW = new Date("2026-11-04T12:00:00Z").getTime();
 const DAY = 24 * 3600 * 1000;
@@ -48,7 +48,34 @@ beforeEach(() => {
   projectId = addProject("/work/app");
 });
 
+describe("findSessionStart", () => {
+  it("gives the folder of the first call of a session", () => {
+    addCall({ sessionId: "s", cwd: "/work/app/src", calledAt: new Date(NOW - 2 * DAY) });
+    addCall({ sessionId: "s", cwd: "/work/app", calledAt: new Date(NOW - DAY) });
+    expect(findSessionStart(db, projectId, "s")).toBe("/work/app/src");
+  });
+
+  it("finds a session of a sub-project from its group", () => {
+    const group = addProject("/work/group");
+    addCall({ sessionId: "s", cwd: "/work/group/a", projectId: addProject("/work/group/a", group) });
+    expect(findSessionStart(db, group, "s")).toBe("/work/group/a");
+  });
+
+  it("knows nothing of an unknown session, or of the session of another project", () => {
+    addCall({ sessionId: "other", projectId: addProject("/work/other"), cwd: "/work/other" });
+    expect(findSessionStart(db, projectId, "unknown")).toBeNull();
+    expect(findSessionStart(db, projectId, "other")).toBeNull();
+  });
+});
+
 describe("readClaudeUsage", () => {
+  it("can be limited to what came after a moment", () => {
+    addCall({ outputTokens: MILLION, calledAt: new Date(NOW - DAY) });
+    addCall({ outputTokens: MILLION, calledAt: new Date(NOW - 1000) });
+    expect(readClaudeUsage(db, projectId, NOW, NOW - 60_000)).toMatchObject({ calls: 1, costInDollars: 20 });
+    expect(readClaudeUsage(db, projectId, NOW, NOW + 60_000)).toBeNull();
+  });
+
   it("has nothing to say about a project without calls", () => {
     expect(readClaudeUsage(db, projectId, NOW)).toBeNull();
   });

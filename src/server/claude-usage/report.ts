@@ -1,10 +1,12 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { type CostBreakdown, costBreakdown, LONG_PROMPT_TOKENS } from "@/lib/claude-pricing";
 import type { Db } from "../db/client";
 import { claudeApiCalls, claudeTranscripts, projects } from "../db/schema";
 
 export const USAGE_WEEKS = 26;
 export const USAGE_DAYS = 30;
+/** Sessions listed on the Claude tab, the most recent ones. */
+export const SESSIONS_SHOWN = 25;
 
 const SECONDS_PER_DAY = 24 * 3600;
 const DAYS_PER_WEEK = 7;
@@ -78,7 +80,20 @@ function entry<T>(map: Map<string, T>, key: string, create: () => T): T {
 
 const byCost = (a: UsageGroup, b: UsageGroup) => b.costInDollars - a.costInDollars;
 
-export function readClaudeUsage(db: Db, projectId: number, now = Date.now()): ClaudeUsage | null {
+/** Where a session of this project started, so that resuming it goes on working in the same folder. */
+export function findSessionStart(db: Db, projectId: number, sessionId: string): string | null {
+  const first = db
+    .select({ cwd: claudeApiCalls.cwd })
+    .from(claudeApiCalls)
+    .where(and(eq(claudeApiCalls.sessionId, sessionId), inArray(claudeApiCalls.projectId, withSubProjects(db, projectId))))
+    .orderBy(asc(claudeApiCalls.calledAt))
+    .limit(1)
+    .get();
+  return first?.cwd ?? null;
+}
+
+/** `since` limits it to the calls made from then on, for a console that has just been opened. */
+export function readClaudeUsage(db: Db, projectId: number, now = Date.now(), since?: number): ClaudeUsage | null {
   const nowSeconds = Math.floor(now / 1000);
   const promptTokens = sql`${claudeApiCalls.inputTokens} + ${claudeApiCalls.cacheReadTokens} + ${claudeApiCalls.cacheWrite5mTokens} + ${claudeApiCalls.cacheWrite1hTokens}`;
   // Numbers are bound as floats, which would make this a fraction of a day without the cast.
@@ -108,7 +123,12 @@ export function readClaudeUsage(db: Db, projectId: number, now = Date.now()): Cl
       webSearchRequests: sql<number>`sum(${claudeApiCalls.webSearchRequests})`,
     })
     .from(claudeApiCalls)
-    .where(inArray(claudeApiCalls.projectId, withSubProjects(db, projectId)))
+    .where(
+      and(
+        inArray(claudeApiCalls.projectId, withSubProjects(db, projectId)),
+        since === undefined ? undefined : gte(claudeApiCalls.calledAt, new Date(since)),
+      ),
+    )
     .groupBy(
       claudeApiCalls.model,
       claudeApiCalls.speed,

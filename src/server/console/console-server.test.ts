@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { Socket } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
@@ -84,7 +84,7 @@ afterAll(() => {
 });
 
 const grant = (containerId = "c1") =>
-  issueGrant({ containerId, options: DEFAULT_CONSOLE_OPTIONS, appHost: "127.0.0.1:4300" });
+  issueGrant({ kind: "docker", containerId, options: DEFAULT_CONSOLE_OPTIONS, appHost: "127.0.0.1:4300" });
 
 const connect = (token: string, headers: Record<string, string> = { Origin: "http://127.0.0.1:4300" }) =>
   new WebSocket(`ws://127.0.0.1:${port}/?token=${token}`, { headers });
@@ -209,6 +209,108 @@ describe("console server", () => {
     first.close();
     expect(await status(connect(grant(), { Origin: "http://127.0.0.1:4300", Host: `evil.test:${port}` }))).toBe(403);
     expect(await status(connect("not-a-token"))).toBe(403);
+  });
+
+  describe("Claude", () => {
+    let bin: string;
+    let originalPath: string | undefined;
+
+    // A stand-in for `claude`: it says how it was started, then echoes what is typed.
+    beforeAll(() => {
+      bin = mkdtempSync(join(tmpdir(), "pm-claude-bin-"));
+      writeFileSync(
+        join(bin, "claude"),
+        `#!/bin/sh
+echo "args=$*"
+echo "cwd=$(pwd)"
+echo "node_env=[$NODE_ENV] term=$TERM"
+echo "pid=$$"
+trap 'exit 0' HUP
+while read -r line; do
+  [ "$line" = quit ] && exit 7
+  echo "got=$line"
+done
+`,
+        { mode: 0o755 },
+      );
+      originalPath = process.env.PATH;
+      process.env.PATH = `${bin}:${originalPath}`;
+    });
+
+    afterAll(() => {
+      process.env.PATH = originalPath;
+      rmSync(bin, { recursive: true, force: true });
+    });
+
+    const SESSION = "24e58f29-84d6-4eed-930f-68d02b4aae30";
+    const claudeGrant = (resume = false) =>
+      issueGrant({ kind: "claude", cwd: dir, sessionId: SESSION, resume, appHost: "127.0.0.1:4300" });
+    const output = (frames: Frame[]) =>
+      frames
+        .filter(({ binary }) => binary)
+        .map(({ text }) => text)
+        .join("");
+
+    it("starts it in the folder of the project, on that session, away from the server's environment", async () => {
+      const ws = connect(claudeGrant());
+      const { frames, until } = collect(ws);
+      await until((all) => output(all).includes("term="));
+      expect(output(frames)).toContain(`args=--session-id ${SESSION}`);
+      expect(output(frames)).toContain(`cwd=${dir}`);
+      expect(output(frames)).toContain("node_env=[] term=xterm-256color");
+      ws.close();
+    });
+
+    it("resumes a session when asked to", async () => {
+      const ws = connect(claudeGrant(true));
+      const { until } = collect(ws);
+      await until((all) => output(all).includes(`args=--resume ${SESSION}`));
+      ws.close();
+    });
+
+    it("carries what is typed, and reports the exit code", async () => {
+      const ws = connect(claudeGrant());
+      const { frames, closed, until } = collect(ws);
+      await until((all) => output(all).includes("pid="));
+      ws.send(Buffer.from("hello\n"), { binary: true });
+      await until((all) => output(all).includes("got=hello"));
+      ws.send(Buffer.from("quit\n"), { binary: true });
+      expect(await closed).toBe(1000);
+      expect(frames.at(-1)).toEqual({ binary: false, text: JSON.stringify({ type: "exit", code: 7 }) });
+    });
+
+    it("hangs up on it when the browser goes away", async () => {
+      const ws = connect(claudeGrant());
+      const { frames, until } = collect(ws);
+      await until((all) => /pid=\d+/.test(output(all)));
+      const pid = Number(/pid=(\d+)/.exec(output(frames))?.[1]);
+      expect(() => process.kill(pid, 0)).not.toThrow();
+      ws.close();
+      const isGone = () => {
+        try {
+          process.kill(pid, 0);
+          return false;
+        } catch {
+          return true;
+        }
+      };
+      for (let attempt = 0; attempt < 100 && !isGone(); attempt += 1) await new Promise((r) => setTimeout(r, 30));
+      expect(isGone()).toBe(true);
+    });
+
+    it("is refused to another site like any console", async () => {
+      expect(await status(connect(claudeGrant(), { Origin: "http://evil.test" }))).toBe(403);
+    });
+
+    it("answers with the reason when it cannot be started", async () => {
+      process.env.PATH = "/nowhere";
+      const ws = connect(claudeGrant());
+      const { frames, closed } = collect(ws);
+      await closed;
+      process.env.PATH = `${bin}:${originalPath}`;
+      expect(output(frames)).toContain("execvp");
+      expect(frames.at(-1)).toEqual({ binary: false, text: JSON.stringify({ type: "exit", code: 1 }) });
+    });
   });
 
   it("answers nothing on plain HTTP", async () => {

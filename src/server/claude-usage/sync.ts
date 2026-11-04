@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
@@ -9,6 +9,7 @@ import { type ApiCall, mayHoldCall, parseTranscriptLine, projectForCwd } from ".
 
 /** Enough to keep each write short, which matters since writing blocks the whole app. */
 const BATCH_SIZE = 200;
+const LINE_BREAK = 10;
 
 export type SyncReport = { filesRead: number; callsRead: number; unreadableLines: number };
 
@@ -59,11 +60,25 @@ function saveProgress(db: Db, path: string, calls: readonly ApiCall[], offset: n
   });
 }
 
+/** An offset is always just after a line break, in the file it was taken from. */
+async function endsALine(path: string, offset: number): Promise<boolean> {
+  if (offset === 0) return true;
+  const file = await open(path);
+  try {
+    const { buffer } = await file.read(Buffer.alloc(1), 0, 1, offset - 1);
+    return buffer[0] === LINE_BREAK;
+  } finally {
+    await file.close();
+  }
+}
+
 async function readTranscript(db: Db, path: string, report: SyncReport): Promise<void> {
   const known = db.select().from(claudeTranscripts).where(eq(claudeTranscripts.path, path)).get();
   const { size } = await stat(path);
-  // Smaller than what was read: it is another file now. Reading it again counts nothing twice.
-  const restart = !known || size < known.offset;
+  if (known && size === known.offset) return;
+  // Claude Code rewrites transcripts, which then may have grown back past what was read.
+  // Reading again counts nothing twice.
+  const restart = !known || size < known.offset || !(await endsALine(path, known.offset));
   let offset = restart ? 0 : known.offset;
   let unreadable = restart ? 0 : known.unreadableLines;
   if (size === offset) return;
@@ -82,7 +97,7 @@ async function readTranscript(db: Db, path: string, report: SyncReport): Promise
   for await (const chunk of createReadStream(path, { start: offset, end: size - 1 })) {
     const data: Buffer = rest.length > 0 ? Buffer.concat([rest, chunk as Buffer]) : (chunk as Buffer);
     let start = 0;
-    for (let end = data.indexOf(10); end !== -1; end = data.indexOf(10, start)) {
+    for (let end = data.indexOf(LINE_BREAK); end !== -1; end = data.indexOf(LINE_BREAK, start)) {
       const line = data.subarray(start, end);
       start = end + 1;
       offset += line.length + 1;
