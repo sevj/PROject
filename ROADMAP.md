@@ -16,8 +16,8 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [x] Les volumes ne sont jamais supprimés en masse : listés un par un, ceux des projets signalés, suppression avec confirmation explicite.
 
 ## 2. Ports (entrée de menu générale)
-- [ ] Ports publiés par Docker, ports déclarés dans compose (même projet arrêté), processus en écoute sur l'hôte (`ss`).
-- [ ] Détection des collisions, signalées en premier.
+- [x] Ports publiés par Docker, ports déclarés dans compose (même projet arrêté), processus en écoute sur l'hôte (`ss`).
+- [x] Détection des collisions, signalées en premier.
 
 ## 3. Onglet « Sécurité et dépendances » sur la fiche projet
 - [ ] npm / pnpm / yarn / composer (cargo / go si installés) : paquets obsolètes + audit.
