@@ -69,6 +69,35 @@ describe("runScan", () => {
     expect(db.select().from(projects).all()).toHaveLength(1);
   });
 
+  it("ignores an empty .git folder and finds the projects below it", async () => {
+    mkdirSync(join(root, "suite", ".git"), { recursive: true });
+    make("suite/core/composer.json");
+    make("suite/web/package.json");
+    await runScan(db, root);
+
+    expect(row("suite").project.kind).toBe("group");
+    expect(row("suite").facts?.scanError).toBeNull();
+    expect(row("core").project.parentId).toBe(row("suite").project.id);
+    expect(row("web").project.parentId).toBe(row("suite").project.id);
+  });
+
+  it("keeps a valid repository as one project, even with projects inside", async () => {
+    mkdirSync(join(root, "mono"));
+    execFileSync("git", ["init", "-q"], { cwd: join(root, "mono") });
+    make("mono/sub/package.json");
+    await runScan(db, root);
+
+    expect(row("mono").project.kind).toBe("project");
+    expect(db.select().from(projects).all()).toHaveLength(1);
+  });
+
+  it("counts a .git file as a repository", async () => {
+    make("worktree/.git", "gitdir: /nowhere\n");
+    await runScan(db, root);
+    expect(row("worktree").project.kind).toBe("project");
+    expect(row("worktree").facts?.hasGit).toBe(true);
+  });
+
   it("treats a folder with a Makefile as one project, not as a group", async () => {
     make("sim/Makefile", "");
     make("sim/rust/Cargo.toml");

@@ -43,8 +43,9 @@ async function list(path: string): Promise<Listing> {
   const dirs: string[] = [];
   let hasGit = false;
   for (const entry of entries) {
-    // A `.git` file is a worktree or a submodule, which still counts as a repository.
-    if (entry.name === ".git") hasGit = true;
+    // A `.git` file is a worktree or a submodule. A `.git` folder without HEAD, such as
+    // an empty one, is not a repository and must not hide the projects below it.
+    if (entry.name === ".git") hasGit = entry.isFile() || existsSync(join(path, ".git", "HEAD"));
     else if (entry.isFile()) files.push(entry.name);
     // Symlinks are not followed: they could leave the root or form a cycle.
     else if (entry.isDirectory()) dirs.push(entry.name);
