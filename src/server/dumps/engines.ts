@@ -71,7 +71,7 @@ const pickTool = (first: string, second: string, args: string[]) => ["sh", "-c",
 const SQL_SYSTEM_DATABASES = new Set(["information_schema", "performance_schema", "mysql", "sys"]);
 const MONGO_SYSTEM_DATABASES = new Set(["admin", "local", "config"]);
 
-const mysqlTool = (engine: Engine, kind: "client" | "dump", args: string[]) => {
+export const mysqlTool = (engine: Engine, kind: "client" | "dump", args: string[]) => {
   const names = kind === "client" ? ["mysql", "mariadb"] : ["mysqldump", "mariadb-dump"];
   return pickTool(...((engine === "mariadb" ? names.reverse() : names) as [string, string]), args);
 };
@@ -79,7 +79,7 @@ const mysqlTool = (engine: Engine, kind: "client" | "dump", args: string[]) => {
 const mongoAuth = ({ user, password }: Credentials) =>
   user && password ? ["--username", user, "--password", password, "--authenticationDatabase", "admin"] : [];
 
-const mongoEval = (credentials: Credentials, script: string) =>
+export const mongoEval = (credentials: Credentials, script: string) =>
   pickTool("mongosh", "mongo", ["--quiet", ...mongoAuth(credentials), "--eval", script]);
 
 const psql = (credentials: Credentials, extra: string[]) => ["psql", "-U", credentials.user, "-d", "postgres", "-X", ...extra];

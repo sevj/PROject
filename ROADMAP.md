@@ -25,9 +25,9 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [x] composer : sur la machine, sinon dans un conteneur du projet qui tourne et qui l'a (plugins et scripts désactivés).
 
 ## 4. Explorateur de bases + requêtes SQL
-- [ ] Tables / colonnes / lignes paginées, éditeur SQL, historique par projet.
-- [ ] Lecture seule garantie par la base (transaction READ ONLY), limites 1000 lignes et 15 s.
-- [ ] MongoDB : collections + filtre JSON.
+- [x] Tables / colonnes / lignes paginées, éditeur SQL, historique par projet.
+- [x] Lecture seule garantie par la base (session READ ONLY) + contrôle du texte, limites 1000 lignes et 15 s.
+- [x] MongoDB : collections + filtre JSON.
 - Hors périmètre pour l'instant : écritures, comparaison de dumps.
 
 ## 5. Journal de travail automatique

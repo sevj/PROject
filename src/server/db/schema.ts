@@ -240,3 +240,22 @@ export const analyses = sqliteTable(
   },
   (table) => [uniqueIndex("analyses_project_kind").on(table.projectId, table.kind)],
 );
+
+/** What was run in the SQL editor of a project, newest last. Browsing a table is not kept. */
+export const queryHistory = sqliteTable(
+  "query_history",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    containerName: text("container_name").notNull(),
+    database: text("database").notNull(),
+    statement: text("statement").notNull(),
+    ranAt: integer("ran_at", { mode: "timestamp" }).notNull(),
+    ok: integer("ok", { mode: "boolean" }).notNull(),
+    rowCount: integer("row_count"),
+    elapsedMs: integer("elapsed_ms").notNull(),
+  },
+  (table) => [index("query_history_project").on(table.projectId, table.ranAt)],
+);
