@@ -20,9 +20,9 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [x] Détection des collisions, signalées en premier.
 
 ## 3. Onglet « Sécurité et dépendances » sur la fiche projet
-- [ ] npm / pnpm / yarn / composer (cargo / go si installés) : paquets obsolètes + audit.
-- [ ] Compteurs dans la liste, bouton « Analyser » manuel, résultats datés en cache.
-- [ ] Question ouverte : lancer composer dans le conteneur PHP s'il n'est pas installé sur l'hôte.
+- [x] npm / pnpm / yarn / composer : paquets obsolètes + audit. (cargo / go : pas faits, non installés ici ; yarn non testé sur un vrai projet.)
+- [x] Compteurs dans la liste, bouton « Analyser » manuel, résultats datés en cache.
+- [x] composer : sur la machine, sinon dans un conteneur du projet qui tourne et qui l'a (plugins et scripts désactivés).
 
 ## 4. Explorateur de bases + requêtes SQL
 - [ ] Tables / colonnes / lignes paginées, éditeur SQL, historique par projet.
