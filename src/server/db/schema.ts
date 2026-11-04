@@ -175,6 +175,47 @@ export const envValueHistory = sqliteTable(
   (table) => [index("env_value_history_project_key").on(table.projectId, table.key)],
 );
 
+/**
+ * One call to the API made by Claude Code, read from its transcripts. Only figures: what
+ * was said stays in the transcripts. A row outlives its transcript, which Claude Code
+ * purges, and its project, whose folder is still known by `cwd`.
+ */
+export const claudeApiCalls = sqliteTable(
+  "claude_api_calls",
+  {
+    messageId: text("message_id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    /** Null when `cwd` is in no registered project. */
+    projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+    cwd: text("cwd").notNull(),
+    calledAt: integer("called_at", { mode: "timestamp" }).notNull(),
+    model: text("model").notNull(),
+    /** Made by a subagent rather than by the conversation itself. */
+    isSidechain: integer("is_sidechain", { mode: "boolean" }).notNull(),
+    inputTokens: integer("input_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    cacheReadTokens: integer("cache_read_tokens").notNull(),
+    cacheWrite5mTokens: integer("cache_write_5m_tokens").notNull(),
+    cacheWrite1hTokens: integer("cache_write_1h_tokens").notNull(),
+    webSearchRequests: integer("web_search_requests").notNull(),
+    speed: text("speed"),
+  },
+  (table) => [
+    index("claude_api_calls_project_called").on(table.projectId, table.calledAt),
+    index("claude_api_calls_session").on(table.sessionId),
+    index("claude_api_calls_cwd").on(table.cwd),
+  ],
+);
+
+/** How far each transcript has been read. Transcripts only grow, until they are purged. */
+export const claudeTranscripts = sqliteTable("claude_transcripts", {
+  path: text("path").primaryKey(),
+  /** Always just after a line break: a line still being written is read next time. */
+  offset: integer("offset").notNull(),
+  /** Lines that should have held a call but could not be understood. */
+  unreadableLines: integer("unreadable_lines").notNull().default(0),
+});
+
 /** A single row: settings are read together and written together. */
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),

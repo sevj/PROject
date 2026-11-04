@@ -78,6 +78,13 @@
       "when": 1793829769816,
       "tag": "0010_env_value_history",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793830611563,
+      "tag": "0011_claude_usage",
+      "breakpoints": true
     }
   ]
 }
