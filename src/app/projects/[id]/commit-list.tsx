@@ -6,7 +6,7 @@ import { Modal } from "@/app/modal";
 import { BUTTON, DATA } from "@/app/ui";
 import { useMessages } from "@/i18n/provider";
 import { formatAge } from "@/lib/registry";
-import type { CommitDetail, CommitView } from "@/server/scan/git";
+import type { CommitDetail, CommitFile, CommitView } from "@/server/scan/git";
 
 const TAG = "border border-rule-strong px-1.5 text-mut";
 
@@ -16,6 +16,55 @@ function lineColor(line: string): string {
   if (line.startsWith("-")) return "text-alert";
   if (line.startsWith("@@")) return "text-accent";
   return line.startsWith(" ") ? "" : "text-mut";
+}
+
+/** The header repeats the name shown in the list: only what is not a change is worth keeping. */
+function changesOf(patch: string): string {
+  const firstHunk = patch.indexOf("\n@@ ");
+  return firstHunk === -1 ? patch.slice(patch.indexOf("\n") + 1) : patch.slice(firstHunk + 1);
+}
+
+function CommitFiles({ files }: { files: CommitFile[] }) {
+  const m = useMessages().gitTab;
+  const [selected, setSelected] = useState(0);
+  const file = files[selected];
+  return (
+    <div className="grid items-start gap-3 md:grid-cols-[260px_minmax(0,1fr)]">
+      <nav aria-label={m.commitFilesLabel} className="max-h-[200px] overflow-y-auto border border-rule md:max-h-[60vh]">
+        {files.map((item, index) => (
+          <button
+            key={item.path}
+            type="button"
+            aria-current={index === selected ? "true" : undefined}
+            onClick={() => setSelected(index)}
+            className="block w-full cursor-pointer border-b border-rule px-2.5 py-1.5 text-left last:border-b-0 hover:bg-sel aria-[current=true]:bg-accent-soft"
+          >
+            <span className={`${DATA} block break-all`}>{item.path}</span>
+            <span className={`${DATA} block text-mut`}>
+              {item.insertions === null ? m.binary : `+${item.insertions} −${item.deletions}`}
+            </span>
+          </button>
+        ))}
+      </nav>
+      <div className="min-w-0">
+        {file.patch === null ? (
+          <p className="border border-rule p-2.5 text-mut">{m.patchUnavailable}</p>
+        ) : (
+          // A new key: another file starts from its top, not from where the last one was scrolled.
+          <pre key={file.path} className={`${DATA} max-h-[60vh] overflow-auto border border-rule bg-field p-2.5`}>
+            {changesOf(file.patch)
+              .split("\n")
+              .map((line, index) => (
+                <span key={index} className={`block min-h-[1em] ${lineColor(line)}`}>
+                  {line}
+                </span>
+              ))}
+          </pre>
+        )}
+        {file.truncated ? <p className={`${DATA} pt-2 text-alert`}>{m.patchTruncated}</p> : null}
+      </div>
+    </div>
+  );
 }
 
 function CommitModal({
@@ -57,29 +106,7 @@ function CommitModal({
           </p>
           {view.body ? <p className="break-words whitespace-pre-wrap">{view.body}</p> : null}
           {view.isMerge ? <p className={`${DATA} text-mut`}>{m.mergeNote}</p> : null}
-          {view.files.length > 0 ? (
-            <div className="max-h-[200px] overflow-y-auto border border-rule px-2.5">
-              {view.files.map((file) => (
-                <div key={file.path} className="flex items-baseline justify-between gap-3 border-b border-rule py-1 last:border-b-0">
-                  <span className={`${DATA} min-w-0 break-all`}>{file.path}</span>
-                  <span className={`${DATA} shrink-0 text-mut`}>
-                    {file.insertions === null ? m.binary : `+${file.insertions} −${file.deletions}`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {view.patch === null ? <p className="text-mut">{m.patchUnavailable}</p> : null}
-          {view.patch ? (
-            <pre className={`${DATA} max-h-[50vh] overflow-auto border border-rule bg-field p-2.5`}>
-              {view.patch.split("\n").map((line, index) => (
-                <span key={index} className={`block min-h-[1em] ${lineColor(line)}`}>
-                  {line}
-                </span>
-              ))}
-            </pre>
-          ) : null}
-          {view.truncated ? <p className={`${DATA} text-alert`}>{m.patchTruncated}</p> : null}
+          {view.files.length > 0 ? <CommitFiles key={view.hash} files={view.files} /> : null}
         </>
       ) : null}
       <div>

@@ -5,35 +5,31 @@ import { useState, useTransition } from "react";
 import { controlContainers } from "@/app/actions";
 import { ConsolePanel } from "./console-panel";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
+import { useFlash } from "@/app/flash";
 import { useMessages } from "@/i18n/provider";
 import type { ContainerAction } from "@/server/project-actions";
 
 function useControl(projectId: number) {
-  const [error, setError] = useState<string | null>(null);
+  const m = useMessages().sheet.dockerTab;
+  const flash = useFlash();
   const [pending, start] = useTransition();
   const run = (action: ContainerAction, containerId?: string) => {
-    setError(null);
-    start(async () => setError(await controlContainers(projectId, action, containerId)));
+    start(async () => {
+      const error = await controlContainers(projectId, action, containerId);
+      if (error) flash("error", error);
+      else flash("success", m.done[action]);
+    });
   };
-  return { error, pending, run };
+  return { pending, run };
 }
 
-function Feedback({ pending, error }: { pending: boolean; error: string | null }) {
+function Feedback({ pending }: { pending: boolean }) {
   const m = useMessages().sheet.dockerTab;
-  return (
-    <>
-      {pending ? (
-        <span role="status" className={`${DATA} text-mut`}>
-          {m.working}
-        </span>
-      ) : null}
-      {error ? (
-        <p role="alert" className={`${DATA} basis-full max-h-40 overflow-auto break-words whitespace-pre-wrap text-alert`}>
-          {error}
-        </p>
-      ) : null}
-    </>
-  );
+  return pending ? (
+    <span role="status" className={`${DATA} text-mut`}>
+      {m.working}
+    </span>
+  ) : null;
 }
 
 export function ContainerControls({
@@ -52,7 +48,7 @@ export function ContainerControls({
 }) {
   const messages = useMessages().sheet;
   const m = messages.dockerTab;
-  const { error, pending, run } = useControl(projectId);
+  const { pending, run } = useControl(projectId);
   const [consoleOpen, setConsoleOpen] = useState(false);
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -83,7 +79,7 @@ export function ContainerControls({
           {m.start}
         </button>
       )}
-      <Feedback pending={pending} error={error} />
+      <Feedback pending={pending} />
     </div>
   );
 }
@@ -102,7 +98,7 @@ export function ProjectControls({
 }) {
   const m = useMessages().sheet.dockerTab;
   const router = useRouter();
-  const { error, pending, run } = useControl(projectId);
+  const { pending, run } = useControl(projectId);
   return (
     <div className="flex flex-wrap items-center gap-2">
       {total === 0 ? (
@@ -133,7 +129,7 @@ export function ProjectControls({
       <button type="button" disabled={pending} onClick={() => router.refresh()} className={BUTTON}>
         {m.refresh}
       </button>
-      <Feedback pending={pending} error={error} />
+      <Feedback pending={pending} />
     </div>
   );
 }

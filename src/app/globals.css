@@ -126,6 +126,118 @@ body {
   }
 }
 
+/* How an action went, in the top layer so that nothing covers it. */
+.toasts {
+  position: fixed;
+  inset: 4rem 1rem auto auto;
+  width: min(28rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.toasts:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.toast {
+  --toast-color: var(--ok);
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem 0.9rem;
+  overflow: hidden;
+  border: 1px solid var(--rule-strong);
+  border-left: 3px solid var(--toast-color);
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  color: var(--ink);
+  pointer-events: auto;
+  animation: toast-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast--error {
+  --toast-color: var(--alert);
+}
+.toast.is-leaving {
+  animation: toast-out 0.25s ease forwards;
+}
+.toast__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  background: var(--toast-color);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.toast__text {
+  flex: 1;
+  min-width: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.toast__close {
+  flex: none;
+  padding: 0 0.25rem;
+  color: var(--mut);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.toast__close:hover {
+  color: var(--ink);
+}
+.toast__timer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--toast-color);
+  opacity: 0.7;
+  transform-origin: left;
+  animation: toast-timer 6s linear forwards;
+}
+.toast:hover .toast__timer {
+  animation-play-state: paused;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+@keyframes toast-timer {
+  to {
+    transform: scaleX(0);
+  }
+}
+/* The timer still has to run, since its end is what closes the message. */
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast.is-leaving {
+    animation-duration: 1ms;
+  }
+  .toast__timer {
+    opacity: 0;
+  }
+}
+
 /* The header fades out instead of ending on a hard line. */
 .site-header {
   border-bottom: 1px solid transparent;

@@ -161,7 +161,9 @@ export const HISTORY_WEEKS = 52;
 export const MAX_NAMED_AUTHORS = 7;
 const COMMIT_PAGE = 30;
 const CHANGE_LIMIT = 200;
-const MAX_PATCH_CHARS = 200_000;
+/** One huge file, such as a lockfile, must not hide the others. */
+const MAX_FILE_PATCH_CHARS = 200_000;
+const MAX_COMMIT_PATCH_CHARS = 2_000_000;
 const TAG_LIMIT = 30;
 const BRANCH_LIMIT = 100;
 
@@ -217,11 +219,17 @@ export type StashEntry = { ref: string; at: number | null; branch: string | null
 
 export type RemoteBranch = { name: string; at: number | null; author: string; subject: string };
 
-export type CommitFile = {
+export type CommitFileStat = {
   path: string;
   /** Null for a binary file. */
   insertions: number | null;
   deletions: number | null;
+};
+
+export type CommitFile = CommitFileStat & {
+  /** Null when it could not be read or is beyond what a commit can show. */
+  patch: string | null;
+  truncated: boolean;
 };
 
 export type CommitView = {
@@ -233,9 +241,6 @@ export type CommitView = {
   /** A merge is shown against the branch it was merged into. */
   isMerge: boolean;
   files: CommitFile[];
-  /** Null when it could not be read, which a very large commit may cause. */
-  patch: string | null;
-  truncated: boolean;
 };
 
 export type TagDetail = { name: string; hash: string; at: number | null; subject: string };
@@ -527,7 +532,7 @@ export async function readCommits(path: string, { from, skip = 0 }: { from?: str
 /** A hash comes from the browser: it must not be able to read as an option or a range. */
 const COMMIT_HASH = /^[0-9a-f]{4,64}$/;
 
-export function parseNumstat(output: string): CommitFile[] {
+export function parseNumstat(output: string): CommitFileStat[] {
   return output
     .split("\n")
     .filter(Boolean)
@@ -539,6 +544,32 @@ export function parseNumstat(output: string): CommitFile[] {
         deletions: removed === "-" ? null : Number(removed),
       };
     });
+}
+
+/** One part per file. Only a file header starts with this: lines of content have a prefix. */
+export function splitPatch(patch: string): string[] {
+  return patch
+    .split(/^(?=diff --git )/m)
+    .filter((part) => part.startsWith("diff --git "));
+}
+
+/** Git gives files in the same order in both outputs, whatever their paths look like after a rename. */
+export function attachPatches(
+  stats: CommitFileStat[],
+  patch: string | undefined,
+  { perFile = MAX_FILE_PATCH_CHARS, perCommit = MAX_COMMIT_PATCH_CHARS } = {},
+): CommitFile[] {
+  const parts = splitPatch(patch ?? "");
+  // Never show one file's changes under the name of another.
+  const usable = parts.length === stats.length;
+  let budget = perCommit;
+  return stats.map((stat, index) => {
+    const part = usable ? parts[index] : undefined;
+    if (part === undefined || budget <= 0) return { ...stat, patch: null, truncated: false };
+    const shown = part.slice(0, Math.min(perFile, budget));
+    budget -= shown.length;
+    return { ...stat, patch: shown, truncated: shown.length < part.length };
+  });
 }
 
 /** Null when this is not a commit of this repository. */
@@ -561,9 +592,7 @@ export async function readCommitView(path: string, hash: string): Promise<Commit
     subject,
     body: (body ?? "").trim(),
     isMerge: parents.includes(" "),
-    files: parseNumstat(numstat ?? ""),
-    patch: patch === undefined ? null : patch.slice(0, MAX_PATCH_CHARS),
-    truncated: (patch?.length ?? 0) > MAX_PATCH_CHARS,
+    files: attachPatches(parseNumstat(numstat ?? ""), patch),
   };
 }
 

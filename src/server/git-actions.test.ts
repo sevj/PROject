@@ -239,7 +239,9 @@ describe("pullFastForward", () => {
     commit(remote, "b.txt", "on the remote");
     commit(dir, "c.txt", "here");
     const before = git(dir, "rev-parse", "HEAD");
-    expect(await pullFastForward(dir)).toBeTruthy();
+    const refusal = await pullFastForward(dir);
+    expect(refusal).toContain("fatal");
+    expect(refusal).not.toContain("hint:");
     expect(git(dir, "rev-parse", "HEAD")).toBe(before);
     expect(git(dir, "status", "--porcelain")).toBe("");
   });

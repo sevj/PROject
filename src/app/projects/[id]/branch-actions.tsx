@@ -12,15 +12,28 @@ import {
 } from "@/app/actions";
 import { Modal, useConfirm } from "@/app/modal";
 import { BUTTON, BUTTON_PRIMARY, BUTTON_PRIMARY_DANGER, CHECKBOX, DATA, FIELD, LABEL } from "@/app/ui";
+import { useFlash } from "@/app/flash";
 import { useMessages } from "@/i18n/provider";
 import type { DeletedBranch } from "@/server/git-actions";
 
 const ERROR = `${DATA} basis-full max-h-40 overflow-auto break-words whitespace-pre-wrap text-alert`;
 
+/** Runs a git action, then tells how it went. */
+function useGitAction() {
+  const flash = useFlash();
+  const [pending, start] = useTransition();
+  const run = (action: () => Promise<string | null>, success: string) =>
+    start(async () => {
+      const error = await action();
+      if (error) flash("error", error);
+      else flash("success", success);
+    });
+  return { pending, run };
+}
+
 export function SwitchBranch({ projectId, branch, running }: { projectId: number; branch: string; running: number }) {
   const m = useMessages().gitTab;
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const { pending, run } = useGitAction();
   const { confirm, confirmation } = useConfirm();
   return (
     <>
@@ -32,10 +45,7 @@ export function SwitchBranch({ projectId, branch, running }: { projectId: number
           confirm({
             ...m.confirmSwitch(branch, running),
             action: m.switchBranch,
-            onConfirm: () => {
-              setError(null);
-              start(async () => setError(await switchProjectBranch(projectId, branch)));
-            },
+            onConfirm: () => run(() => switchProjectBranch(projectId, branch), m.switched(branch)),
           })
         }
         className={`${BUTTON} ml-auto min-h-8! px-2.5! font-sans text-[14px]`}
@@ -43,11 +53,6 @@ export function SwitchBranch({ projectId, branch, running }: { projectId: number
         {pending ? m.working : m.switchBranch}
       </button>
       {confirmation}
-      {error ? (
-        <p role="alert" className={ERROR}>
-          {error}
-        </p>
-      ) : null}
     </>
   );
 }
@@ -62,8 +67,7 @@ export function CheckOutRemote({
   running: number;
 }) {
   const m = useMessages().gitTab;
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const { pending, run } = useGitAction();
   const { confirm, confirmation } = useConfirm();
   const local = remoteBranch.slice(remoteBranch.indexOf("/") + 1);
   return (
@@ -76,10 +80,7 @@ export function CheckOutRemote({
           confirm({
             ...m.confirmCheckOut(remoteBranch, local, running),
             action: m.checkOut,
-            onConfirm: () => {
-              setError(null);
-              start(async () => setError(await checkOutProjectRemoteBranch(projectId, remoteBranch)));
-            },
+            onConfirm: () => run(() => checkOutProjectRemoteBranch(projectId, remoteBranch), m.checkedOut(local)),
           })
         }
         className={`${BUTTON} ml-auto min-h-8! px-2.5! font-sans text-[14px]`}
@@ -87,18 +88,13 @@ export function CheckOutRemote({
         {pending ? m.working : m.checkOut}
       </button>
       {confirmation}
-      {error ? (
-        <p role="alert" className={ERROR}>
-          {error}
-        </p>
-      ) : null}
     </>
   );
 }
 
 export function CheckOutAllRemotes({ projectId, count, branch }: { projectId: number; count: number; branch: string }) {
   const m = useMessages().gitTab;
-  const [errors, setErrors] = useState<string[]>([]);
+  const flash = useFlash();
   const [pending, start] = useTransition();
   const { confirm, confirmation } = useConfirm();
   return (
@@ -110,10 +106,12 @@ export function CheckOutAllRemotes({ projectId, count, branch }: { projectId: nu
           confirm({
             ...m.confirmCheckOutAll(count, branch),
             action: m.checkOutAll(count),
-            onConfirm: () => {
-              setErrors([]);
-              start(async () => setErrors((await checkOutAllProjectRemoteBranches(projectId)).errors));
-            },
+            onConfirm: () =>
+              start(async () => {
+                const { created, errors } = await checkOutAllProjectRemoteBranches(projectId);
+                if (created.length > 0) flash("success", m.checkedOutAll(created.length));
+                if (errors.length > 0) flash("error", errors.join("\n"));
+              }),
           })
         }
         className={BUTTON}
@@ -121,19 +119,13 @@ export function CheckOutAllRemotes({ projectId, count, branch }: { projectId: nu
         {pending ? m.working : m.checkOutAll(count)}
       </button>
       {confirmation}
-      {errors.length > 0 ? (
-        <p role="alert" className={ERROR}>
-          {errors.join("\n")}
-        </p>
-      ) : null}
     </>
   );
 }
 
 export function PullButton({ projectId, branch, behind }: { projectId: number; branch: string; behind: number }) {
   const m = useMessages().gitTab;
-  const [result, setResult] = useState<{ error: string | null } | null>(null);
-  const [pending, start] = useTransition();
+  const { pending, run } = useGitAction();
   const { confirm, confirmation } = useConfirm();
   return (
     <>
@@ -144,10 +136,7 @@ export function PullButton({ projectId, branch, behind }: { projectId: number; b
           confirm({
             ...m.confirmPull(branch, behind),
             action: m.pull(behind),
-            onConfirm: () => {
-              setResult(null);
-              start(async () => setResult({ error: await pullProject(projectId) }));
-            },
+            onConfirm: () => run(() => pullProject(projectId), m.pulled),
           })
         }
         className={BUTTON}
@@ -155,11 +144,6 @@ export function PullButton({ projectId, branch, behind }: { projectId: number; b
         {pending ? m.working : m.pull(behind)}
       </button>
       {confirmation}
-      {result?.error ? (
-        <p role="alert" className={`${ERROR} order-last`}>
-          {result.error}
-        </p>
-      ) : null}
     </>
   );
 }
@@ -167,6 +151,7 @@ export function PullButton({ projectId, branch, behind }: { projectId: number; b
 export function NewBranch({ projectId, from }: { projectId: number; from: string }) {
   const messages = useMessages();
   const m = messages.gitTab;
+  const flash = useFlash();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -189,9 +174,13 @@ export function NewBranch({ projectId, from }: { projectId: number; from: string
             action={(form) =>
               start(async () => {
                 setError(null);
-                const failure = await createProjectBranch(projectId, String(form.get("name") ?? ""));
+                const name = String(form.get("name") ?? "").trim();
+                const failure = await createProjectBranch(projectId, name);
                 if (failure) setError(failure);
-                else setOpen(false);
+                else {
+                  flash("success", m.branchCreated(name));
+                  setOpen(false);
+                }
               })
             }
           >
@@ -221,32 +210,11 @@ export function NewBranch({ projectId, from }: { projectId: number; from: string
 
 export function FetchButton({ projectId }: { projectId: number }) {
   const m = useMessages().gitTab;
-  const [result, setResult] = useState<{ error: string | null } | null>(null);
-  const [pending, start] = useTransition();
+  const { pending, run } = useGitAction();
   return (
-    <>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => {
-          setResult(null);
-          start(async () => setResult({ error: await fetchProject(projectId) }));
-        }}
-        className={BUTTON}
-      >
-        {pending ? m.working : m.fetch}
-      </button>
-      {result?.error ? (
-        <p role="alert" className={`${ERROR} order-last`}>
-          {result.error}
-        </p>
-      ) : null}
-      {result && !result.error ? (
-        <p role="status" className={`${DATA} order-last basis-full text-mut`}>
-          {m.fetched}
-        </p>
-      ) : null}
-    </>
+    <button type="button" disabled={pending} onClick={() => run(() => fetchProject(projectId), m.fetched)} className={BUTTON}>
+      {pending ? m.working : m.fetch}
+    </button>
   );
 }
 
@@ -321,20 +289,12 @@ export function CleanUpBranches({
   branches: Removable[];
 }) {
   const m = useMessages().gitTab;
+  const flash = useFlash();
   const [open, setOpen] = useState(false);
-  // Kept here: this stays on screen once the list is empty.
-  const [result, setResult] = useState<{ deleted: DeletedBranch[]; errors: string[] } | null>(null);
   return (
     <>
       {branches.length > 0 ? (
-        <button
-          type="button"
-          onClick={() => {
-            setResult(null);
-            setOpen(true);
-          }}
-          className={BUTTON}
-        >
+        <button type="button" onClick={() => setOpen(true)} className={BUTTON}>
           {m.cleanUp(branches.length)}
         </button>
       ) : null}
@@ -344,18 +304,11 @@ export function CleanUpBranches({
           into={into}
           branches={branches}
           onClose={() => setOpen(false)}
-          onDone={setResult}
+          onDone={({ deleted, errors }) => {
+            if (deleted.length > 0) flash("success", m.cleanedUp(deleted));
+            if (errors.length > 0) flash("error", errors.join("\n"));
+          }}
         />
-      ) : null}
-      {result && result.deleted.length > 0 ? (
-        <p role="status" className={`${DATA} order-last basis-full break-words text-mut`}>
-          {m.cleanedUp(result.deleted)}
-        </p>
-      ) : null}
-      {result && result.errors.length > 0 ? (
-        <p role="alert" className={`${ERROR} order-last`}>
-          {result.errors.join("\n")}
-        </p>
       ) : null}
     </>
   );

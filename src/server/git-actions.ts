@@ -8,6 +8,15 @@ const run = promisify(execFile);
 const LOCAL_TIMEOUT = 60_000;
 const FETCH_TIMEOUT = 2 * 60_000;
 
+/** Git's hints are advice about its command line: what matters here is the refusal itself. */
+export function readableError(stderr: string | undefined): string {
+  return (stderr ?? "")
+    .split("\n")
+    .filter((line) => !line.startsWith("hint:"))
+    .join("\n")
+    .trim();
+}
+
 /** Null when it went well, otherwise what git said, as it is what explains the refusal. */
 async function gitAction(cwd: string, args: string[], timeout = LOCAL_TIMEOUT): Promise<string | null> {
   try {
@@ -20,7 +29,7 @@ async function gitAction(cwd: string, args: string[], timeout = LOCAL_TIMEOUT): 
     });
     return null;
   } catch (error) {
-    return (error as { stderr?: string }).stderr?.trim() || String(error);
+    return readableError((error as { stderr?: string }).stderr) || String(error);
   }
 }
 

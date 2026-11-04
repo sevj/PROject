@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ACTIVITY_WEEKS,
+  attachPatches,
   bucketWeeks,
   buildAuthorHistory,
   HISTORY_WEEKS,
@@ -23,6 +24,7 @@ import {
   readGitDetails,
   readGitFacts,
   sanitizeRemoteUrl,
+  splitPatch,
 } from "./git";
 
 const WEEK = 7 * 24 * 3600;
@@ -317,6 +319,51 @@ describe("parseNumstat", () => {
   });
 });
 
+describe("splitPatch", () => {
+  it("cuts at file headers only, not at content that looks like one", () => {
+    const first = "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+diff --git not a header\n";
+    const second = "diff --git a/b b/b\nBinary files a/b and b/b differ\n";
+    expect(splitPatch(first + second)).toEqual([first, second]);
+    expect(splitPatch("")).toEqual([]);
+  });
+});
+
+describe("attachPatches", () => {
+  const stat = (path: string) => ({ path, insertions: 1, deletions: 0 });
+  const part = (path: string, size: number) => `diff --git a/${path} b/${path}\n${"x".repeat(size)}\n`;
+
+  it("gives each file its own changes", () => {
+    const files = attachPatches([stat("a"), stat("b")], part("a", 5) + part("b", 5));
+    expect(files[0].patch).toContain("a/a");
+    expect(files[1].patch).toContain("a/b");
+    expect(files[1].patch).not.toContain("a/a");
+    expect(files[0].truncated).toBe(false);
+  });
+
+  it("cuts a huge file without hiding the next ones", () => {
+    const files = attachPatches([stat("big"), stat("next")], part("big", 500) + part("next", 5), { perFile: 100 });
+    expect(files[0]).toMatchObject({ truncated: true });
+    expect(files[0].patch).toHaveLength(100);
+    expect(files[1]).toMatchObject({ truncated: false });
+    expect(files[1].patch).toContain("a/next");
+  });
+
+  it("stops at the limit of the commit", () => {
+    const files = attachPatches([stat("a"), stat("b"), stat("c")], part("a", 80) + part("b", 80) + part("c", 80), {
+      perCommit: 150,
+    });
+    expect(files[0].truncated).toBe(false);
+    expect(files[1].truncated).toBe(true);
+    expect(files[2]).toMatchObject({ patch: null, truncated: false });
+  });
+
+  it("shows nothing rather than risk the wrong file", () => {
+    const files = attachPatches([stat("a"), stat("b")], part("a", 5));
+    expect(files.map(({ patch }) => patch)).toEqual([null, null]);
+    expect(attachPatches([stat("a")], undefined)[0].patch).toBeNull();
+  });
+});
+
 describe("pickCompareBase", () => {
   it("prefers the default branch of the remote, then the usual names", () => {
     expect(pickCompareBase(["main", "prod-line"], "prod-line")).toBe("prod-line");
@@ -393,9 +440,34 @@ describe("readCommitView", () => {
     const hash = git(dir, "rev-parse", "--short", "HEAD").trim();
 
     const view = await readCommitView(dir, hash);
-    expect(view).toMatchObject({ hash, author: "t", subject: "Subject", body: "Body text", isMerge: false, truncated: false });
-    expect(view?.files).toEqual([{ path: "b.txt", insertions: 1, deletions: 0 }]);
-    expect(view?.patch).toContain("+line");
+    expect(view).toMatchObject({ hash, author: "t", subject: "Subject", body: "Body text", isMerge: false });
+    expect(view?.files).toEqual([
+      { path: "b.txt", insertions: 1, deletions: 0, patch: expect.stringContaining("+line"), truncated: false },
+    ]);
+  });
+
+  it("keeps files and their changes together through renames, binaries and empty files", async () => {
+    const dir = tempRepo();
+    writeFileSync(join(dir, "old name.txt"), "same content\n".repeat(20));
+    writeFileSync(join(dir, "kept.txt"), "before\n");
+    commit(dir, "z.txt", "first");
+    git(dir, "add", ".");
+    git(dir, "commit", "-q", "-m", "base");
+    git(dir, "mv", "old name.txt", "new name.txt");
+    writeFileSync(join(dir, "kept.txt"), "after\n");
+    writeFileSync(join(dir, "logo.bin"), Buffer.from([0, 1, 2, 0, 3]));
+    writeFileSync(join(dir, "empty.txt"), "");
+    git(dir, "add", ".");
+    git(dir, "commit", "-q", "-m", "mixed");
+
+    const view = await readCommitView(dir, git(dir, "rev-parse", "--short", "HEAD").trim());
+    const find = (text: string) => view?.files.find(({ path }) => path.includes(text));
+    expect(view?.files).toHaveLength(4);
+    expect(find("kept")?.patch).toContain("+after");
+    expect(find("kept")?.patch).not.toContain("rename");
+    expect(find("new name")?.patch).toContain("rename to new name.txt");
+    expect(find("logo")).toMatchObject({ insertions: null, patch: expect.stringContaining("Binary") });
+    expect(find("empty")?.patch).toContain("new file");
   });
 
   it("shows a merge against the branch it went into", async () => {

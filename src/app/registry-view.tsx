@@ -25,6 +25,7 @@ import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ClassificationEditor } from "./classification-editor";
 import { ProjectDescription } from "./project-description";
 import { ProjectDirectory } from "./project-directory";
+import { useFlash } from "./flash";
 import { useConfirm } from "./modal";
 import { ProjectFacts } from "./project-facts";
 import { ProjectName } from "./project-name";
@@ -294,6 +295,7 @@ function BulkBar({
     if (!selected.includes(row.id)) continue;
     for (const tag of row.tags) counts[tag] = (counts[tag] ?? 0) + 1;
   }
+  const flash = useFlash();
   const { confirm, confirmation } = useConfirm();
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-rule-strong bg-panel px-4 py-2" role="group" aria-label={m.label}>
@@ -325,7 +327,8 @@ function BulkBar({
         className={BUTTON}
         onClick={() =>
           start(async () => {
-            await markAbandoned(selected, view !== "abandoned");
+            const error = await markAbandoned(selected, view !== "abandoned");
+            if (error) flash("error", error);
             onClear();
           })
         }
@@ -475,12 +478,13 @@ export function RegistryView({
   const [sort, setSort] = useState<RegistrySort>("commit");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const flash = useFlash();
   const [refreshing, startRefresh] = useTransition();
 
   const refresh = () => {
     startRefresh(async () => {
-      setRefreshError((await refreshEverything()).error);
+      const { error: failure } = await refreshEverything();
+      if (failure) flash("error", m.refreshFailed(failure));
     });
   };
 
@@ -604,7 +608,7 @@ export function RegistryView({
   const selectedGroup =
     items.flatMap((item) => (item.kind === "group" && item.group.parentId === selectedId ? [item.group] : []))[0] ?? null;
   const selected = visible.find((row) => row.id === selectedId) ?? (selectedGroup ? null : (visible[0] ?? null));
-  const error = refreshError ?? lastScan?.error ?? null;
+  const error = lastScan?.error ?? null;
   // With nothing to show, the panel has only one use.
   const showForm = adding || rows.length === 0;
 

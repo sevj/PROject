@@ -3,6 +3,7 @@ import { DM_Mono, Schibsted_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DEFAULT_LOCALE } from "@/i18n";
+import { FlashProvider } from "./flash";
 import { LocaleBoundary } from "./locale-boundary";
 import { NavLinks } from "./nav-links";
 import "./globals.css";
@@ -29,16 +30,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <Suspense>
           <LocaleBoundary>
-            <header className="site-header flex min-h-12 flex-wrap items-center gap-x-5 px-4">
-              <Link href="/" className="inline-flex items-center gap-2 text-[14px] font-bold tracking-tight text-accent">
-                Project Manager
-                <span aria-hidden="true" className="size-1.5 bg-ink" />
-              </Link>
-              <Suspense>
-                <NavLinks />
-              </Suspense>
-            </header>
-            {children}
+            <FlashProvider>
+              <header className="site-header flex min-h-12 flex-wrap items-center gap-x-5 px-4">
+                <Link href="/" className="inline-flex items-center gap-2 text-[14px] font-bold tracking-tight text-accent">
+                  Project Manager
+                  <span aria-hidden="true" className="size-1.5 bg-ink" />
+                </Link>
+                <Suspense>
+                  <NavLinks />
+                </Suspense>
+              </header>
+              {children}
+            </FlashProvider>
           </LocaleBoundary>
         </Suspense>
       </body>

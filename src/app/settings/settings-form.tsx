@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { type Locale, LANGUAGES } from "@/i18n";
 import { useMessages } from "@/i18n/provider";
 import { deleteTagByName, renameTagByName, saveSettingsForm } from "../actions";
+import { useFlash } from "../flash";
 import { useConfirm } from "../modal";
 import { BUTTON, BUTTON_PRIMARY, DATA, FIELD, LABEL } from "../ui";
 
@@ -20,9 +21,7 @@ type Props = {
 export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tags }: Props) {
   const messages = useMessages();
   const m = messages.settings;
-  const [message, setMessage] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [tagMessage, setTagMessage] = useState<string | null>(null);
+  const flash = useFlash();
   const [pending, start] = useTransition();
   const { confirm, confirmation } = useConfirm();
 
@@ -33,12 +32,10 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
       <form
         className={`${SECTION} grid gap-4 border-t border-t-ink`}
         action={(data) => {
-          setMessage(null);
-          setSaved(false);
           start(async () => {
             const error = await saveSettingsForm(Object.fromEntries(data) as Record<string, string>);
-            setSaved(error === null);
-            setMessage(error);
+            if (error) flash("error", error);
+            else flash("success", m.saved);
           });
         }}
       >
@@ -78,21 +75,11 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
           <button type="submit" disabled={pending} className={BUTTON_PRIMARY}>
             {pending ? messages.common.saving : messages.common.save}
           </button>
-          {message || saved ? (
-            <span role="status" className={DATA}>
-              {message ?? m.saved}
-            </span>
-          ) : null}
         </div>
       </form>
 
       <section className={SECTION}>
         <h2 className={`${LABEL} pb-3`}>{m.tags}</h2>
-        {tagMessage ? (
-          <p role="alert" className={`${DATA} pb-2 text-alert`}>
-            {tagMessage}
-          </p>
-        ) : null}
         {tags.length === 0 ? <p className="text-mut">{m.noTags}</p> : null}
         {tags.map(({ name, count }) => (
           <div key={name} className="flex flex-wrap items-center gap-2 border-b border-rule py-2 last:border-b-0">
@@ -100,7 +87,10 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
               className="min-w-[200px] flex-1"
               action={(data) => {
                 const next = String(data.get("name") ?? "");
-                start(async () => setTagMessage(await renameTagByName(name, next)));
+                start(async () => {
+                  const error = await renameTagByName(name, next);
+                  if (error) flash("error", error);
+                });
               }}
             >
               <label>
