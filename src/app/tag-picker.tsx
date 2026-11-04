@@ -3,10 +3,9 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { addTagTo, removeTagFrom } from "./actions";
-import { BUTTON, FIELD, LABEL } from "./ui";
+import { BUTTON, BUTTON_TOGGLE_SMALL, FIELD, LABEL } from "./ui";
 
-const TAG =
-  "min-h-8 max-w-full cursor-pointer truncate border px-2.5 text-[13px] border-rule hover:border-ink aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:font-medium aria-pressed:text-ink aria-[pressed=mixed]:border-dashed aria-[pressed=mixed]:bg-transparent aria-[pressed=mixed]:text-ink";
+const TAG = `${BUTTON_TOGGLE_SMALL} max-w-full aria-[pressed=mixed]:border-dashed aria-[pressed=mixed]:border-accent aria-[pressed=mixed]:bg-control aria-[pressed=mixed]:text-ink`;
 
 type Change = { name: string; on: boolean };
 

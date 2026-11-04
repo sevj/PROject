@@ -50,9 +50,9 @@ export function ProjectOrganizer({ row, knownTags }: { row: RegistryRow; knownTa
               await toggleFavorite(row.id, !favorite);
             })
           }
-          className={`flex cursor-pointer items-center gap-2 px-4 font-medium hover:bg-sel hover:text-ink ${favorite ? "" : "text-mut"}`}
+          className="flex cursor-pointer items-center gap-2 px-4 font-medium text-accent hover:bg-accent-soft"
         >
-          <span className={favorite ? "text-accent" : ""}>
+          <span>
             <StarIcon filled={favorite} />
           </span>
           {favorite ? m.isFavorite : m.addToFavorites}

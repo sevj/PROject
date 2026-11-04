@@ -5,7 +5,7 @@ import { useMessages } from "@/i18n/provider";
 import { addMultiProject, addProject, addSubProject } from "./actions";
 import { DirectoryInput } from "./directory-input";
 import { CloseIcon, PlusIcon } from "./icons";
-import { BUTTON, BUTTON_ICON, BUTTON_PRIMARY, DATA, FIELD, LABEL, SEGMENT } from "./ui";
+import { BUTTON, BUTTON_ICON, BUTTON_PRIMARY, BUTTON_SMALL, DATA, FIELD, LABEL, SEGMENT } from "./ui";
 
 function TextField({
   label,
@@ -43,7 +43,7 @@ function TagsField({ name, knownTags }: { name: string; knownTags: string[] }) {
         {knownTags.map((tag) => (
           <label key={tag} className="max-w-full cursor-pointer">
             <input type="checkbox" name={name} value={tag} className="peer sr-only" />
-            <span className="block max-w-full truncate border border-rule px-2.5 py-1 text-[13px] peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-medium peer-checked:text-ink peer-focus-visible:outline hover:border-ink">
+            <span className={`${BUTTON_SMALL} max-w-full peer-checked:border-accent peer-checked:bg-accent peer-checked:text-bg peer-focus-visible:outline`}>
               {tag}
             </span>
           </label>

@@ -4,14 +4,13 @@ import { formatAge, type RegistryRow, runningCount } from "@/lib/registry";
 import { parseRemote } from "@/lib/remote";
 import { type GitDetails, HISTORY_WEEKS } from "@/server/scan/git";
 import { GitFacts } from "../../project-facts";
-import { CARD, DATA, SECTION_TITLE } from "../../ui";
+import { BADGE, CARD, DATA, SECTION_TITLE } from "../../ui";
 import { CheckOutAllRemotes, CheckOutRemote, CleanUpBranches, FetchButton, NewBranch, PullButton, SwitchBranch } from "./branch-actions";
 import { CommitChart } from "./commit-chart";
 import { CommitList } from "./commit-list";
 
 const COLUMNS = "grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]";
 
-const TAG = "border border-rule-strong px-1.5 text-mut";
 /** The right column holds two lists: neither should push the other far down. */
 const LIST = "max-h-[420px] overflow-y-auto";
 
@@ -157,8 +156,8 @@ function Branches({
             {branch.subject ? <div className="truncate text-mut">{branch.subject}</div> : null}
             {branch.current || branch.merged || branch.upstream || branch.baseAhead !== null || canSwitch ? (
               <div className={`${DATA} mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-mut`}>
-                {branch.current ? <span className={TAG}>{m.currentBranch}</span> : null}
-                {branch.merged && !branch.current ? <span className={TAG}>{m.mergedBranch}</span> : null}
+                {branch.current ? <span className={BADGE}>{m.currentBranch}</span> : null}
+                {branch.merged && !branch.current ? <span className={BADGE}>{m.mergedBranch}</span> : null}
                 {branch.upstream ? (
                   <span className="min-w-0 break-words">
                     {branch.upstream}

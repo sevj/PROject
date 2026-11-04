@@ -11,7 +11,7 @@ import {
   switchProjectBranch,
 } from "@/app/actions";
 import { Modal, useConfirm } from "@/app/modal";
-import { BUTTON, BUTTON_PRIMARY, BUTTON_PRIMARY_DANGER, CHECKBOX, DATA, FIELD, LABEL } from "@/app/ui";
+import { BUTTON, BUTTON_PRIMARY, BUTTON_PRIMARY_DANGER, BUTTON_SMALL, CHECKBOX, DATA, FIELD, LABEL } from "@/app/ui";
 import { useFlash } from "@/app/flash";
 import { useMessages } from "@/i18n/provider";
 import type { DeletedBranch } from "@/server/git-actions";
@@ -48,7 +48,7 @@ export function SwitchBranch({ projectId, branch, running }: { projectId: number
             onConfirm: () => run(() => switchProjectBranch(projectId, branch), m.switched(branch)),
           })
         }
-        className={`${BUTTON} ml-auto min-h-8! px-2.5! font-sans text-[14px]`}
+        className={`${BUTTON_SMALL} ml-auto`}
       >
         {pending ? m.working : m.switchBranch}
       </button>
@@ -83,7 +83,7 @@ export function CheckOutRemote({
             onConfirm: () => run(() => checkOutProjectRemoteBranch(projectId, remoteBranch), m.checkedOut(local)),
           })
         }
-        className={`${BUTTON} ml-auto min-h-8! px-2.5! font-sans text-[14px]`}
+        className={`${BUTTON_SMALL} ml-auto`}
       >
         {pending ? m.working : m.checkOut}
       </button>

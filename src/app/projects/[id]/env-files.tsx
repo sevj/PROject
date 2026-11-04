@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { revealEnvFile } from "@/app/actions";
 import { useMessages } from "@/i18n/provider";
 import type { EnvEntry } from "@/server/project-files";
-import { DATA } from "../../ui";
+import { BUTTON_SMALL, DATA } from "../../ui";
 
 function EnvFile({ projectId, file }: { projectId: number; file: string }) {
   const m = useMessages().env;
@@ -34,7 +34,7 @@ function EnvFile({ projectId, file }: { projectId: number; file: string }) {
           onClick={toggle}
           disabled={pending}
           aria-expanded={entries !== null}
-          className="min-h-9 cursor-pointer border border-rule px-3 hover:border-ink disabled:cursor-default disabled:opacity-50"
+          className={BUTTON_SMALL}
         >
           {entries ? m.hide : m.show}
         </button>

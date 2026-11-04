@@ -21,7 +21,7 @@ import { MAX_ENV_BYTES } from "./project-files";
 
 const run = promisify(execFile);
 
-/** Declares every variable, and is committed: it is only ever read here. */
+/** Declares every variable, and is committed: a name can be added to it, never a value. */
 export const DECLARED_ENV_FILE = ".env";
 /** What the application actually uses on this machine, and is not committed. */
 export const LOCAL_ENV_FILE = ".env.local";
@@ -174,6 +174,28 @@ export function saveEnvValue(
   if (!ENV_KEY.test(key)) return m.invalidKey;
   if (value !== null && (value.length > MAX_VALUE_LENGTH || value.includes("\0"))) return m.invalidValue;
   return applyValue(db, projectId, projectPath, key, value, "edit", m);
+}
+
+/**
+ * Adds a name to the file that is committed, always without a value: what the local file
+ * holds may be a secret. Does nothing to a name already declared, whatever its value.
+ */
+export function declareEnvVariable(projectPath: string, key: string, m: Messages["envTab"] = en.envTab): string | null {
+  if (!ENV_KEY.test(key)) return m.invalidKey;
+  const path = join(projectPath, DECLARED_ENV_FILE);
+  const source = readSource(path);
+  if (!source) return m.unreadable(DECLARED_ENV_FILE);
+  if (envValues(parseEnv(source.content)).has(key)) return null;
+  const next = writeEnvValue(source.content, key, "");
+  if (next === null) return m.cannotWrite(key);
+  if (Buffer.byteLength(next) > MAX_ENV_BYTES) return m.tooLarge;
+  try {
+    if (source.exists) accessSync(path, constants.W_OK);
+    replaceFile(path, next, source.mode);
+    return null;
+  } catch {
+    return m.notWritable(DECLARED_ENV_FILE);
+  }
 }
 
 /** The entry is looked up in this project: its id comes from the browser. */

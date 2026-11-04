@@ -3,6 +3,7 @@ import { DM_Mono, Schibsted_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DEFAULT_LOCALE } from "@/i18n";
+import { DumpActivityProvider } from "./dump-activity";
 import { FlashProvider } from "./flash";
 import { LocaleBoundary } from "./locale-boundary";
 import { NavLinks } from "./nav-links";
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Suspense>
           <LocaleBoundary>
             <FlashProvider>
+              <DumpActivityProvider>
               <header className="site-header flex min-h-12 flex-wrap items-center gap-x-5 px-4">
                 <Link href="/" className="inline-flex items-center gap-2 text-[14px] font-bold tracking-tight text-accent">
                   Project Manager
@@ -41,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 </Suspense>
               </header>
               {children}
+              </DumpActivityProvider>
             </FlashProvider>
           </LocaleBoundary>
         </Suspense>

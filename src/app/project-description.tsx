@@ -4,7 +4,7 @@ import { useOptimistic, useRef, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { saveDescription } from "./actions";
 import { PencilIcon, PlusIcon } from "./icons";
-import { BUTTON_ICON, BUTTON_QUIET, FIELD } from "./ui";
+import { BUTTON_ICON, BUTTON_SMALL, FIELD } from "./ui";
 
 export function ProjectDescription({
   projectId,
@@ -76,7 +76,7 @@ export function ProjectDescription({
         </button>
       </div>
     ) : (
-      <button type="button" onClick={open} className={BUTTON_QUIET}>
+      <button type="button" onClick={open} className={BUTTON_SMALL}>
         <PlusIcon />
         {m.add}
       </button>

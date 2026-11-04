@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "./db/client";
 import { projects } from "./db/schema";
-import { readEnvView, restoreEnvValue, saveEnvValue } from "./env-vars";
+import { declareEnvVariable, readEnvView, restoreEnvValue, saveEnvValue } from "./env-vars";
 
 let dir: string;
 let db: Db;
@@ -136,6 +136,37 @@ describe("saveEnvValue", () => {
     saveEnvValue(db, projectId, dir, "A", "1");
     db.delete(projects).run();
     expect((await view()).history).toEqual({});
+  });
+});
+
+describe("declareEnvVariable", () => {
+  it("adds the name without the local value, and leaves the local file alone", async () => {
+    writeFileSync(join(dir, ".env"), "# top\nA=1\n");
+    writeLocal("SECRET=hunter2\n");
+    expect(declareEnvVariable(dir, "SECRET")).toBeNull();
+    expect(readFileSync(join(dir, ".env"), "utf8")).toBe("# top\nA=1\nSECRET=\n");
+    expect(local()).toBe("SECRET=hunter2\n");
+    expect((await view()).rows.find(({ key }) => key === "SECRET")?.state).toBe("different");
+    expect(await history("SECRET")).toEqual([]);
+  });
+
+  it("creates the file if there is none", () => {
+    expect(declareEnvVariable(dir, "A")).toBeNull();
+    expect(readFileSync(join(dir, ".env"), "utf8")).toBe("A=\n");
+  });
+
+  it("does not touch a name already declared", () => {
+    writeFileSync(join(dir, ".env"), "A=1\n");
+    expect(declareEnvVariable(dir, "A")).toBeNull();
+    expect(readFileSync(join(dir, ".env"), "utf8")).toBe("A=1\n");
+  });
+
+  it("refuses an invalid name and a link", () => {
+    expect(declareEnvVariable(dir, "A\nB")).toContain("not a valid");
+    writeFileSync(join(dir, "elsewhere"), "A=1\n");
+    symlinkSync(join(dir, "elsewhere"), join(dir, ".env"));
+    expect(declareEnvVariable(dir, "B")).toContain("could not be read");
+    expect(readFileSync(join(dir, "elsewhere"), "utf8")).toBe("A=1\n");
   });
 });
 

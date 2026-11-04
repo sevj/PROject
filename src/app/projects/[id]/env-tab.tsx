@@ -1,10 +1,10 @@
 "use client";
 
 import { type FormEvent, type KeyboardEvent, useState, useTransition } from "react";
-import { removeEnvVariable, restoreEnvVariable, saveEnvVariable } from "@/app/actions";
+import { declareEnvVariableInProject, removeEnvVariable, restoreEnvVariable, saveEnvVariable } from "@/app/actions";
 import { useFlash } from "@/app/flash";
 import { Modal, useConfirm } from "@/app/modal";
-import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_QUIET, CARD, DATA, FIELD, LABEL, SECTION_TITLE, SEGMENT } from "@/app/ui";
+import { BADGE, BADGE_ALERT, BUTTON, BUTTON_PRIMARY, BUTTON_PRIMARY_SMALL, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, DATA, FIELD, LABEL, SECTION_TITLE, SEGMENT } from "@/app/ui";
 import { useMessages } from "@/i18n/provider";
 import { ENV_KEY, type EnvRow } from "@/lib/env-file";
 import type { EnvHistoryEntry, EnvView } from "@/server/env-vars";
@@ -12,8 +12,6 @@ import type { EnvHistoryEntry, EnvView } from "@/server/env-vars";
 const COLUMNS = "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)]";
 const VALUE = `${DATA} break-all whitespace-pre-wrap`;
 const CELL_LABEL = `${LABEL} mb-0.5 lg:hidden`;
-const TAG = "border px-1.5";
-const SMALL_BUTTON = "min-h-8!";
 
 /** Runs an action on the file, then tells how it went. */
 function useEnvAction() {
@@ -112,13 +110,13 @@ function HistoryModal({
               </div>
             </div>
             {entry.id === currentId ? (
-              <span className={`${DATA} ${TAG} justify-self-start border-rule-strong text-mut`}>{m.currentValue}</span>
+              <span className={`${BADGE} justify-self-start`}>{m.currentValue}</span>
             ) : editable ? (
               <button
                 type="button"
                 disabled={pending}
                 onClick={() => run(() => restoreEnvVariable(projectId, entry.id), m.restored(row.key), onClose)}
-                className={`${BUTTON} ${SMALL_BUTTON} justify-self-start`}
+                className={`${BUTTON_SMALL} justify-self-start`}
               >
                 {m.restore}
               </button>
@@ -133,10 +131,6 @@ function HistoryModal({
       </div>
     </Modal>
   );
-}
-
-function stateTag(state: EnvRow["state"]): string {
-  return state === "missing" ? "border-alert text-alert" : "border-rule-strong text-mut";
 }
 
 function Row({
@@ -172,7 +166,7 @@ function Row({
       <div className="min-w-0">
         <div className={`${DATA} font-medium break-all`}>{row.key}</div>
         {m.states[row.state] ? (
-          <span className={`${DATA} ${TAG} mt-1 inline-block ${stateTag(row.state)}`}>{m.states[row.state]}</span>
+          <span className={`${row.state === "missing" ? BADGE_ALERT : BADGE} mt-1`}>{m.states[row.state]}</span>
         ) : null}
       </div>
 
@@ -189,10 +183,10 @@ function Row({
               autoFocus
             />
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={pending} onClick={save} className={`${BUTTON_PRIMARY} ${SMALL_BUTTON}`}>
+              <button type="button" disabled={pending} onClick={save} className={BUTTON_PRIMARY_SMALL}>
                 {pending ? common.saving : common.save}
               </button>
-              <button type="button" disabled={pending} onClick={() => setDraft(null)} className={`${BUTTON} ${SMALL_BUTTON}`}>
+              <button type="button" disabled={pending} onClick={() => setDraft(null)} className={BUTTON_SMALL}>
                 {common.cancel}
               </button>
             </div>
@@ -203,13 +197,13 @@ function Row({
           <Value value={row.local} empty={m.emptyValue} />
         )}
         {draft === null ? (
-          <div className="mt-0.5 flex flex-wrap gap-x-4">
+          <div className="mt-1.5 flex flex-wrap gap-2">
             {editable ? (
               <button
                 type="button"
                 aria-label={`${row.local === null ? m.add : m.edit} ${row.key}`}
                 onClick={() => setDraft(row.local ?? row.declared ?? "")}
-                className={`${BUTTON_QUIET} min-h-7!`}
+                className={BUTTON_SMALL}
               >
                 {row.local === null ? m.add : m.edit}
               </button>
@@ -219,7 +213,7 @@ function Row({
                 type="button"
                 aria-label={`${m.history(entries.length)} ${row.key}`}
                 onClick={() => setShowHistory(true)}
-                className={`${BUTTON_QUIET} min-h-7!`}
+                className={BUTTON_SMALL}
               >
                 {m.history(entries.length)}
               </button>
@@ -237,7 +231,7 @@ function Row({
                     onConfirm: () => run(() => removeEnvVariable(projectId, row.key), m.removed(row.key)),
                   })
                 }
-                className={`${BUTTON_DANGER} min-h-7!`}
+                className={BUTTON_SMALL_DANGER}
               >
                 {m.remove}
               </button>
@@ -249,7 +243,23 @@ function Row({
       <div className="min-w-0">
         <div className={CELL_LABEL}>.env</div>
         {row.declared === null ? (
-          <span className={`${DATA} text-mut`}>{m.notDeclared}</span>
+          <>
+            <span className={`${DATA} text-mut`}>{m.notDeclared}</span>
+            {editable && row.local !== null ? (
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  disabled={pending}
+                  aria-label={`${row.key} : ${m.declareHint}`}
+                  title={m.declareHint}
+                  onClick={() => run(() => declareEnvVariableInProject(projectId, row.key), m.declared(row.key))}
+                  className={BUTTON_SMALL}
+                >
+                  {m.declare}
+                </button>
+              </div>
+            ) : null}
+          </>
         ) : (
           <Value value={row.declared} empty={m.emptyValue} />
         )}

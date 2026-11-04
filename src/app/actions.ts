@@ -37,7 +37,7 @@ import {
 } from "@/server/git-actions";
 import { type CommitPage, type CommitView, readCommits, readCommitView } from "@/server/scan/git";
 import { type ContainerAction, composeDirectories, launch, runCompose, runContainers } from "@/server/project-actions";
-import { restoreEnvValue, saveEnvValue } from "@/server/env-vars";
+import { declareEnvVariable, restoreEnvValue, saveEnvValue } from "@/server/env-vars";
 import { type EnvEntry, listProjectFolder, readEnvFile, type TreeListing } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import {
@@ -337,6 +337,14 @@ export async function removeEnvVariable(projectId: number, key: string): Promise
   const target = gitTarget(projectId);
   if ("error" in target) return target.error;
   const error = saveEnvValue(getDb(), projectId, target.path, String(key), null, serverMessages(getDb()).envTab);
+  if (!error) await afterEnvChange(projectId);
+  return error;
+}
+
+export async function declareEnvVariableInProject(projectId: number, key: string): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = declareEnvVariable(target.path, String(key), serverMessages(getDb()).envTab);
   if (!error) await afterEnvChange(projectId);
   return error;
 }

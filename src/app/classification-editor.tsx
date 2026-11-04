@@ -5,7 +5,7 @@ import { useMessages } from "@/i18n/provider";
 import { STATUSES, type RegistryRow } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
 import { saveNote, toggleFavorite, updateStatus } from "./actions";
-import { FIELD, LABEL } from "./ui";
+import { BUTTON_TOGGLE, FIELD, LABEL } from "./ui";
 
 /** Mount with `key={row.id}`: the note field keeps its own text while typing. */
 export function ClassificationEditor({ row }: { row: RegistryRow }) {
@@ -40,7 +40,7 @@ export function ClassificationEditor({ row }: { row: RegistryRow }) {
             type="button"
             aria-pressed={row.favorite}
             onClick={() => run(() => toggleFavorite(row.id, !row.favorite))}
-            className={`${FIELD} cursor-pointer text-left hover:border-ink aria-pressed:border-accent`}
+            className={`${BUTTON_TOGGLE} w-full`}
           >
             {row.favorite ? `★ ${m.isFavorite}` : `☆ ${m.addFavorite}`}
           </button>

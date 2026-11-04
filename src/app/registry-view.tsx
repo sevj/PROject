@@ -32,7 +32,7 @@ import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
 import { BackIcon, OpenIcon, PlusIcon } from "./icons";
-import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_QUIET, CHECKBOX, DATA, LABEL, SECTION_TITLE, SEGMENT } from "./ui";
+import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_TOGGLE_SMALL, CHECKBOX, DATA, LABEL, SECTION_TITLE, SEGMENT } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
 const COLUMNS =
@@ -43,8 +43,7 @@ const VIEWS: View[] = ["all", "abandoned"];
 const PANEL =
   "min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto";
 const PANEL_TITLE = "text-[26px] leading-[1.1] font-bold tracking-tight";
-const FILTER =
-  "group inline-flex min-h-9 max-w-full cursor-pointer items-center gap-2 border border-rule px-2.5 hover:border-ink aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-ink";
+const FILTER = `${BUTTON_TOGGLE_SMALL} max-w-full`;
 
 function cellColor(commits: number): string {
   if (commits === 0) return "var(--r0)";
@@ -90,7 +89,7 @@ function SortButton({
       type="button"
       aria-pressed={active}
       onClick={() => onSort(id)}
-      className={`${LABEL} h-9 cursor-pointer hover:text-ink ${right ? "text-right" : "text-left"} ${active ? "text-ink" : ""}`}
+      className={`${LABEL} h-9 cursor-pointer hover:text-accent ${right ? "text-right" : "text-left"} ${active ? "text-ink" : ""}`}
     >
       {children}
       {active ? " ↓" : ""}
@@ -384,7 +383,7 @@ function Inspector({
           <button
             type="button"
             onClick={() => row.parentId !== null && onSelect(row.parentId)}
-            className={`${BUTTON_QUIET} min-w-0`}
+            className={`${BUTTON_SMALL} min-w-0`}
           >
             <BackIcon />
             <span className="truncate">{row.parentName}</span>
@@ -637,7 +636,7 @@ export function RegistryView({
             className={FILTER}
           >
             <span>{m.untagged}</span>
-            <span className={`${DATA} text-mut group-aria-pressed:text-ink`}>{tagCounts.untagged}</span>
+            <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.untagged}</span>
           </button>
           {knownTags.map((tag) => (
             <button
@@ -648,7 +647,7 @@ export function RegistryView({
               className={FILTER}
             >
               <span className="truncate">{tag}</span>
-              <span className={`${DATA} text-mut group-aria-pressed:text-ink`}>{tagCounts.counts.get(tag) ?? 0}</span>
+              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.counts.get(tag) ?? 0}</span>
             </button>
           ))}
         </div>
@@ -657,7 +656,7 @@ export function RegistryView({
           {VIEWS.map((id) => (
             <button key={id} type="button" aria-pressed={view === id} onClick={() => switchView(id)} className={SEGMENT}>
               <span>{m[id]}</span>
-              <span className={`${DATA} text-mut`}>{countView(rows, id)}</span>
+              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{countView(rows, id)}</span>
             </button>
           ))}
         </div>

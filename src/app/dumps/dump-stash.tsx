@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useMessages } from "@/i18n/provider";
 import { ENGINE_LABELS } from "@/lib/db-engines";
-import { type DumpRow, formatStamp } from "@/lib/dumps";
+import { type DumpRow, formatStamp, groupByProject, type ProjectDumps } from "@/lib/dumps";
 import { formatAge, formatSize } from "@/lib/registry";
 import type { DatabaseTarget } from "@/server/dumps/containers";
 import type { JobView } from "@/server/dumps/jobs";
@@ -13,7 +13,7 @@ import { DumpJobs } from "../dump-jobs";
 import { DumpModal, LoadModal } from "../dump-modals";
 import { Modal, useConfirm } from "../modal";
 import { StateGlyph } from "../projects/[id]/state-badge";
-import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_QUIET, CARD, DATA } from "../ui";
+import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_SMALL, CARD, DATA, LINK } from "../ui";
 import type { StateKind } from "@/lib/docker-state";
 
 const GLYPH: Record<DumpRow["status"], StateKind> = {
@@ -47,7 +47,7 @@ function Note({ dump }: { dump: DumpRow }) {
     );
   }
   return (
-    <button type="button" onClick={() => setEditing(true)} aria-label={m.editNote} className={`${BUTTON_QUIET} max-w-full justify-start text-left`}>
+    <button type="button" onClick={() => setEditing(true)} aria-label={m.editNote} className={`${BUTTON_SMALL} max-w-full justify-start text-left`}>
       <span className={`min-w-0 break-words ${dump.note ? "text-ink" : ""}`}>{dump.note ?? m.notePlaceholder}</span>
     </button>
   );
@@ -76,6 +76,77 @@ function PickModal({ targets, onPick, onClose }: { targets: DatabaseTarget[]; on
   );
 }
 
+function ProjectGroup({
+  group,
+  open,
+  onToggle,
+  onDump,
+  now,
+  renderDump,
+}: {
+  group: ProjectDumps;
+  open: boolean;
+  onToggle: () => void;
+  /** Null when no database of the project is running. */
+  onDump: (() => void) | null;
+  now: number;
+  renderDump: (dump: DumpRow) => ReactNode;
+}) {
+  const messages = useMessages();
+  const m = messages.dumps;
+  const panel = `dumps-${group.key.replace(/\W/g, "-")}`;
+  return (
+    <li className="border border-rule bg-panel">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pr-4">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panel}
+          aria-label={m.groups.toggle(group.projectName)}
+          onClick={onToggle}
+          className="flex min-h-14 min-w-0 flex-1 cursor-pointer items-center gap-3 px-4 py-2 text-left hover:bg-sel"
+        >
+          <span aria-hidden="true" className={`font-mono text-mut transition-transform ${open ? "rotate-90" : ""}`}>
+            ▸
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[17px] font-bold break-all">{group.projectName}</span>
+            <span className={`${DATA} block text-mut`}>
+              {[
+                group.dumps.length === 0 ? m.groups.none : m.groups.count(group.dumps.length),
+                group.totalBytes > 0 ? m.groups.total(formatSize(group.totalBytes, messages.size)) : null,
+                group.lastAt > 0 ? m.groups.last(formatAge(group.lastAt, now, messages.age)) : null,
+                group.projectId === null ? m.groups.removed : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled={onDump === null}
+          onClick={onDump ?? undefined}
+          title={onDump === null ? m.groups.noDatabase : m.groups.dumpTitle(group.projectName)}
+          className={BUTTON}
+        >
+          {m.groups.dump}
+        </button>
+        {group.projectId === null ? null : (
+          <Link href={`/projects/${group.projectId}?tab=docker`} className={LINK} aria-label={m.groups.open(group.projectName)}>
+            {messages.dumps.groups.open(group.projectName)}
+          </Link>
+        )}
+      </div>
+      {open && group.dumps.length > 0 ? (
+        <ul id={panel} className="grid gap-3 border-t border-rule p-3">
+          {group.dumps.map(renderDump)}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
 export function DumpStash({
   dumps,
   targets,
@@ -96,6 +167,23 @@ export function DumpStash({
   const [dumping, setDumping] = useState<DatabaseTarget | null>(null);
   const [loading, setLoading] = useState<number | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // What the user chose by hand; a project alone starts open, the others closed.
+  const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const groups = groupByProject(
+    dumps,
+    // One entry per project that has a running database, whether or not it has a dump yet.
+    [...new Map(targets.flatMap((target) => (target.projectId === null ? [] : [[target.projectId, target.projectName] as const]))).entries()].map(
+      ([id, name]) => ({ id, name }),
+    ),
+  );
+  const [picked, setPicked] = useState<DatabaseTarget[] | null>(null);
+
+  // One database dumps straight away; several ask which, among this project's only.
+  const dumpFrom = (group: ProjectDumps): (() => void) | null => {
+    const own = targets.filter((target) => group.projectId !== null && target.projectId === group.projectId);
+    if (own.length === 0) return null;
+    return () => (own.length === 1 ? setDumping(own[0]) : setPicked(own));
+  };
 
   return (
     <div className="grid gap-4">
@@ -129,7 +217,17 @@ export function DumpStash({
         </div>
       ) : (
         <ul className="grid gap-3">
-          {dumps.map((dump) => (
+          {groups.map((group) => (
+            <ProjectGroup
+              key={group.key}
+              group={group}
+              open={chosen.get(group.key) ?? groups.length === 1}
+              onToggle={() =>
+                setChosen((current) => new Map(current).set(group.key, !(current.get(group.key) ?? groups.length === 1)))
+              }
+              onDump={dumpFrom(group)}
+              now={now}
+              renderDump={(dump) => (
             <li key={dump.id} className={`${CARD} ${dump.status === "failed" ? "border-l-[3px] border-l-alert" : ""}`}>
               <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
                 <div className="min-w-0">
@@ -137,16 +235,7 @@ export function DumpStash({
                     <span className="text-[17px] font-bold break-all">{dump.database ?? m.allDatabases}</span>
                     <span className={`${DATA} text-mut`}>{ENGINE_LABELS[dump.engine]}</span>
                   </p>
-                  <p className={`${DATA} text-mut`}>
-                    {dump.projectId === null ? (
-                      dump.projectName
-                    ) : (
-                      <Link href={`/projects/${dump.projectId}?tab=docker`} className="hover:text-accent">
-                        {dump.projectName}
-                      </Link>
-                    )}{" "}
-                    · {dump.containerName}
-                  </p>
+                  <p className={`${DATA} text-mut`}>{dump.containerName}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {dump.status === "done" ? (
@@ -204,6 +293,8 @@ export function DumpStash({
                 <Note dump={dump} />
               </div>
             </li>
+              )}
+            />
           ))}
         </ul>
       )}
@@ -214,6 +305,16 @@ export function DumpStash({
           onClose={() => setPicking(false)}
           onPick={(target) => {
             setPicking(false);
+            setDumping(target);
+          }}
+        />
+      ) : null}
+      {picked ? (
+        <PickModal
+          targets={picked}
+          onClose={() => setPicked(null)}
+          onPick={(target) => {
+            setPicked(null);
             setDumping(target);
           }}
         />

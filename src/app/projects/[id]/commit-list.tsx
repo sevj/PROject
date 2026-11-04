@@ -3,12 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import { loadCommitView, loadProjectCommits } from "@/app/actions";
 import { Modal } from "@/app/modal";
-import { BUTTON, DATA } from "@/app/ui";
+import { BADGE, BUTTON, DATA, LINK } from "@/app/ui";
 import { useMessages } from "@/i18n/provider";
 import { formatAge } from "@/lib/registry";
 import type { CommitDetail, CommitFile, CommitView } from "@/server/scan/git";
 
-const TAG = "border border-rule-strong px-1.5 text-mut";
 
 function lineColor(line: string): string {
   if (line.startsWith("+++") || line.startsWith("---")) return "text-mut";
@@ -150,7 +149,7 @@ export function CommitList({
           className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-rule py-[7px] last:border-b-0"
         >
           {web ? (
-            <a href={`${web}/commit/${commit.hash}`} target="_blank" rel="noreferrer" className={`${DATA} text-mut hover:text-accent`}>
+            <a href={`${web}/commit/${commit.hash}`} target="_blank" rel="noreferrer" className={`${DATA} ${LINK} text-mut`}>
               {commit.hash}
             </a>
           ) : (
@@ -173,7 +172,7 @@ export function CommitList({
               </span>
             ) : null}
             {commit.tags.map((tag) => (
-              <span key={tag} className={TAG}>
+              <span key={tag} className={BADGE}>
                 {tag}
               </span>
             ))}

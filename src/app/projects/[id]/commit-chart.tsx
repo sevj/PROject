@@ -4,7 +4,7 @@ import { type KeyboardEvent, Suspense, use, useState } from "react";
 import { useMessages } from "@/i18n/provider";
 import { axisTicks, niceCeiling, sum, type WeekLabel } from "@/lib/git-activity";
 import type { AuthorCommits, AuthorHistory } from "@/server/scan/git";
-import { DATA, LABEL, SECTION_TITLE, SEGMENT } from "../../ui";
+import { DATA, LABEL, SECTION_TITLE, SEGMENT_SMALL } from "../../ui";
 
 const PERIODS = [13, 26, 52] as const;
 type Period = (typeof PERIODS)[number];
@@ -114,7 +114,7 @@ export function CommitChart({
                 setPeriod(item);
                 setActiveWeek(null);
               }}
-              className={`${SEGMENT} ${DATA} min-h-8!`}
+              className={SEGMENT_SMALL}
             >
               {m.periodWeeks(item)}
             </button>

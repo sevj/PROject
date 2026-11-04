@@ -4,7 +4,7 @@ import { classify, countStates, STATE_ORDER, type StateKind, TONE } from "@/lib/
 import { formatAge, type RegistryRow } from "@/lib/registry";
 import type { ContainerDetail, ProjectContainers } from "@/server/docker-containers";
 import type { DockerStack } from "@/server/docker-stack";
-import { CARD, DATA, SECTION_TITLE } from "../../ui";
+import { CARD, DATA, LINK, SECTION_TITLE } from "../../ui";
 import { DumpJobs } from "@/app/dump-jobs";
 import type { DumpRow } from "@/lib/dumps";
 import type { JobView } from "@/server/dumps/jobs";
@@ -78,7 +78,7 @@ function QuickList({ containers, now, messages }: { containers: ContainerDetail[
             className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b border-rule px-1 py-2 last:border-b-0 ${tone === "warn" ? "bg-alert/10" : ""}`}
           >
             <StateGlyph kind={kind} />
-            <a href={`#container-${container.name}`} className={`${DATA} min-w-0 break-all hover:text-accent`}>
+            <a href={`#container-${container.name}`} className={`${DATA} ${LINK} min-w-0 break-all`}>
               <span className="sr-only">{m.states[kind]}: </span>
               {container.name}
             </a>

@@ -5,7 +5,7 @@ import { useMessages } from "@/i18n/provider";
 import { dockerLabel, formatAge, formatSize, type RegistryRow, runningCount } from "@/lib/registry";
 import { parseRemote, publishedPorts } from "@/lib/remote";
 import { OpenIcon } from "./icons";
-import { CARD, DATA, SECTION_TITLE } from "./ui";
+import { CARD, DATA, LINK, SECTION_TITLE } from "./ui";
 
 function Fact({ label, children, alert }: { label: string; children: ReactNode; alert?: boolean }) {
   return (
@@ -45,7 +45,7 @@ export function GitFacts({ row, now, card = false }: { row: RegistryRow; now: nu
         {remote === null ? (
           m.none
         ) : remote.url ? (
-          <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="inline-flex max-w-full items-center gap-1 hover:text-accent">
+          <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className={`${LINK} inline-flex max-w-full items-center gap-1`}>
             <span className="truncate">{remote.label}</span>
             <OpenIcon />
           </a>

@@ -22,10 +22,9 @@ import { ProjectFacts } from "../../project-facts";
 import { ProjectName } from "../../project-name";
 import { ProjectOrganizer } from "../../project-organizer";
 import { BackIcon } from "../../icons";
-import { BUTTON_QUIET, CARD, DATA, SECTION_TITLE } from "../../ui";
+import { BUTTON_SMALL, CARD, DATA, SECTION_TITLE } from "../../ui";
 import { DockerComponents } from "./docker-components";
 import { DockerTab } from "./docker-tab";
-import { EnvFiles } from "./env-files";
 import { EnvTab } from "./env-tab";
 import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
@@ -82,7 +81,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const project = Number.isInteger(projectId) ? getProject(getDb(), projectId) : null;
   if (!project) notFound();
 
-  const { row, absolutePath, docs, envFiles, now, knownTags } = project;
+  const { row, absolutePath, docs, now, knownTags } = project;
   const messages = serverMessages(getDb());
   const m = messages.sheet;
   // Only what the open tab shows is read.
@@ -106,7 +105,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
     <main className="mx-auto w-full max-w-[1240px] flex-1 px-5 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5 pt-6 pb-6">
         <div className="min-w-0">
-          <Link href="/" className={BUTTON_QUIET}>
+          <Link href="/" className={`${BUTTON_SMALL} mb-2`}>
             <BackIcon />
             {m.back}
           </Link>
@@ -196,16 +195,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                 <DockerComponents stack={dockerStack} containers={row.containers} m={m.dockerComponents} states={m.dockerTab.states} />
               </section>
 
-              <ProjectFacts row={row} now={now} wide>
-                  <section className={CARD}>
-                    <h2 className={`${SECTION_TITLE} mb-1`}>{m.environment}</h2>
-                    {envFiles.length === 0 ? (
-                      <p className="py-1.5 text-mut">{m.noEnv}</p>
-                    ) : (
-                      <EnvFiles projectId={row.id} files={envFiles} />
-                    )}
-                  </section>
-                </ProjectFacts>
+              <ProjectFacts row={row} now={now} wide />
             </>
           ) : null}
 

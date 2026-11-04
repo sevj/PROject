@@ -1,7 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useMessages } from "@/i18n/provider";
 import type { StateKind } from "@/lib/docker-state";
 import { ENGINE_LABELS } from "@/lib/db-engines";
@@ -9,8 +8,9 @@ import { formatDuration, progressOf } from "@/lib/dumps";
 import { formatSize } from "@/lib/registry";
 import type { JobView } from "@/server/dumps/jobs";
 import { cancelDumpJob, dismissDumpJob } from "./dump-actions";
+import { useDumpActivity } from "./dump-activity";
 import { StateGlyph } from "./projects/[id]/state-badge";
-import { BUTTON, BUTTON_QUIET, CARD, DATA, SECTION_TITLE } from "./ui";
+import { BUTTON, BUTTON_SMALL, CARD, DATA, SECTION_TITLE } from "./ui";
 
 const GLYPH: Record<JobView["status"], StateKind> = {
   running: "restarting",
@@ -59,7 +59,7 @@ function Job({ job, now }: { job: JobView; now: number }) {
             {m.cancel}
           </button>
         ) : (
-          <button type="button" onClick={() => void dismissDumpJob(job.id)} className={BUTTON_QUIET}>
+          <button type="button" onClick={() => void dismissDumpJob(job.id)} className={BUTTON_SMALL}>
             {m.dismiss}
           </button>
         )}
@@ -112,44 +112,13 @@ function Job({ job, now }: { job: JobView; now: number }) {
 }
 
 /**
- * Asks the server how far the dumps and loads have got, every second while one runs.
- * The lists of the page are refreshed the moment one ends, so that its result appears.
+ * The dumps and loads in progress and the ones just ended. The following itself is done once
+ * for the whole app by the provider of the layout, which also refreshes the page on completion.
  */
 export function DumpJobs({ initial, initialNow }: { initial: JobView[]; initialNow: number }) {
   const m = useMessages().dumps.jobs;
-  const router = useRouter();
-  const [state, setState] = useState({ jobs: initial, now: initialNow });
-  const seen = useRef(new Map(initial.map((job) => [job.id, job.status])));
-  const busy = useRef(initial.some((job) => job.status === "running"));
-
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      if (!document.hidden) {
-        try {
-          const response = await fetch("/api/dump-jobs", { cache: "no-store" });
-          if (response.ok && !stopped) {
-            const data = (await response.json()) as { jobs: JobView[]; now: number };
-            const ended = data.jobs.some((job) => seen.current.get(job.id) === "running" && job.status !== "running");
-            seen.current = new Map(data.jobs.map((job) => [job.id, job.status]));
-            busy.current = data.jobs.some((job) => job.status === "running");
-            setState({ jobs: data.jobs, now: data.now });
-            if (ended) router.refresh();
-          }
-        } catch {
-          // The server restarting for a moment is not worth a message: the next poll will see.
-        }
-      }
-      // Quick while something runs, and only a glance now and then when nothing does.
-      if (!stopped) timer = setTimeout(poll, busy.current ? 1000 : 4000);
-    };
-    timer = setTimeout(poll, busy.current ? 1000 : 4000);
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [router]);
+  const live = useDumpActivity();
+  const state = live ?? { jobs: initial, now: initialNow };
 
   if (state.jobs.length === 0) return null;
   return (
