@@ -194,10 +194,12 @@ function RemoveButton({ projectId, subject }: { projectId: number; subject: stri
 
 function GroupInspector({
   group,
+  knownTags,
   onSelect,
   onCreated,
 }: {
   group: ProjectGroup;
+  knownTags: string[];
   onSelect: (id: number) => void;
   onCreated: (id: number) => void;
 }) {
@@ -244,6 +246,7 @@ function GroupInspector({
         <AddSubProjectForm
           groupId={group.parentId}
           root={group.path}
+          knownTags={knownTags}
           onCancel={() => setAdding(false)}
           onCreated={(id) => {
             setAdding(false);
@@ -752,12 +755,13 @@ export function RegistryView({
         {showForm ? (
           <section aria-label={messages.panel.newProject} className={PANEL}>
             <AddProjectForm
+              knownTags={knownTags}
               onCreated={showCreated}
               onCancel={rows.length > 0 ? () => setAdding(false) : undefined}
             />
           </section>
         ) : selectedGroup ? (
-          <GroupInspector key={selectedGroup.parentId} group={selectedGroup} onSelect={select} onCreated={showCreated} />
+          <GroupInspector key={selectedGroup.parentId} group={selectedGroup} knownTags={knownTags} onSelect={select} onCreated={showCreated} />
         ) : selected ? (
           <Inspector row={selected} now={now} knownTags={knownTags} onSelect={select} />
         ) : null}

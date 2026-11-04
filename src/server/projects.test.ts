@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addTag, setAbandoned } from "./classification";
 import { type Db, openDb } from "./db/client";
-import { projectFacts, projectMeta, projects, projectTags, settings } from "./db/schema";
+import { projectFacts, projectMeta, projects, projectTags, settings, tags } from "./db/schema";
 import {
   changeDirectory,
   registerMultiProject,
@@ -80,6 +80,35 @@ describe("registerProject", () => {
     ids(registerProject(db, { name: "a", description: "", directory: dir("app") }));
     const again = registerProject(db, { name: "b", description: "", directory: dir("app") });
     expect("error" in again && again.error).toContain("already");
+  });
+});
+
+describe("tags chosen when adding", () => {
+  const tagsOf = () => Object.fromEntries(getRegistry(db).rows.map((row) => [row.name, row.tags]));
+
+  it("puts them on the project, reusing the existing tag whatever its case", () => {
+    addTag(db, [ids(registerProject(db, { name: "Autre", description: "", directory: dir("other") }))[0]], "Client");
+    ids(registerProject(db, { name: "Appli", description: "", directory: dir("app"), tags: ["client", "Perso"] }));
+    expect(tagsOf().Appli).toEqual(["Client", "Perso"]);
+  });
+
+  it("puts them on each repository of a multi-project, not on the multi-project", () => {
+    dir("suite/front");
+    dir("suite/back");
+    const [groupId] = ids(
+      registerMultiProject(db, { name: "Suite", description: "", directory: dir("suite") }, [
+        { name: "Front", description: "", subdirectory: "front", tags: ["Web"] },
+        { name: "Back", description: "", subdirectory: "back" },
+      ]),
+    );
+    ids(registerSubProject(db, groupId, { name: "Libs", description: "", subdirectory: dir("suite/libs"), tags: ["Web", "Lib"] }));
+    expect(tagsOf()).toEqual({ Front: ["Web"], Back: [], Libs: ["Lib", "Web"] });
+    expect(db.select().from(projectTags).all().some(({ projectId }) => projectId === groupId)).toBe(false);
+  });
+
+  it("adds no tag when the project is refused", () => {
+    registerProject(db, { name: "a", description: "", directory: "/nulle/part", tags: ["Perso"] });
+    expect(db.select().from(tags).all()).toEqual([]);
   });
 });
 

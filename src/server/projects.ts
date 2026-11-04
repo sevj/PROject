@@ -2,13 +2,13 @@ import { eq, inArray } from "drizzle-orm";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import { cleanName, setDescription, setDisplayName } from "./classification";
+import { addTag, cleanName, setDescription, setDisplayName } from "./classification";
 import type { Db } from "./db/client";
 import { projectFacts, projects } from "./db/schema";
 import { serverMessages } from "./i18n";
 
-export type ProjectInput = { name: string; description: string; directory: string };
-export type SubProjectInput = { name: string; description: string; subdirectory: string };
+export type ProjectInput = { name: string; description: string; directory: string; tags?: string[] };
+export type SubProjectInput = { name: string; description: string; subdirectory: string; tags?: string[] };
 export type Registered = { ids: number[] } | { error: string };
 
 export const expandHome = (value: string) =>
@@ -50,7 +50,7 @@ function takenBy(db: Db, path: string): string | null {
 function insert(
   db: Db,
   values: { path: string; kind: "project" | "group"; parentId: number | null },
-  { name, description }: { name: string; description: string },
+  { name, description, tags = [] }: { name: string; description: string; tags?: string[] },
 ): number {
   const { id } = db
     .insert(projects)
@@ -60,6 +60,7 @@ function insert(
   db.insert(projectFacts).values({ projectId: id }).run();
   setDisplayName(db, id, name);
   setDescription(db, id, String(description ?? ""));
+  for (const tag of tags) addTag(db, [id], String(tag));
   return id;
 }
 
@@ -73,7 +74,7 @@ export function registerProject(db: Db, input: ProjectInput): Registered {
   return {
     ids: [
       db.transaction((tx) =>
-        insert(tx as unknown as Db, { path: directory.path, kind: "project", parentId: null }, { name, description: input.description }),
+        insert(tx as unknown as Db, { path: directory.path, kind: "project", parentId: null }, { name, description: input.description, tags: input.tags }),
       ),
     ],
   };
@@ -84,9 +85,9 @@ function readSubProjects(
   root: string,
   subProjects: SubProjectInput[],
   locate: boolean,
-): { items: { path: string; name: string; description: string }[] } | { error: string } {
+): { items: (SubProjectInput & { path: string })[] } | { error: string } {
   const m = serverMessages(db).errors;
-  const items: { path: string; name: string; description: string }[] = [];
+  const items: (SubProjectInput & { path: string })[] = [];
   for (const [index, item] of subProjects.entries()) {
     // Adding to an existing multi-project has only one form, which needs no position.
     const located = (message: string) => ({ error: locate ? m.repository(index + 1, message) : message });
@@ -97,7 +98,7 @@ function readSubProjects(
     const taken = takenBy(db, directory.path);
     if (taken) return located(taken);
     if (items.some(({ path }) => path === directory.path)) return located(m.subdirectoryTwice);
-    items.push({ path: directory.path, name, description: item.description });
+    items.push({ ...item, path: directory.path, name });
   }
   return { items };
 }

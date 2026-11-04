@@ -34,6 +34,27 @@ function TextField({
   );
 }
 
+/** Plain checkboxes: their state belongs to the form, which reads it when submitted. */
+function TagsField({ name, knownTags }: { name: string; knownTags: string[] }) {
+  const m = useMessages().tags;
+  if (knownTags.length === 0) return null;
+  return (
+    <fieldset>
+      <legend className={`${LABEL} pb-1`}>{m.label}</legend>
+      <div className="flex flex-wrap gap-1.5">
+        {knownTags.map((tag) => (
+          <label key={tag} className="max-w-full cursor-pointer">
+            <input type="checkbox" name={name} value={tag} className="peer sr-only" />
+            <span className="block max-w-full truncate border border-rule px-2.5 py-1 text-[13px] peer-checked:border-ink peer-checked:bg-ink peer-checked:font-medium peer-checked:text-bg peer-focus-visible:outline hover:border-ink">
+              {tag}
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function DescriptionField({ name }: { name: string }) {
   const m = useMessages().form;
   return (
@@ -55,11 +76,13 @@ function SubProjectFields({
   autoFocus = false,
   root,
   rootField,
+  knownTags,
 }: {
   prefix: string;
   autoFocus?: boolean;
   root?: string;
   rootField?: string;
+  knownTags: string[];
 }) {
   const m = useMessages().form;
   return (
@@ -78,6 +101,7 @@ function SubProjectFields({
           rootField={rootField}
         />
       </div>
+      <TagsField name={`${prefix}tags`} knownTags={knownTags} />
     </>
   );
 }
@@ -87,6 +111,7 @@ function readSubProject(data: FormData, prefix: string) {
     name: String(data.get(`${prefix}name`) ?? ""),
     description: String(data.get(`${prefix}description`) ?? ""),
     subdirectory: String(data.get(`${prefix}subdirectory`) ?? ""),
+    tags: data.getAll(`${prefix}tags`).map(String),
   };
 }
 
@@ -99,9 +124,11 @@ function FormError({ message }: { message: string | null }) {
 }
 
 export function AddProjectForm({
+  knownTags,
   onCreated,
   onCancel,
 }: {
+  knownTags: string[];
   onCreated: (id: number) => void;
   onCancel?: () => void;
 }) {
@@ -118,6 +145,7 @@ export function AddProjectForm({
       name: String(data.get("name") ?? ""),
       description: String(data.get("description") ?? ""),
       directory: String(data.get("directory") ?? ""),
+      tags: data.getAll("tags").map(String),
     };
     start(async () => {
       const result = multi
@@ -155,6 +183,8 @@ export function AddProjectForm({
         </label>
         <DirectoryInput id="project-directory-field" name="directory" placeholder={m.directoryPlaceholder} />
       </div>
+      {/* A multi-project is only a heading: tags go on each of its repositories. */}
+      {multi ? null : <TagsField name="tags" knownTags={knownTags} />}
 
       {multi ? (
         <>
@@ -173,7 +203,7 @@ export function AddProjectForm({
                   </button>
                 ) : null}
               </div>
-              <SubProjectFields prefix={`repo-${key}-`} rootField="directory" />
+              <SubProjectFields prefix={`repo-${key}-`} rootField="directory" knownTags={knownTags} />
             </fieldset>
           ))}
           <button
@@ -209,11 +239,13 @@ export function AddProjectForm({
 export function AddSubProjectForm({
   groupId,
   root,
+  knownTags,
   onCreated,
   onCancel,
 }: {
   groupId: number;
   root: string;
+  knownTags: string[];
   onCreated: (id: number) => void;
   onCancel: () => void;
 }) {
@@ -235,7 +267,7 @@ export function AddSubProjectForm({
         });
       }}
     >
-      <SubProjectFields prefix="" autoFocus root={root} />
+      <SubProjectFields prefix="" autoFocus root={root} knownTags={knownTags} />
       <FormError message={error} />
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending} className={BUTTON}>
