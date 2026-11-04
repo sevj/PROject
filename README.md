@@ -39,9 +39,8 @@ pnpm db:generate  # migration après un changement de src/server/db/schema.ts
 
 `better-sqlite3` reste fixé en 12.11.1, car les binaires 13.x plantent à l'ouverture d'une base sur Node 22.12.
 
-## Docker (behind the Adimeo proxy)
+## Start with a name
 
-`docker compose up -d` serves the app at https://project.dev.local through the `adimeo_local_proxy` network.
-Add `127.0.0.1 project.dev.local` to `/etc/hosts` first. The app only answers to the names in
-`PM_ALLOWED_HOSTS` besides loopback, and it has no login of its own: anyone who can reach the proxy
-can use it. The consoles opened from a project do not work from the container.
+`./start.sh` runs the dev server so that it also answers at http://project.dev.local:4300.
+Add `127.0.0.1 project.dev.local` to `/etc/hosts` first. The server stays bound to 127.0.0.1;
+other names are accepted only when listed in `PM_ALLOWED_HOSTS` (comma-separated, exact names).
