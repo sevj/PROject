@@ -247,7 +247,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                   ) : selectedDoc && isMarkdown(selectedDoc) ? (
                     <MarkdownDoc content={docContent} file={selectedDoc} docs={docs} projectId={row.id} />
                   ) : (
-                    <pre className={`${DATA} max-h-[640px] overflow-auto border border-rule bg-panel p-4 break-words whitespace-pre-wrap`}>
+                    <pre className={`${DATA} overflow-auto border border-rule bg-field p-4 break-words whitespace-pre-wrap`}>
                       {docContent}
                     </pre>
                   )}

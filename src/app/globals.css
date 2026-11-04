@@ -246,7 +246,6 @@ body {
 
 /* Documents from a project, in the same language as the rest of the app. */
 .markdown {
-  max-width: 78ch;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
