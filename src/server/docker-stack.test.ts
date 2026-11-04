@@ -75,6 +75,10 @@ services:
     ports: ["127.0.0.1:5438:5432", "9000"]
   app:
     build: { context: ., dockerfile: docker/Dockerfile }
+    depends_on:
+      db:
+        condition: service_healthy
+      cache: {}
     ports:
       - { published: 8080, target: 80 }
   cache:
@@ -84,9 +88,9 @@ services:
     const { components, invalidFiles } = await readDockerStack(project);
     expect(invalidFiles).toEqual([]);
     expect(components).toEqual([
-      { service: "db", images: [{ name: "postgres", version: "16" }], builtFrom: null, sources: ["docker-compose.yml"], ports: ["5438:5432", "9000"] },
-      { service: "app", images: [{ name: "php", version: "8.4-fpm" }], builtFrom: "docker/Dockerfile", sources: ["docker-compose.yml"], ports: ["8080:80"] },
-      { service: "cache", images: [{ name: "redis", version: "latest" }], builtFrom: null, sources: ["docker-compose.yml"], ports: [] },
+      { service: "db", images: [{ name: "postgres", version: "16" }], builtFrom: null, sources: ["docker-compose.yml"], ports: ["5438:5432", "9000"], dependsOn: [] },
+      { service: "app", images: [{ name: "php", version: "8.4-fpm" }], builtFrom: "docker/Dockerfile", sources: ["docker-compose.yml"], ports: ["8080:80"], dependsOn: ["db", "cache"] },
+      { service: "cache", images: [{ name: "redis", version: "latest" }], builtFrom: null, sources: ["docker-compose.yml"], ports: [], dependsOn: [] },
     ]);
   });
 

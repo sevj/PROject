@@ -13,6 +13,8 @@ export type DockerComponent = {
   builtFrom: string | null;
   sources: string[];
   ports: string[];
+  /** The services this one waits for, as `depends_on` names them. */
+  dependsOn: string[];
 };
 
 export type DockerStack = { components: DockerComponent[]; invalidFiles: string[] };
@@ -68,7 +70,13 @@ function parsePort(port: unknown): string | null {
   return published === undefined ? String(target) : `${applyDefaults(String(published))}:${target}`;
 }
 
-type ComposeService = { image?: unknown; build?: unknown; ports?: unknown };
+type ComposeService = { image?: unknown; build?: unknown; ports?: unknown; depends_on?: unknown };
+
+/** A list of names, or an object whose keys are the names. */
+function parseDependsOn(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  return value && typeof value === "object" ? Object.keys(value) : [];
+}
 
 async function readBuild(projectPath: string, build: unknown) {
   const { context = ".", dockerfile = "Dockerfile" } =
@@ -89,6 +97,7 @@ async function toComponent(projectPath: string, service: string, definition: Com
     builtFrom: build?.file ?? null,
     sources: [source],
     ports: Array.isArray(definition.ports) ? definition.ports.flatMap((port) => parsePort(port) ?? []) : [],
+    dependsOn: parseDependsOn(definition.depends_on),
   };
 }
 
@@ -126,6 +135,7 @@ export async function readDockerStack(projectPath: string): Promise<DockerStack>
           builtFrom: next.builtFrom ?? known.builtFrom,
           sources: [...known.sources, file],
           ports: [...new Set([...known.ports, ...next.ports])],
+          dependsOn: [...new Set([...known.dependsOn, ...next.dependsOn])],
         });
       }
     }
@@ -140,6 +150,7 @@ export async function readDockerStack(projectPath: string): Promise<DockerStack>
       builtFrom: "Dockerfile",
       sources: ["Dockerfile"],
       ports: [],
+      dependsOn: [],
     });
   }
   return { components: [...components.values()], invalidFiles };

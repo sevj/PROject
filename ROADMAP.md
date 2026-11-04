@@ -36,7 +36,7 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [x] Vue hebdomadaire projet × jour, estimations présentées comme telles.
 
 ## 6. Carte visuelle
-- [ ] React Flow, disposition en couches : projets / conteneurs / bases. Version simple d'abord, pour juger.
+- [x] React Flow, disposition en couches : projets / services / bases (flèches depends_on). Version simple, pour juger.
 
 ## Reste à faire hors chantiers
 - Supprimer `src/app/projects/[id]/env-files.tsx` (orphelin), la ligne « Env files » de `project-facts.tsx` et les clés i18n `environment` / `noEnv`.
