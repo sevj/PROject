@@ -8,12 +8,14 @@ import {
   countView,
   formatAge,
   formatSize,
+  isOldestFirst,
   type RegistryRow,
   type RegistrySort,
   type RegistryView as View,
   runningCount,
   selectRows,
   STATUS_LABELS,
+  todoReasons,
 } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
 import { addCollection, addTagTo, scanNow, toggleCollection, updateStatus } from "./actions";
@@ -27,6 +29,7 @@ const COLUMNS =
 
 const VIEWS: { id: View; label: string; alwaysShown: boolean }[] = [
   { id: "all", label: "Tous", alwaysShown: true },
+  { id: "todo", label: "À traiter", alwaysShown: true },
   { id: "favorites", label: "Favoris", alwaysShown: true },
   { id: "unclassified", label: "Non classés", alwaysShown: true },
   { id: "dirty", label: "Modifiés", alwaysShown: true },
@@ -66,12 +69,14 @@ function SortButton({
   sort,
   onSort,
   right,
+  ascending,
   children,
 }: {
   id: RegistrySort;
   sort: RegistrySort;
   onSort: (sort: RegistrySort) => void;
   right?: boolean;
+  ascending?: boolean;
   children: string;
 }) {
   const active = id === sort;
@@ -83,7 +88,7 @@ function SortButton({
       className={`${LABEL} h-9 cursor-pointer hover:text-ink ${right ? "text-right" : "text-left"} ${active ? "text-ink" : ""}`}
     >
       {children}
-      {active ? " ↓" : ""}
+      {active ? (ascending ? " ↑" : " ↓") : ""}
     </button>
   );
 }
@@ -454,10 +459,16 @@ export function RegistryView({
               </label>
               <div className={COLUMNS}>
               <SortButton id="name" sort={sort} onSort={setSort}>Projet</SortButton>
-              <span className={LABEL}>Stack</span>
-              <span className={LABEL}>Branche</span>
+              {view === "todo" ? (
+                <span className={`${LABEL} col-span-2`}>À faire</span>
+              ) : (
+                <>
+                  <span className={LABEL}>Stack</span>
+                  <span className={LABEL}>Branche</span>
+                </>
+              )}
               <SortButton id="dirty" sort={sort} onSort={setSort} right>Modifs</SortButton>
-              <SortButton id="commit" sort={sort} onSort={setSort}>Commit</SortButton>
+              <SortButton id="commit" sort={sort} onSort={setSort} ascending={isOldestFirst(view, sort)}>Commit</SortButton>
               <span className={LABEL}>26 semaines</span>
               <span className={LABEL}>Docker</span>
               <SortButton id="size" sort={sort} onSort={setSort} right>Taille</SortButton>
@@ -488,10 +499,18 @@ export function RegistryView({
                   {row.parentName ? <span className="font-normal text-mut">{row.parentName} / </span> : null}
                   {row.name}
                 </span>
-                <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
-                <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
-                  {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
-                </span>
+                {view === "todo" ? (
+                  <span className={`${DATA} col-span-2 truncate`} title={todoReasons(row).join(" · ")}>
+                    {todoReasons(row).join(" · ")}
+                  </span>
+                ) : (
+                  <>
+                    <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
+                    <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
+                      {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
+                    </span>
+                  </>
+                )}
                 <span
                   className={`${DATA} text-right ${(row.dirtyCount ?? 0) > 0 ? "font-medium text-alert" : "text-mut"}`}
                 >

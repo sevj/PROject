@@ -38,7 +38,7 @@ export type RegistryRow = {
   tags: string[];
 };
 
-export type RegistryView = "all" | "favorites" | "unclassified" | "dirty" | "docker" | "nogit" | "folders" | "errors" | "missing";
+export type RegistryView = "all" | "todo" | "favorites" | "unclassified" | "dirty" | "docker" | "nogit" | "folders" | "errors" | "missing";
 export type RegistrySort = "commit" | "name" | "dirty" | "size";
 
 const DAY = 24 * 3600 * 1000;
@@ -47,8 +47,26 @@ export function runningCount(row: RegistryRow): number {
   return row.containers.filter((container) => container.state === "running").length;
 }
 
+/** What is at risk of being forgotten. Empty when the project is in a clean state. */
+export function todoReasons(row: RegistryRow): string[] {
+  if (!row.hasGit) return [];
+  const reasons: string[] = [];
+  const dirty = row.dirtyCount ?? 0;
+  const ahead = row.ahead ?? 0;
+  if (dirty > 0) reasons.push(`${dirty} modif${dirty > 1 ? "s" : ""}`);
+  if (ahead > 0) reasons.push(`${ahead} non poussé${ahead > 1 ? "s" : ""}`);
+  if ((row.commitCount ?? 0) > 0 && !row.upstream) {
+    if (!row.remoteUrl) reasons.push("sans remote");
+    // A detached HEAD has no branch to track: a checked-out tag or commit is not a forgotten push.
+    else if (row.branch) reasons.push("branche sans suivi");
+  }
+  return reasons;
+}
+
 const VIEW_TESTS: Record<RegistryView, (row: RegistryRow) => boolean> = {
   all: (row) => !row.missing && row.kind === "project",
+  // An archived project was set aside on purpose, so it stops asking for attention.
+  todo: (row) => !row.missing && row.kind === "project" && row.status !== "archived" && todoReasons(row).length > 0,
   favorites: (row) => !row.missing && row.favorite,
   unclassified: (row) => !row.missing && row.kind === "project" && row.collectionIds.length === 0,
   dirty: (row) => !row.missing && (row.dirtyCount ?? 0) > 0,
@@ -70,6 +88,14 @@ const SORTERS: Record<RegistrySort, (a: RegistryRow, b: RegistryRow) => number> 
   commit: (a, b) => (b.lastCommitAt ?? -1) - (a.lastCommitAt ?? -1),
 };
 
+/** Whatever waits the longest comes first. */
+const oldestFirst = (a: RegistryRow, b: RegistryRow) =>
+  (a.lastCommitAt ?? Infinity) - (b.lastCommitAt ?? Infinity);
+
+export function isOldestFirst(view: RegistryView, sort: RegistrySort): boolean {
+  return view === "todo" && sort === "commit";
+}
+
 export function selectRows(
   rows: RegistryRow[],
   {
@@ -89,7 +115,10 @@ export function selectRows(
         row.path.toLowerCase().includes(needle) ||
         row.tags.some((tag) => tag.toLowerCase().includes(needle)),
     )
-    .sort((a, b) => SORTERS[sort](a, b) || a.name.localeCompare(b.name, "fr"));
+    .sort(
+      (a, b) =>
+        (isOldestFirst(view, sort) ? oldestFirst : SORTERS[sort])(a, b) || a.name.localeCompare(b.name, "fr"),
+    );
 }
 
 export function computeStats(rows: RegistryRow[], now: number) {

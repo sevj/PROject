@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Project Manager
 
-## Getting Started
+Application locale pour visualiser et organiser les projets d'un dossier : état git, Docker, taille, documentation et variables d'environnement, avec un classement par statut, collections, tags et notes.
 
-First, run the development server:
+## Lancer
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Puis ouvrir http://127.0.0.1:4300. Le premier chargement lance un scan ; ensuite, tout se rafraîchit à la demande.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Données et sécurité
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Base :** SQLite dans `~/.local/share/project-manager/pm.db`. `PM_DB_PATH` et `PM_ROOT` permettent de pointer ailleurs.
+- **Sauvegarde :** le classement est saisi à la main et ne peut pas être recalculé. L'écran Organisation permet de l'exporter et de l'importer en JSON.
+- **Lecture seule :** le scan n'écrit rien dans les projets. Seules les actions Docker et les commandes configurées agissent sur la machine.
+- **`.env` :** les valeurs sont lues à la demande, à la racine du projet, sans jamais être stockées ni journalisées.
+- **Accès local :** le serveur écoute sur `127.0.0.1`, et `src/proxy.ts` refuse les requêtes venant d'un autre site.
 
-## Learn More
+## Développement
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm test         # tests Vitest
+pnpm typecheck
+pnpm lint
+pnpm db:generate  # migration après un changement de src/server/db/schema.ts
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`better-sqlite3` reste fixé en 12.11.1, car les binaires 13.x plantent à l'ouverture d'une base sur Node 22.12.

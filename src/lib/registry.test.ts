@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { computeStats, countView, formatAge, formatSize, type RegistryRow, selectRows } from "./registry";
+import {
+  computeStats,
+  countView,
+  formatAge,
+  formatSize,
+  type RegistryRow,
+  selectRows,
+  todoReasons,
+} from "./registry";
 
 const DAY = 24 * 3600 * 1000;
 const NOW = 1000 * DAY;
@@ -103,6 +111,42 @@ describe("classification filters", () => {
     expect(names(selectRows(classified, { view: "favorites", query: "", sort: "name" }))).toEqual(["a"]);
     expect(names(selectRows(classified, { view: "all", query: "", sort: "name", collectionId: 2 }))).toEqual(["b"]);
     expect(names(selectRows(classified, { view: "all", query: "client", sort: "name" }))).toEqual(["a"]);
+  });
+});
+
+describe("todo view", () => {
+  const clean = { upstream: "origin/main", ahead: 0, behind: 0, remoteUrl: "git@x:a/b.git" };
+
+  it.each([
+    [{ ...clean }, []],
+    [{ ...clean, behind: 4 }, []],
+    [{ ...clean, dirtyCount: 1 }, ["1 modif"]],
+    [{ ...clean, dirtyCount: 3, ahead: 2 }, ["3 modifs", "2 non poussés"]],
+    [{ ...clean, ahead: 1 }, ["1 non poussé"]],
+    [{ ...clean, upstream: null, ahead: null }, ["branche sans suivi"]],
+    [{ ...clean, upstream: null, ahead: null, branch: null }, []],
+    [{ upstream: null, ahead: null, remoteUrl: null }, ["sans remote"]],
+    [{ upstream: null, remoteUrl: null, commitCount: 0 }, []],
+    [{ hasGit: false, dirtyCount: null }, []],
+  ])("explains %j", (patch, expected) => {
+    expect(todoReasons(row("x", patch))).toEqual(expected);
+  });
+
+  it("lists the oldest first, without archived, missing or clean projects", () => {
+    const list = [
+      row("recent", { ...clean, dirtyCount: 1, lastCommitAt: NOW - DAY }),
+      row("oldest", { ...clean, dirtyCount: 1, lastCommitAt: NOW - 90 * DAY }),
+      row("no-commit", { ...clean, dirtyCount: 1, lastCommitAt: null, commitCount: 0 }),
+      row("archived", { ...clean, dirtyCount: 1, status: "archived" }),
+      row("gone", { ...clean, dirtyCount: 1, missing: true }),
+      row("clean", clean),
+    ];
+    expect(names(selectRows(list, { view: "todo", query: "", sort: "commit" }))).toEqual([
+      "oldest",
+      "recent",
+      "no-commit",
+    ]);
+    expect(names(selectRows(list, { view: "todo", query: "", sort: "name" }))[0]).toBe("no-commit");
   });
 });
 

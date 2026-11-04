@@ -26,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="fr" className={`${schibsted.variable} ${dmMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
-        <header className="flex h-14 flex-wrap items-center gap-x-6 border-b border-ink px-4">
+        <header className="flex min-h-14 flex-wrap items-center gap-x-6 border-b border-ink px-4">
           <div className="flex items-baseline gap-2.5">
             <Link href="/" className="text-[15px] font-bold tracking-tight">
               Project Manager
