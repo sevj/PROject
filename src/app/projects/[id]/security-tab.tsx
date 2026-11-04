@@ -27,7 +27,7 @@ function EcosystemCard({ result }: { result: EcosystemResult }) {
   const m = useMessages().dependencies;
   const shownAdvisories = result.advisories.slice(0, SHOWN_ADVISORIES);
   return (
-    <section className={`${CARD} grid gap-3`}>
+    <section className={`${CARD} grid min-w-0 gap-3`}>
       <h3 className={SECTION_TITLE}>
         {result.ecosystem} · {m.folder(result.folder)}
         {result.runner === "-" ? "" : ` · ${m.runner(result.runner)}`}
@@ -36,11 +36,11 @@ function EcosystemCard({ result }: { result: EcosystemResult }) {
       {result.auditError && result.auditError !== result.outdatedError ? <Failure reason={result.auditError} kind="audit" /> : null}
 
       {result.advisories.length > 0 ? (
-        <div>
+        <div className="min-w-0">
           <p className={`${LABEL} pb-1`}>{m.advisories}</p>
           <ul className="grid gap-1">
             {shownAdvisories.map((advisory, index) => (
-              <li key={`${advisory.package}-${index}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-rule py-1.5">
+              <li key={`${advisory.package}-${index}`} className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-rule py-1.5">
                 <SeverityBadge severity={advisory.severity} />
                 <span className={`${DATA} font-medium`}>{advisory.package}</span>
                 {advisory.url ? (
@@ -51,7 +51,7 @@ function EcosystemCard({ result }: { result: EcosystemResult }) {
                   <span>{advisory.title}</span>
                 )}
                 {advisory.range ? (
-                  <span className={`${DATA} max-w-full truncate text-mut`} title={advisory.range}>
+                  <span className={`${DATA} basis-full truncate text-mut`} title={advisory.range}>
                     {advisory.range}
                   </span>
                 ) : null}
@@ -127,7 +127,7 @@ export function SecurityTab({
   const summary = stored ? summarize(stored.analysis) : null;
   const old = stored !== null && now - stored.analyzedAt > STALE_AFTER_MS;
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h2 className="text-[20px] leading-tight font-bold tracking-tight">{m.title}</h2>
