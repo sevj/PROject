@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { isMarkdown } from "@/lib/docs";
 import { formatAge, runningCount } from "@/lib/registry";
 import type { Messages } from "@/i18n";
 import { getDb } from "@/server/db/client";
@@ -19,6 +20,7 @@ import { TagPicker } from "../../tag-picker";
 import { BackIcon } from "../../icons";
 import { BUTTON_QUIET, DATA, LABEL } from "../../ui";
 import { EnvFiles } from "./env-files";
+import { MarkdownDoc } from "./markdown-doc";
 import { ProjectTree } from "./project-tree";
 
 const SECTION = "border-b border-rule px-5 pt-[18px] pb-[22px]";
@@ -210,6 +212,8 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                   </nav>
                   {docContent === null ? (
                     <p className="text-mut">{m.unreadableDoc}</p>
+                  ) : selectedDoc && isMarkdown(selectedDoc) ? (
+                    <MarkdownDoc content={docContent} file={selectedDoc} docs={docs} projectId={row.id} />
                   ) : (
                     <pre className={`${DATA} max-h-[640px] overflow-auto border border-rule bg-panel p-4 break-words whitespace-pre-wrap`}>
                       {docContent}

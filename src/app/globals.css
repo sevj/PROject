@@ -64,3 +64,147 @@ body {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
 }
+
+/* Documents from a project, in the same language as the rest of the app. */
+.markdown {
+  max-width: 78ch;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 1.8em 0 0.5em;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  scroll-margin-top: 1rem;
+}
+.markdown h1 {
+  font-size: 32px;
+  letter-spacing: -0.02em;
+}
+.markdown h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--rule);
+  font-size: 24px;
+}
+.markdown h3 {
+  font-size: 19px;
+}
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-size: 16px;
+}
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote,
+.markdown .markdown-table {
+  margin: 0.9em 0;
+}
+.markdown ul,
+.markdown ol {
+  padding-left: 1.5em;
+}
+.markdown ul {
+  list-style: square;
+}
+.markdown ol {
+  list-style: decimal;
+}
+.markdown li {
+  margin: 0.25em 0;
+}
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0.25em 0;
+}
+.markdown li::marker {
+  color: var(--mut);
+}
+.markdown .contains-task-list {
+  padding-left: 0;
+  list-style: none;
+}
+.markdown .task-list-item input {
+  margin-right: 0.5em;
+  accent-color: var(--ink);
+}
+.markdown a {
+  color: var(--ink);
+  border-bottom: 1px solid var(--mut);
+}
+.markdown a:hover {
+  color: var(--alert);
+  border-color: var(--alert);
+}
+.markdown strong {
+  font-weight: 700;
+}
+.markdown em {
+  font-style: italic;
+}
+.markdown del {
+  color: var(--mut);
+}
+.markdown hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+.markdown blockquote {
+  padding-left: 1em;
+  border-left: 3px solid var(--rule);
+  color: var(--mut);
+}
+.markdown code {
+  padding: 0.1em 0.35em;
+  background: var(--sel);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+.markdown pre {
+  padding: 1em;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  overflow-wrap: normal;
+  line-height: 1.5;
+}
+.markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 12.5px;
+}
+.markdown .markdown-table {
+  overflow-x: auto;
+}
+.markdown table {
+  border-collapse: collapse;
+  overflow-wrap: normal;
+}
+.markdown th,
+.markdown td {
+  padding: 0.4em 0.75em;
+  border: 1px solid var(--rule);
+  text-align: left;
+}
+.markdown th {
+  background: var(--panel);
+  font-weight: 600;
+}
+.markdown .markdown-image {
+  padding: 0.1em 0.35em;
+  border: 1px dashed var(--rule);
+  color: var(--mut);
+  font-size: 0.88em;
+}
