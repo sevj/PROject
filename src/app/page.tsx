@@ -1,25 +1,19 @@
-import { count } from "drizzle-orm";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { getDb } from "@/server/db/client";
-import { projects } from "@/server/db/schema";
+import { getRegistry } from "@/server/registry";
+import { RegistryView } from "./registry-view";
 
-async function ProjectCount() {
+async function Registry() {
   await connection();
-  const [{ total }] = getDb().select({ total: count() }).from(projects).all();
-  return (
-    <p className="font-mono text-[12.5px] text-mut">
-      {total === 0 ? "Aucun projet scanné pour l'instant." : `${total} projets en base.`}
-    </p>
-  );
+  const { rows, lastScan, now } = getRegistry(getDb());
+  return <RegistryView rows={rows} lastScan={lastScan} now={now} />;
 }
 
 export default function Home() {
   return (
-    <main className="flex-1 p-4">
-      <Suspense>
-        <ProjectCount />
-      </Suspense>
-    </main>
+    <Suspense fallback={<main className="flex-1 p-4 font-mono text-[12.5px] text-mut">Chargement…</main>}>
+      <Registry />
+    </Suspense>
   );
 }
