@@ -20,7 +20,6 @@ import {
 import type { ProjectStatus } from "@/server/db/schema";
 import { markAbandoned, scanNow, updateStatus } from "./actions";
 import { ClassificationEditor } from "./classification-editor";
-import { ProjectButtons } from "./project-buttons";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
 import { BUTTON, CHECKBOX, DATA, LABEL } from "./ui";
@@ -235,17 +234,27 @@ function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; kno
       <div className={`${DATA} break-all text-mut`}>{row.path}</div>
       <h1 className="mt-1 mb-4 text-[32px] leading-[1.05] font-bold tracking-tight break-words">{row.name}</h1>
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
-      <div className="mb-5">
-        <ProjectButtons key={row.id} row={row} />
-      </div>
-      <div className="mb-5">
-        <TagPicker
-          key={row.id}
-          projectIds={[row.id]}
-          knownTags={knownTags}
-          counts={Object.fromEntries(row.tags.map((tag) => [tag, 1]))}
-        />
-      </div>
+      {/* Stays open from one project to the next, to tag several in a row. */}
+      <details className="group/tags mb-5 border-y border-rule">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-2 hover:text-ink [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0">
+            <span className={`${LABEL} block`}>Tags</span>
+            {row.tags.length > 0 ? <TagList tags={row.tags} /> : <span className="text-mut">Aucun tag</span>}
+          </span>
+          <span aria-hidden="true" className="font-mono text-mut group-open/tags:rotate-90">
+            ▸
+          </span>
+        </summary>
+        <div className="pt-1 pb-3">
+          <TagPicker
+            key={row.id}
+            showLabel={false}
+            projectIds={[row.id]}
+            knownTags={knownTags}
+            counts={Object.fromEntries(row.tags.map((tag) => [tag, 1]))}
+          />
+        </div>
+      </details>
       {row.hasGit ? (
         <>
           <div className={`${LABEL} pb-1.5`}>Dernier commit</div>

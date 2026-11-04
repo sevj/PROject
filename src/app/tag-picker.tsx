@@ -17,7 +17,9 @@ export function TagPicker({
   projectIds,
   knownTags,
   counts,
+  showLabel = true,
 }: {
+  showLabel?: boolean;
   projectIds: number[];
   knownTags: string[];
   /** For each tag, how many of `projectIds` carry it. */
@@ -64,7 +66,7 @@ export function TagPicker({
 
   return (
     <div>
-      <div className={`${LABEL} pb-1.5`}>Tags</div>
+      {showLabel ? <div className={`${LABEL} pb-1.5`}>Tags</div> : null}
       {shown.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 pb-2">
           {shown.map((name) => {
