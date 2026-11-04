@@ -37,7 +37,7 @@ pnpm lint
 pnpm db:generate  # migration après un changement de src/server/db/schema.ts
 ```
 
-`better-sqlite3` reste fixé en 12.11.1, car les binaires 13.x plantent à l'ouverture d'une base sur Node 22.12.
+Node 26 (voir `.nvmrc`) : `better-sqlite3` 13 plante à l'ouverture d'une base sur Node 22.12, il faut au moins une 22.22 ou plus récente.
 
 ## Start with a name
 
