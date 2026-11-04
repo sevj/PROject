@@ -5,6 +5,7 @@ import { useOptimistic, useRef, useState, useTransition } from "react";
 import { formatAge, type RegistryRow, STATUS_LABELS } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
 import { importBackup, updateStatus } from "../actions";
+import { TagList } from "../tag-list";
 import { BUTTON, DATA } from "../ui";
 
 const COLUMNS: { status: ProjectStatus | null; label: string }[] = [
@@ -16,7 +17,7 @@ const COLUMNS: { status: ProjectStatus | null; label: string }[] = [
 ];
 
 const MOVE =
-  "h-[60px] cursor-pointer border-l border-rule font-mono hover:bg-ink hover:text-bg disabled:cursor-default disabled:text-rule disabled:hover:bg-transparent";
+  "h-full min-h-[60px] cursor-pointer border-l border-rule font-mono hover:bg-ink hover:text-bg disabled:cursor-default disabled:text-rule disabled:hover:bg-transparent";
 
 function Backup() {
   const input = useRef<HTMLInputElement>(null);
@@ -130,7 +131,7 @@ export function Board({
               {items.map((row) => (
                 <div
                   key={row.id}
-                  className="grid grid-cols-[minmax(0,1fr)_44px_44px] items-center border-b border-rule pl-4 hover:bg-sel"
+                  className="grid grid-cols-[minmax(0,1fr)_44px_44px] items-stretch border-b border-rule pl-4 hover:bg-sel"
                 >
                   <Link href={`/projects/${row.id}`} className="min-w-0 py-2.5 pr-2">
                     <div className="truncate font-semibold">
@@ -143,6 +144,7 @@ export function Board({
                         <span className="font-medium text-alert"> · {row.dirtyCount} modif{(row.dirtyCount ?? 0) > 1 ? "s" : ""}</span>
                       ) : null}
                     </div>
+                    <TagList tags={row.tags} />
                   </Link>
                   <button
                     type="button"

@@ -20,6 +20,7 @@ import type { ProjectStatus } from "@/server/db/schema";
 import { addTagTo, markAbandoned, removeTagFrom, scanNow, updateStatus } from "./actions";
 import { ClassificationEditor } from "./classification-editor";
 import { ProjectButtons } from "./project-buttons";
+import { TagList } from "./tag-list";
 import { BUTTON, CHECKBOX, DATA, LABEL } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
@@ -458,7 +459,7 @@ export function RegistryView({
             {visible.map((row) => (
               <div
                 key={row.id}
-                className="flex h-11 border-b border-rule hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_3px_0_0_var(--ink)]"
+                className="flex min-h-11 border-b border-rule hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_3px_0_0_var(--ink)]"
               >
                 <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
                   <span className="sr-only">Sélectionner {row.name}</span>
@@ -473,12 +474,15 @@ export function RegistryView({
                   type="button"
                   aria-pressed={row.id === selected?.id}
                   onClick={() => setSelectedId(row.id)}
-                  className={`${COLUMNS} h-full cursor-pointer text-left`}
+                  className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}
                 >
-                <span className="truncate font-semibold">
-                  {row.favorite ? <span aria-label="Favori">★ </span> : null}
-                  {row.parentName ? <span className="font-normal text-mut">{row.parentName} / </span> : null}
-                  {row.name}
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold">
+                    {row.favorite ? <span aria-label="Favori">★ </span> : null}
+                    {row.parentName ? <span className="font-normal text-mut">{row.parentName} / </span> : null}
+                    {row.name}
+                  </span>
+                  <TagList tags={row.tags} />
                 </span>
                 <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
                 <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
