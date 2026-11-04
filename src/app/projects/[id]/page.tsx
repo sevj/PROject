@@ -8,11 +8,11 @@ import { readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import { readRecentCommits } from "@/server/scan/git";
 import { isSizing } from "@/server/scan/jobs";
+import { ClassificationEditor } from "../../classification-editor";
+import { DATA, LABEL } from "../../ui";
 import { EnvFiles } from "./env-files";
 import { RefreshButton } from "./refresh-button";
 
-const LABEL = "font-mono text-[11px] uppercase tracking-[.06em] text-mut";
-const DATA = "font-mono text-[12.5px] tabular-nums";
 const SECTION = "border-b border-rule px-5 pt-[18px] pb-[22px]";
 
 function Fact({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
@@ -71,7 +71,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const project = Number.isInteger(projectId) ? getProject(getDb(), projectId) : null;
   if (!project) notFound();
 
-  const { row, absolutePath, docs, envFiles, now } = project;
+  const { row, absolutePath, docs, envFiles, now, collections, knownTags } = project;
   const commits = row.hasGit && !row.missing ? await readRecentCommits(absolutePath) : [];
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
   // Only a path found by the scan can be opened: `doc` comes from the URL.
@@ -175,6 +175,10 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
         </div>
 
         <aside className="min-w-0 flex-[1_1_400px] bg-panel">
+          <section className={SECTION}>
+            <h2 className={`${LABEL} mb-3.5`}>Organisation</h2>
+            <ClassificationEditor key={row.id} row={row} collections={collections} knownTags={knownTags} />
+          </section>
           <section className={SECTION}>
             <h2 className={`${LABEL} mb-3.5`}>
               Conteneurs · {running} lancé{running > 1 ? "s" : ""}

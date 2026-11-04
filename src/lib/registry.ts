@@ -1,4 +1,11 @@
-import type { ContainerFact } from "@/server/db/schema";
+import type { ContainerFact, ProjectStatus } from "@/server/db/schema";
+
+export const STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: "Actif",
+  paused: "En pause",
+  resume: "À reprendre",
+  archived: "Archivé",
+};
 
 export type RegistryRow = {
   id: number;
@@ -23,9 +30,14 @@ export type RegistryRow = {
   containers: ContainerFact[];
   sizeBytes: number | null;
   scanError: string | null;
+  status: ProjectStatus | null;
+  favorite: boolean;
+  note: string | null;
+  collectionIds: number[];
+  tags: string[];
 };
 
-export type RegistryView = "all" | "dirty" | "docker" | "nogit" | "folders" | "errors" | "missing";
+export type RegistryView = "all" | "favorites" | "unclassified" | "dirty" | "docker" | "nogit" | "folders" | "errors" | "missing";
 export type RegistrySort = "commit" | "name" | "dirty" | "size";
 
 const DAY = 24 * 3600 * 1000;
@@ -36,6 +48,8 @@ export function runningCount(row: RegistryRow): number {
 
 const VIEW_TESTS: Record<RegistryView, (row: RegistryRow) => boolean> = {
   all: (row) => !row.missing && row.kind === "project",
+  favorites: (row) => !row.missing && row.favorite,
+  unclassified: (row) => !row.missing && row.kind === "project" && row.collectionIds.length === 0,
   dirty: (row) => !row.missing && (row.dirtyCount ?? 0) > 0,
   docker: (row) => !row.missing && runningCount(row) > 0,
   nogit: (row) => !row.missing && row.kind === "project" && !row.hasGit,
@@ -57,12 +71,23 @@ const SORTERS: Record<RegistrySort, (a: RegistryRow, b: RegistryRow) => number> 
 
 export function selectRows(
   rows: RegistryRow[],
-  { view, query, sort }: { view: RegistryView; query: string; sort: RegistrySort },
+  {
+    view,
+    query,
+    sort,
+    collectionId = null,
+  }: { view: RegistryView; query: string; sort: RegistrySort; collectionId?: number | null },
 ): RegistryRow[] {
   const needle = query.trim().toLowerCase();
   return rows
     .filter(VIEW_TESTS[view])
-    .filter((row) => !needle || row.path.toLowerCase().includes(needle))
+    .filter((row) => collectionId === null || row.collectionIds.includes(collectionId))
+    .filter(
+      (row) =>
+        !needle ||
+        row.path.toLowerCase().includes(needle) ||
+        row.tags.some((tag) => tag.toLowerCase().includes(needle)),
+    )
     .sort((a, b) => SORTERS[sort](a, b) || a.name.localeCompare(b.name, "fr"));
 }
 

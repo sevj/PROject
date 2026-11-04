@@ -3,8 +3,7 @@
 import { useState, useTransition } from "react";
 import { revealEnvFile } from "@/app/actions";
 import type { EnvEntry } from "@/server/project-files";
-
-const DATA = "font-mono text-[12.5px] tabular-nums";
+import { DATA } from "../../ui";
 
 function EnvFile({ projectId, file }: { projectId: number; file: string }) {
   // Values stay in memory only while revealed, and are dropped when masked again.

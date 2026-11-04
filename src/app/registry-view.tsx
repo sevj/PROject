@@ -13,16 +13,21 @@ import {
   type RegistryView as View,
   runningCount,
   selectRows,
+  STATUS_LABELS,
 } from "@/lib/registry";
-import { scanNow } from "./actions";
+import type { ProjectStatus } from "@/server/db/schema";
+import { addCollection, addTagTo, scanNow, toggleCollection, updateStatus } from "./actions";
+import { ClassificationEditor, type CollectionOption } from "./classification-editor";
+import { BUTTON, CHECKBOX, DATA, FIELD, LABEL } from "./ui";
 
+const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
 const COLUMNS =
-  "grid min-w-[834px] grid-cols-[minmax(150px,1.4fr)_104px_100px_56px_68px_134px_56px_64px] items-center gap-x-2.5 px-4";
-const LABEL = "font-mono text-[11px] uppercase tracking-[.06em] text-mut";
-const DATA = "font-mono text-[12.5px] tabular-nums";
+  "grid min-w-[798px] flex-1 grid-cols-[minmax(150px,1.4fr)_104px_100px_56px_68px_134px_56px_64px] items-center gap-x-2.5 pr-4";
 
 const VIEWS: { id: View; label: string; alwaysShown: boolean }[] = [
   { id: "all", label: "Tous", alwaysShown: true },
+  { id: "favorites", label: "Favoris", alwaysShown: true },
+  { id: "unclassified", label: "Non classés", alwaysShown: true },
   { id: "dirty", label: "Modifiés", alwaysShown: true },
   { id: "docker", label: "Docker lancé", alwaysShown: true },
   { id: "nogit", label: "Sans git", alwaysShown: true },
@@ -97,7 +102,103 @@ function dockerLabel(row: RegistryRow): string {
   return row.hasCompose || row.containers.length > 0 ? "arrêté" : "—";
 }
 
-function Inspector({ row, now }: { row: RegistryRow; now: number }) {
+function BulkBar({
+  selected,
+  collections,
+  onClear,
+}: {
+  selected: number[];
+  collections: CollectionOption[];
+  onClear: () => void;
+}) {
+  const [pending, start] = useTransition();
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-ink bg-panel px-4 py-2" role="group" aria-label="Actions groupées">
+      <span className="font-semibold">
+        {selected.length} sélectionné{selected.length > 1 ? "s" : ""}
+      </span>
+      <select
+        aria-label="Changer le statut"
+        disabled={pending}
+        value=""
+        onChange={(event) => {
+          const { value } = event.target;
+          if (!value) return;
+          start(() => updateStatus(selected, value === "none" ? null : (value as ProjectStatus)));
+        }}
+        className={BULK_FIELD}
+      >
+        <option value="">Statut…</option>
+        <option value="none">Sans statut</option>
+        {Object.entries(STATUS_LABELS).map(([status, label]) => (
+          <option key={status} value={status}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Ajouter à une collection"
+        disabled={pending || collections.length === 0}
+        value=""
+        onChange={(event) => {
+          const id = Number(event.target.value);
+          if (id) start(() => toggleCollection(selected, id, true));
+        }}
+        className={BULK_FIELD}
+      >
+        <option value="">Ajouter à…</option>
+        {collections.map(({ id, name }) => (
+          <option key={id} value={id}>
+            {name}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Retirer d'une collection"
+        disabled={pending || collections.length === 0}
+        value=""
+        onChange={(event) => {
+          const id = Number(event.target.value);
+          if (id) start(() => toggleCollection(selected, id, false));
+        }}
+        className={BULK_FIELD}
+      >
+        <option value="">Retirer de…</option>
+        {collections.map(({ id, name }) => (
+          <option key={id} value={id}>
+            {name}
+          </option>
+        ))}
+      </select>
+      <form
+        action={(data) => {
+          const name = String(data.get("tag") ?? "");
+          start(() => addTagTo(selected, name));
+        }}
+      >
+        <label>
+          <span className="sr-only">Ajouter un tag à la sélection</span>
+          <input name="tag" placeholder="Ajouter un tag" maxLength={80} className={`${BULK_FIELD} w-44 placeholder:text-mut`} />
+        </label>
+      </form>
+      <button type="button" onClick={onClear} className={BUTTON}>
+        Désélectionner
+      </button>
+    </div>
+  );
+}
+
+function Inspector({
+  row,
+  now,
+  collections,
+  knownTags,
+}: {
+  row: RegistryRow;
+  now: number;
+  collections: CollectionOption[];
+  knownTags: string[];
+}) {
   const ahead = row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : "pas de suivi distant";
   return (
     <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_340px] bg-panel px-5 pt-5 pb-6">
@@ -128,6 +229,9 @@ function Inspector({ row, now }: { row: RegistryRow; now: number }) {
         <Fact label="Docker" value={dockerLabel(row)} />
         <Fact label="Taille hors dépendances" value={formatSize(row.sizeBytes)} />
       </dl>
+      <div className="mt-5">
+        <ClassificationEditor key={row.id} row={row} collections={collections} knownTags={knownTags} />
+      </div>
       <Link href={`/projects/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-medium underline">
         Ouvrir la fiche complète
       </Link>
@@ -140,14 +244,21 @@ export function RegistryView({
   lastScan,
   now,
   sizing,
+  collections,
+  knownTags,
 }: {
   rows: RegistryRow[];
+  collections: CollectionOption[];
+  knownTags: string[];
   lastScan: { status: string; at: number; error: string | null; warning: string | null } | null;
   now: number;
   sizing: boolean;
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>("all");
+  const [collectionId, setCollectionId] = useState<number | null>(null);
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [, startCollection] = useTransition();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<RegistrySort>("commit");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -174,7 +285,29 @@ export function RegistryView({
   }, [sizing, router]);
 
   const stats = useMemo(() => computeStats(rows, now), [rows, now]);
-  const visible = useMemo(() => selectRows(rows, { view, query, sort }), [rows, view, query, sort]);
+  const visible = useMemo(
+    () => selectRows(rows, { view, query, sort, collectionId }),
+    [rows, view, query, sort, collectionId],
+  );
+  const allChecked = visible.length > 0 && visible.every((row) => checked.has(row.id));
+  const toggleChecked = (id: number, value: boolean) => {
+    setChecked((current) => {
+      const next = new Set(current);
+      if (value) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAll = (value: boolean) => {
+    setChecked((current) => {
+      const next = new Set(current);
+      for (const row of visible) {
+        if (value) next.add(row.id);
+        else next.delete(row.id);
+      }
+      return next;
+    });
+  };
   const selected = visible.find((row) => row.id === selectedId) ?? visible[0] ?? null;
   const error = scanError ?? lastScan?.error ?? null;
 
@@ -233,6 +366,10 @@ export function RegistryView({
         </p>
       ) : null}
 
+      {checked.size > 0 ? (
+        <BulkBar selected={[...checked]} collections={collections} onClear={() => setChecked(new Set())} />
+      ) : null}
+
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] border-b border-ink">
         {statCells.map(({ label, value, alert }) => (
           <div key={label} className="flex flex-col-reverse border-r border-rule px-4 py-3.5 last:border-r-0">
@@ -251,19 +388,67 @@ export function RegistryView({
             <button
               key={id}
               type="button"
-              aria-pressed={view === id}
-              onClick={() => setView(id)}
+              aria-pressed={view === id && collectionId === null}
+              onClick={() => {
+                setView(id);
+                setCollectionId(null);
+              }}
               className="group flex min-h-10 w-full cursor-pointer items-center justify-between px-4 text-left hover:bg-sel aria-pressed:bg-ink aria-pressed:text-bg aria-pressed:hover:bg-ink"
             >
               <span>{label}</span>
               <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{countView(rows, id)}</span>
             </button>
           ))}
+          <div className={`${LABEL} px-4 pt-5 pb-2`}>Collections</div>
+          {collections.map(({ id, name }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={collectionId === id}
+              onClick={() => {
+                setCollectionId(id);
+                setView("all");
+              }}
+              className="group flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 px-4 text-left hover:bg-sel aria-pressed:bg-ink aria-pressed:text-bg aria-pressed:hover:bg-ink"
+            >
+              <span className="truncate">{name}</span>
+              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>
+                {rows.filter((row) => !row.missing && row.collectionIds.includes(id)).length}
+              </span>
+            </button>
+          ))}
+          <form
+            className="px-4 pt-2"
+            action={(data) => {
+              const name = String(data.get("collection") ?? "");
+              startCollection(() => addCollection(name));
+            }}
+          >
+            <label>
+              <span className="sr-only">Nouvelle collection</span>
+              <input
+                name="collection"
+                placeholder="Nouvelle collection"
+                maxLength={80}
+                className={`${FIELD} placeholder:text-mut`}
+              />
+            </label>
+          </form>
         </aside>
 
         <div className="min-w-0 flex-[999_1_620px] border-r border-rule">
           <div className="overflow-x-auto">
-            <div className={`${COLUMNS} h-[38px] border-b border-ink`}>
+            <div className="flex h-[38px] border-b border-ink">
+              <label className="flex w-9 shrink-0 items-center justify-center">
+                <span className="sr-only">Tout sélectionner</span>
+                <input
+                  type="checkbox"
+                  className={CHECKBOX}
+                  checked={allChecked}
+                  onChange={(event) => toggleAll(event.target.checked)}
+                />
+              </label>
+              <div className={COLUMNS}>
               <SortButton id="name" sort={sort} onSort={setSort}>Projet</SortButton>
               <span className={LABEL}>Stack</span>
               <span className={LABEL}>Branche</span>
@@ -272,16 +457,30 @@ export function RegistryView({
               <span className={LABEL}>26 semaines</span>
               <span className={LABEL}>Docker</span>
               <SortButton id="size" sort={sort} onSort={setSort} right>Taille</SortButton>
+              </div>
             </div>
             {visible.map((row) => (
-              <button
+              <div
                 key={row.id}
-                type="button"
-                aria-pressed={row.id === selected?.id}
-                onClick={() => setSelectedId(row.id)}
-                className={`${COLUMNS} h-11 w-full cursor-pointer border-b border-rule text-left hover:bg-sel aria-pressed:bg-sel aria-pressed:shadow-[inset_3px_0_0_var(--ink)]`}
+                className="flex h-11 border-b border-rule hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_3px_0_0_var(--ink)]"
               >
+                <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
+                  <span className="sr-only">Sélectionner {row.name}</span>
+                  <input
+                    type="checkbox"
+                    className={CHECKBOX}
+                    checked={checked.has(row.id)}
+                    onChange={(event) => toggleChecked(row.id, event.target.checked)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  aria-pressed={row.id === selected?.id}
+                  onClick={() => setSelectedId(row.id)}
+                  className={`${COLUMNS} h-full cursor-pointer text-left`}
+                >
                 <span className="truncate font-semibold">
+                  {row.favorite ? <span aria-label="Favori">★ </span> : null}
                   {row.parentName ? <span className="font-normal text-mut">{row.parentName} / </span> : null}
                   {row.name}
                 </span>
@@ -298,7 +497,8 @@ export function RegistryView({
                 <ActivityStrip weeks={row.weeklyCommits} />
                 <span className={`${DATA} ${runningCount(row) > 0 ? "" : "text-mut"}`}>{dockerLabel(row)}</span>
                 <span className={`${DATA} text-right text-mut`}>{formatSize(row.sizeBytes)}</span>
-              </button>
+                </button>
+              </div>
             ))}
           </div>
           {visible.length === 0 ? (
@@ -325,7 +525,7 @@ export function RegistryView({
           </div>
         </div>
 
-        {selected ? <Inspector row={selected} now={now} /> : null}
+        {selected ? <Inspector row={selected} now={now} collections={collections} knownTags={knownTags} /> : null}
       </div>
     </main>
   );

@@ -7,8 +7,17 @@ import { RegistryView } from "./registry-view";
 
 async function Registry() {
   await connection();
-  const { rows, lastScan, now } = getRegistry(getDb());
-  return <RegistryView rows={rows} lastScan={lastScan} now={now} sizing={isSizing()} />;
+  const { rows, lastScan, now, collections, knownTags } = getRegistry(getDb());
+  return (
+    <RegistryView
+      rows={rows}
+      lastScan={lastScan}
+      now={now}
+      sizing={isSizing()}
+      collections={collections}
+      knownTags={knownTags}
+    />
+  );
 }
 
 export default function Home() {

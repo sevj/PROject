@@ -28,6 +28,11 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     containers: [],
     sizeBytes: null,
     scanError: null,
+    status: null,
+    favorite: false,
+    note: null,
+    collectionIds: [],
+    tags: [],
     ...patch,
   };
 }
@@ -78,6 +83,25 @@ describe("selectRows", () => {
     const before = names(rows);
     selectRows(rows, { view: "all", query: "", sort: "name" });
     expect(names(rows)).toEqual(before);
+  });
+});
+
+describe("classification filters", () => {
+  const classified = [
+    row("a", { collectionIds: [1], favorite: true, tags: ["Client"] }),
+    row("b", { collectionIds: [2] }),
+    row("c"),
+    row("plain", { kind: "folder" }),
+  ];
+
+  it("lists unclassified projects, without plain folders", () => {
+    expect(names(selectRows(classified, { view: "unclassified", query: "", sort: "name" }))).toEqual(["c"]);
+  });
+
+  it("filters by favorite, collection and tag", () => {
+    expect(names(selectRows(classified, { view: "favorites", query: "", sort: "name" }))).toEqual(["a"]);
+    expect(names(selectRows(classified, { view: "all", query: "", sort: "name", collectionId: 2 }))).toEqual(["b"]);
+    expect(names(selectRows(classified, { view: "all", query: "client", sort: "name" }))).toEqual(["a"]);
   });
 });
 
