@@ -1,25 +1,29 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   computeStats,
   countView,
   formatAge,
+  formatSize,
   type RegistryRow,
   type RegistrySort,
   type RegistryView as View,
+  runningCount,
   selectRows,
 } from "@/lib/registry";
 import { scanNow } from "./actions";
 
 const COLUMNS =
-  "grid min-w-[760px] grid-cols-[minmax(170px,1.4fr)_130px_120px_60px_72px_134px] items-center gap-x-3 px-4";
+  "grid min-w-[834px] grid-cols-[minmax(150px,1.4fr)_104px_100px_56px_68px_134px_56px_64px] items-center gap-x-2.5 px-4";
 const LABEL = "font-mono text-[11px] uppercase tracking-[.06em] text-mut";
 const DATA = "font-mono text-[12.5px] tabular-nums";
 
 const VIEWS: { id: View; label: string; alwaysShown: boolean }[] = [
   { id: "all", label: "Tous", alwaysShown: true },
   { id: "dirty", label: "Modifiés", alwaysShown: true },
+  { id: "docker", label: "Docker lancé", alwaysShown: true },
   { id: "nogit", label: "Sans git", alwaysShown: true },
   { id: "folders", label: "Autres dossiers", alwaysShown: true },
   { id: "errors", label: "Erreurs de scan", alwaysShown: false },
@@ -86,6 +90,12 @@ function Fact({ label, value, alert }: { label: string; value: string; alert?: b
   );
 }
 
+function dockerLabel(row: RegistryRow): string {
+  const running = runningCount(row);
+  if (running > 0) return `${running} up`;
+  return row.hasCompose || row.containers.length > 0 ? "arrêté" : "—";
+}
+
 function Inspector({ row, now }: { row: RegistryRow; now: number }) {
   const ahead = row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : "pas de suivi distant";
   return (
@@ -114,7 +124,8 @@ function Inspector({ row, now }: { row: RegistryRow; now: number }) {
             <Fact label="Fichiers modifiés" value={String(row.dirtyCount ?? 0)} alert={(row.dirtyCount ?? 0) > 0} />
           </>
         ) : null}
-        <Fact label="Docker Compose" value={row.hasCompose ? "oui" : "non"} />
+        <Fact label="Docker" value={dockerLabel(row)} />
+        <Fact label="Taille hors dépendances" value={formatSize(row.sizeBytes)} />
       </dl>
     </section>
   );
@@ -124,11 +135,14 @@ export function RegistryView({
   rows,
   lastScan,
   now,
+  sizing,
 }: {
   rows: RegistryRow[];
-  lastScan: { status: string; at: number; error: string | null } | null;
+  lastScan: { status: string; at: number; error: string | null; warning: string | null } | null;
   now: number;
+  sizing: boolean;
 }) {
+  const router = useRouter();
   const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<RegistrySort>("commit");
@@ -148,6 +162,13 @@ export function RegistryView({
     if (neverScanned) scan();
   }, [neverScanned]);
 
+  // Sizes arrive after the scan: new values appear as they are measured.
+  useEffect(() => {
+    if (!sizing) return;
+    const timer = setInterval(() => router.refresh(), 3000);
+    return () => clearInterval(timer);
+  }, [sizing, router]);
+
   const stats = useMemo(() => computeStats(rows, now), [rows, now]);
   const visible = useMemo(() => selectRows(rows, { view, query, sort }), [rows, view, query, sort]);
   const selected = visible.find((row) => row.id === selectedId) ?? visible[0] ?? null;
@@ -159,6 +180,7 @@ export function RegistryView({
     { label: "Modifs non commitées", value: stats.dirty, alert: true },
     { label: "Actifs sur 30 jours", value: stats.active30 },
     { label: "Sans commit depuis 1 an", value: stats.dormant },
+    { label: "Conteneurs lancés", value: stats.running },
   ];
 
   return (
@@ -178,9 +200,11 @@ export function RegistryView({
           <span className={`${DATA} text-mut`} role="status">
             {scanning
               ? "Scan en cours…"
-              : lastScan
-                ? `Scanné il y a ${formatAge(lastScan.at, now)}`
-                : "Jamais scanné"}
+              : sizing
+                ? "Calcul des tailles…"
+                : lastScan
+                  ? `Scanné il y a ${formatAge(lastScan.at, now)}`
+                  : "Jamais scanné"}
           </span>
           <button
             type="button"
@@ -196,6 +220,12 @@ export function RegistryView({
       {error ? (
         <p role="alert" className={`${DATA} border-b border-alert px-4 py-2 text-alert`}>
           Le dernier scan a échoué : {error}
+        </p>
+      ) : null}
+
+      {lastScan?.warning ? (
+        <p role="status" className={`${DATA} border-b border-rule px-4 py-2 text-mut`}>
+          Docker n&apos;a pas répondu pendant le scan, l&apos;état des conteneurs est inconnu.
         </p>
       ) : null}
 
@@ -236,6 +266,8 @@ export function RegistryView({
               <SortButton id="dirty" sort={sort} onSort={setSort} right>Modifs</SortButton>
               <SortButton id="commit" sort={sort} onSort={setSort}>Commit</SortButton>
               <span className={LABEL}>26 semaines</span>
+              <span className={LABEL}>Docker</span>
+              <SortButton id="size" sort={sort} onSort={setSort} right>Taille</SortButton>
             </div>
             {visible.map((row) => (
               <button
@@ -260,6 +292,8 @@ export function RegistryView({
                 </span>
                 <span className={DATA}>{row.hasGit ? formatAge(row.lastCommitAt, now) : "—"}</span>
                 <ActivityStrip weeks={row.weeklyCommits} />
+                <span className={`${DATA} ${runningCount(row) > 0 ? "" : "text-mut"}`}>{dockerLabel(row)}</span>
+                <span className={`${DATA} text-right text-mut`}>{formatSize(row.sizeBytes)}</span>
               </button>
             ))}
           </div>

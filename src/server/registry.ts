@@ -41,6 +41,8 @@ export function getRegistry(db: Db) {
       lastCommitSubject: facts.lastCommitSubject,
       weeklyCommits: facts.weeklyCommits,
       hasCompose: facts.hasCompose,
+      containers: facts.containers,
+      sizeBytes: facts.sizeBytes,
       scanError: facts.scanError,
     });
   }
@@ -54,6 +56,7 @@ export function getRegistry(db: Db) {
           status: lastScan.status,
           at: (lastScan.finishedAt ?? lastScan.startedAt).getTime(),
           error: lastScan.error,
+          warning: lastScan.warning,
         }
       : null,
   };

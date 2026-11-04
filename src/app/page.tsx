@@ -2,12 +2,13 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { getDb } from "@/server/db/client";
 import { getRegistry } from "@/server/registry";
+import { isSizing } from "@/server/scan/jobs";
 import { RegistryView } from "./registry-view";
 
 async function Registry() {
   await connection();
   const { rows, lastScan, now } = getRegistry(getDb());
-  return <RegistryView rows={rows} lastScan={lastScan} now={now} />;
+  return <RegistryView rows={rows} lastScan={lastScan} now={now} sizing={isSizing()} />;
 }
 
 export default function Home() {

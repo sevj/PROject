@@ -120,4 +120,5 @@ export const scans = sqliteTable("scans", {
   projectCount: integer("project_count"),
   errorCount: integer("error_count"),
   error: text("error"),
+  warning: text("warning"),
 });

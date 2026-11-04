@@ -8,6 +8,13 @@
       "when": 1793801775924,
       "tag": "0000_wild_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793802435767,
+      "tag": "0001_outstanding_redwing",
+      "breakpoints": true
     }
   ]
 }

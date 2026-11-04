@@ -1,3 +1,5 @@
+import type { ContainerFact } from "@/server/db/schema";
+
 export type RegistryRow = {
   id: number;
   name: string;
@@ -18,17 +20,24 @@ export type RegistryRow = {
   lastCommitSubject: string | null;
   weeklyCommits: number[] | null;
   hasCompose: boolean;
+  containers: ContainerFact[];
+  sizeBytes: number | null;
   scanError: string | null;
 };
 
-export type RegistryView = "all" | "dirty" | "nogit" | "folders" | "errors" | "missing";
-export type RegistrySort = "commit" | "name" | "dirty";
+export type RegistryView = "all" | "dirty" | "docker" | "nogit" | "folders" | "errors" | "missing";
+export type RegistrySort = "commit" | "name" | "dirty" | "size";
 
 const DAY = 24 * 3600 * 1000;
+
+export function runningCount(row: RegistryRow): number {
+  return row.containers.filter((container) => container.state === "running").length;
+}
 
 const VIEW_TESTS: Record<RegistryView, (row: RegistryRow) => boolean> = {
   all: (row) => !row.missing && row.kind === "project",
   dirty: (row) => !row.missing && (row.dirtyCount ?? 0) > 0,
+  docker: (row) => !row.missing && runningCount(row) > 0,
   nogit: (row) => !row.missing && row.kind === "project" && !row.hasGit,
   folders: (row) => !row.missing && row.kind === "folder",
   errors: (row) => !row.missing && row.scanError !== null,
@@ -42,6 +51,7 @@ export function countView(rows: RegistryRow[], view: RegistryView): number {
 const SORTERS: Record<RegistrySort, (a: RegistryRow, b: RegistryRow) => number> = {
   name: () => 0,
   dirty: (a, b) => (b.dirtyCount ?? -1) - (a.dirtyCount ?? -1),
+  size: (a, b) => (b.sizeBytes ?? -1) - (a.sizeBytes ?? -1),
   commit: (a, b) => (b.lastCommitAt ?? -1) - (a.lastCommitAt ?? -1),
 };
 
@@ -65,6 +75,7 @@ export function computeStats(rows: RegistryRow[], now: number) {
     dirty: projects.filter((row) => (row.dirtyCount ?? 0) > 0).length,
     active30: projects.filter((row) => age(row) <= 30 * DAY).length,
     dormant: projects.filter((row) => row.lastCommitAt !== null && age(row) > 365 * DAY).length,
+    running: projects.reduce((sum, row) => sum + runningCount(row), 0),
   };
 }
 
@@ -81,4 +92,18 @@ export function formatAge(timestamp: number | null, now: number): string {
   if (days < 365) return `${Math.floor(days / 30)} mois`;
   const years = Math.floor(days / 365);
   return `${years} an${years > 1 ? "s" : ""}`;
+}
+
+const SIZE_UNITS = ["o", "Ko", "Mo", "Go", "To"];
+
+export function formatSize(bytes: number | null): string {
+  if (bytes === null) return "—";
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < SIZE_UNITS.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const digits = value < 10 && unit > 0 ? 1 : 0;
+  return `${value.toFixed(digits).replace(".", ",")} ${SIZE_UNITS[unit]}`;
 }

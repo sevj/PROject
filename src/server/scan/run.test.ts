@@ -6,10 +6,13 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "../db/client";
 import { projectFacts, projectMeta, projects, scans } from "../db/schema";
-import { runScan } from "./run";
+import { runScan as realRunScan } from "./run";
 
 let root: string;
 let db: Db;
+
+const noDocker = async () => ({ containers: [], error: null });
+const runScan = (target: Db, path: string) => realRunScan(target, path, { docker: noDocker });
 
 function make(relative: string, content = "{}") {
   const path = join(root, relative);
@@ -139,6 +142,31 @@ describe("runScan", () => {
     db.update(projectFacts).set({ sizeBytes: 42 }).where(eq(projectFacts.projectId, id)).run();
     await runScan(db, root);
     expect(row("app").facts?.sizeBytes).toBe(42);
+  });
+
+  it("attaches containers to their project and clears them once gone", async () => {
+    make("app/docker-compose.yml", "");
+    make("other/package.json");
+    const container = { name: "app-db", service: "db", state: "running", status: "Up", ports: "" };
+    await realRunScan(db, root, {
+      docker: async () => ({
+        containers: [{ ...container, workingDir: join(root, "app", "deploy") }],
+        error: null,
+      }),
+    });
+    expect(row("app").facts?.containers).toEqual([container]);
+    expect(row("other").facts?.containers).toEqual([]);
+
+    await runScan(db, root);
+    expect(row("app").facts?.containers).toEqual([]);
+  });
+
+  it("keeps scanning when Docker is unavailable and records a warning", async () => {
+    make("app/package.json");
+    await realRunScan(db, root, { docker: async () => ({ containers: [], error: "daemon down" }) });
+    const scan = db.select().from(scans).get();
+    expect(scan?.status).toBe("done");
+    expect(scan?.warning).toBe("daemon down");
   });
 
   it("marks the scan as failed when the root does not exist, and clears stale runs", async () => {

@@ -4,26 +4,14 @@ import { join } from "node:path";
 import type { Db } from "../db/client";
 import { projectFacts, projects, scans } from "../db/schema";
 import { type DetectedFolder, detectFolders } from "./detect";
+import { assignContainers, type DockerState, readDocker } from "./docker";
 import { type GitFacts, readGitFacts } from "./git";
+import { mapLimit } from "./limit";
 
 const GIT_CONCURRENCY = 8;
 
 export function defaultRoot(): string {
   return process.env.PM_ROOT || join(homedir(), "Projects");
-}
-
-async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (next < items.length) {
-        const index = next++;
-        results[index] = await task(items[index]);
-      }
-    }),
-  );
-  return results;
 }
 
 type Scanned = { folder: DetectedFolder; git: GitFacts | null; error: string | null };
@@ -50,7 +38,7 @@ function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | 
     .returning({ id: projects.id })
     .get();
 
-  // Containers and size have their own scan steps, so they are not part of this write.
+  // Containers and size are written by their own steps, so they are not part of this write.
   const facts = {
     stacks: folder.stacks,
     hasGit: folder.hasGit,
@@ -79,7 +67,11 @@ function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | 
 
 export type ScanResult = { scanId: number; projectCount: number; errorCount: number };
 
-export async function runScan(db: Db, root: string, now = new Date()): Promise<ScanResult> {
+export async function runScan(
+  db: Db,
+  root: string,
+  { now = new Date(), docker = readDocker }: { now?: Date; docker?: () => Promise<DockerState> } = {},
+): Promise<ScanResult> {
   // A running row can only be a leftover here: the server stopped during that scan.
   db.update(scans)
     .set({ status: "failed", finishedAt: now, error: "Scan interrompu" })
@@ -88,7 +80,10 @@ export async function runScan(db: Db, root: string, now = new Date()): Promise<S
   const { id: scanId } = db.insert(scans).values({ startedAt: now }).returning().get();
 
   try {
-    const scanned = await mapLimit(await detectFolders(root), GIT_CONCURRENCY, scanFolder);
+    const [scanned, dockerState] = await Promise.all([
+      detectFolders(root).then((folders) => mapLimit(folders, GIT_CONCURRENCY, scanFolder)),
+      docker(),
+    ]);
 
     const result = db.transaction((tx) => {
       const ids = new Map<string, number>();
@@ -99,6 +94,17 @@ export async function runScan(db: Db, root: string, now = new Date()): Promise<S
       for (const item of ordered) {
         const parentId = item.folder.parentPath ? (ids.get(item.folder.parentPath) ?? null) : null;
         ids.set(item.folder.path, saveFolder(tx as unknown as Db, item, parentId, now));
+      }
+
+      const assigned = assignContainers(
+        scanned.filter((item) => item.folder.kind === "project").map((item) => item.folder.path),
+        dockerState.containers,
+      );
+      for (const [path, id] of ids) {
+        tx.update(projectFacts)
+          .set({ containers: assigned.get(path) ?? [] })
+          .where(eq(projectFacts.projectId, id))
+          .run();
       }
 
       // Rows are kept: the user's classification must survive a folder that disappears.
@@ -121,7 +127,7 @@ export async function runScan(db: Db, root: string, now = new Date()): Promise<S
     });
 
     db.update(scans)
-      .set({ status: "done", finishedAt: new Date(), ...result })
+      .set({ status: "done", finishedAt: new Date(), warning: dockerState.error, ...result })
       .where(eq(scans.id, scanId))
       .run();
     return { scanId, ...result };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeStats, countView, formatAge, type RegistryRow, selectRows } from "./registry";
+import { computeStats, countView, formatAge, formatSize, type RegistryRow, selectRows } from "./registry";
 
 const DAY = 24 * 3600 * 1000;
 const NOW = 1000 * DAY;
@@ -25,6 +25,8 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     lastCommitSubject: "x",
     weeklyCommits: null,
     hasCompose: false,
+    containers: [],
+    sizeBytes: null,
     scanError: null,
     ...patch,
   };
@@ -33,7 +35,14 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
 const rows = [
   row("recent", { lastCommitAt: NOW - DAY }),
   row("dirty", { dirtyCount: 5, lastCommitAt: NOW - 40 * DAY }),
-  row("old", { lastCommitAt: NOW - 400 * DAY }),
+  row("old", {
+    lastCommitAt: NOW - 400 * DAY,
+    sizeBytes: 500,
+    containers: [
+      { name: "a", service: "a", state: "running", status: "Up", ports: "" },
+      { name: "b", service: "b", state: "exited", status: "Exited", ports: "" },
+    ],
+  }),
   row("empty", { lastCommitAt: null, commitCount: 0 }),
   row("nogit", { hasGit: false, dirtyCount: null, lastCommitAt: null }),
   row("plain", { kind: "folder", hasGit: false, dirtyCount: null, lastCommitAt: null }),
@@ -74,8 +83,26 @@ describe("selectRows", () => {
 
 describe("computeStats", () => {
   it("counts projects only and excludes missing ones", () => {
-    expect(computeStats(rows, NOW)).toEqual({ projects: 5, git: 4, dirty: 1, active30: 1, dormant: 1 });
+    expect(computeStats(rows, NOW)).toEqual({ projects: 5, git: 4, dirty: 1, active30: 1, dormant: 1, running: 1 });
+    expect(names(selectRows(rows, { view: "docker", query: "", sort: "name" }))).toEqual(["old"]);
     expect(countView(rows, "nogit")).toBe(1);
+  });
+});
+
+describe("formatSize", () => {
+  it.each([
+    [null, "—"],
+    [0, "0 o"],
+    [1023, "1023 o"],
+    [1536, "1,5 Ko"],
+    [146 * 1024 * 1024, "146 Mo"],
+    [8.8 * 1024 ** 3, "8,8 Go"],
+  ])("formats %s as %s", (bytes, expected) => {
+    expect(formatSize(bytes)).toBe(expected);
+  });
+
+  it("sorts unmeasured projects last", () => {
+    expect(names(selectRows(rows, { view: "all", query: "", sort: "size" }))[0]).toBe("old");
   });
 });
 
