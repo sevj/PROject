@@ -144,8 +144,9 @@ export const fr: Messages = {
   classification: {
     status: "Statut",
     favorite: "Favori",
-    isFavorite: "★ Favori",
-    addFavorite: "☆ Ajouter",
+    isFavorite: "Favori",
+    addFavorite: "Ajouter",
+    addToFavorites: "Ajouter aux favoris",
     note: "Note",
     notePlaceholder: "Prochaine étape, point à ne pas oublier",
   },

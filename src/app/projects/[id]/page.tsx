@@ -10,13 +10,12 @@ import { serverMessages } from "@/server/i18n";
 import { listProjectFolder, readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import { readRecentCommits } from "@/server/scan/git";
-import { ClassificationEditor, StatusField } from "../../classification-editor";
 import { LoadingFallback } from "../../loading-fallback";
 import { ProjectDescription } from "../../project-description";
 import { ProjectDirectory } from "../../project-directory";
 import { ProjectFacts } from "../../project-facts";
 import { ProjectName } from "../../project-name";
-import { TagPicker } from "../../tag-picker";
+import { ProjectOrganizer } from "../../project-organizer";
 import { BackIcon } from "../../icons";
 import { BUTTON_QUIET, DATA, LABEL } from "../../ui";
 import { EnvFiles } from "./env-files";
@@ -118,14 +117,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             <ProjectDescription projectId={row.id} description={row.description} detected={row.manifestDescription} />
           </div>
         </div>
-        <div className="grid w-full max-w-[440px] gap-3">
-          <TagPicker
-            projectIds={[row.id]}
-            knownTags={knownTags}
-            counts={Object.fromEntries(row.tags.map((tag) => [tag, 1]))}
-          />
-          <StatusField row={row} />
-        </div>
+        <ProjectOrganizer key={row.id} row={row} knownTags={knownTags} />
       </div>
 
       {row.abandoned ? (
@@ -226,10 +218,6 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
         </div>
 
         <aside className="min-w-0 flex-[1_1_400px] bg-panel">
-          <section className={SECTION}>
-            <h2 className={`${LABEL} mb-3.5`}>{m.organization}</h2>
-            <ClassificationEditor key={row.id} row={row} showStatus={false} />
-          </section>
           <section className={SECTION}>
             <ProjectFacts row={row} now={now} />
           </section>

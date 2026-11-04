@@ -47,3 +47,9 @@ export const CloseIcon = () => (
     <path d="m4 4 8 8M12 4l-8 8" />
   </Icon>
 );
+
+export const StarIcon = ({ filled }: { filled: boolean }) => (
+  <Icon>
+    <path d="m8 2.5 1.7 3.6 3.9.5-2.9 2.7.8 3.9L8 10.8l-3.5 1.9.8-3.9-2.9-2.7 3.9-.5z" fill={filled ? "currentColor" : "none"} strokeLinecap="round" strokeLinejoin="round" />
+  </Icon>
+);

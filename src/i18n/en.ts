@@ -147,8 +147,9 @@ export const en = {
   classification: {
     status: "Status",
     favorite: "Favorite",
-    isFavorite: "★ Favorite",
-    addFavorite: "☆ Add",
+    isFavorite: "Favorite",
+    addFavorite: "Add",
+    addToFavorites: "Add to favorites",
     note: "Note",
     notePlaceholder: "Next step, something not to forget",
   },
