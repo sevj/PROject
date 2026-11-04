@@ -1,20 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { setAbandoned } from "../classification";
 import { type Db, openDb } from "../db/client";
 import { projectFacts, projectMeta, projects, scans } from "../db/schema";
-import { setAbandoned } from "../classification";
-import { getSettings, saveSettings } from "../settings";
-import { rescanProject, runScan as realRunScan } from "./run";
+import { refreshAll as realRefreshAll, refreshProjects, rescanProject } from "./run";
 
 let root: string;
 let db: Db;
 
 const noDocker = async () => ({ containers: [], error: null });
-const runScan = (target: Db, path: string) => realRunScan(target, path, { docker: noDocker });
+const refreshAll = () => realRefreshAll(db, { docker: noDocker });
 
 function make(relative: string, content = "{}") {
   const path = join(root, relative);
@@ -22,10 +21,17 @@ function make(relative: string, content = "{}") {
   writeFileSync(path, content);
 }
 
-function row(name: string) {
-  const project = db.select().from(projects).where(eq(projects.name, name)).get();
-  if (!project) throw new Error(`no project ${name}`);
-  const facts = db.select().from(projectFacts).where(eq(projectFacts.projectId, project.id)).get();
+function register(relative: string, kind: "project" | "group" = "project", parentId: number | null = null): number {
+  const path = join(root, relative);
+  mkdirSync(path, { recursive: true });
+  const { id } = db.insert(projects).values({ path, name: relative, kind, parentId }).returning().get();
+  db.insert(projectFacts).values({ projectId: id }).run();
+  return id;
+}
+
+function row(id: number) {
+  const project = db.select().from(projects).where(eq(projects.id, id)).get();
+  const facts = db.select().from(projectFacts).where(eq(projectFacts.projectId, id)).get();
   return { project, facts };
 }
 
@@ -39,18 +45,28 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe("runScan", () => {
-  it("detects stacks, compose files, docs and env file names", async () => {
+describe("refreshAll", () => {
+  it("only reads the projects of the list, and discovers nothing", async () => {
+    const app = register("app");
+    make("app/package.json");
+    make("other/package.json");
+    make("app/sub/package.json");
+    await refreshAll();
+    expect(db.select().from(projects).all().map(({ id }) => id)).toEqual([app]);
+    expect(row(app).facts?.stacks).toEqual(["Node"]);
+  });
+
+  it("reads stacks, compose files, docs and env file names", async () => {
+    const app = register("app");
     make("app/composer.json");
     make("app/package.json");
     make("app/docker-compose.override.yaml", "");
     make("app/README.md", "");
     make("app/docs/API.md", "");
     make("app/.env.local", "SECRET=value");
-    await runScan(db, root);
+    await refreshAll();
 
-    const { project, facts } = row("app");
-    expect(project.kind).toBe("project");
+    const { facts } = row(app);
     expect(facts?.stacks.sort()).toEqual(["Node", "PHP"]);
     expect(facts?.hasCompose).toBe(true);
     expect(facts?.docs).toEqual(["README.md", "docs/API.md"]);
@@ -59,145 +75,97 @@ describe("runScan", () => {
   });
 
   it("records tooling, and reads it from subfolders when the root has no manifest", async () => {
+    const app = register("app");
     make("app/composer.json", JSON.stringify({ description: "Mon appli", require: { php: "^8" } }));
     make("app/composer.lock");
-    mkdirSync(join(root, "mono"));
+    const mono = register("mono");
     execFileSync("git", ["init", "-q"], { cwd: join(root, "mono") });
     make("mono/.gitlab-ci.yml", "");
     make("mono/front/package.json", JSON.stringify({ dependencies: { next: "16" } }));
     make("mono/front/pnpm-lock.yaml", "");
-    await runScan(db, root);
+    await refreshAll();
 
-    expect(row("app").facts).toMatchObject({
+    expect(row(app).facts).toMatchObject({
       versions: [{ label: "PHP", value: "^8" }],
       packageManagers: ["Composer"],
       manifestDescription: "Mon appli",
     });
-    expect(row("mono").facts).toMatchObject({
+    expect(row(mono).facts).toMatchObject({
       versions: [{ label: "Next.js", value: "16" }],
       packageManagers: ["pnpm"],
       ci: ["GitLab CI"],
+      hasGit: true,
     });
   });
 
-  it("reads the stack of a repository from its subfolders", async () => {
-    mkdirSync(join(root, "mono"));
-    execFileSync("git", ["init", "-q"], { cwd: join(root, "mono") });
-    make("mono/backend/composer.json");
-    make("mono/frontend/package.json");
-    await runScan(db, root);
-    expect(row("mono").facts?.stacks).toEqual(["Node", "PHP"]);
-    expect(row("mono").facts?.hasGit).toBe(true);
-    expect(db.select().from(projects).all()).toHaveLength(1);
+  it("accepts a folder without any marker or repository", async () => {
+    const notes = register("notes");
+    await refreshAll();
+    expect(row(notes).facts).toMatchObject({ stacks: [], hasGit: false, scanError: null });
   });
 
-  it("ignores an empty .git folder and finds the projects below it", async () => {
-    mkdirSync(join(root, "suite", ".git"), { recursive: true });
-    make("suite/core/composer.json");
-    make("suite/web/package.json");
-    await runScan(db, root);
-
-    expect(row("suite").project.kind).toBe("group");
-    expect(row("suite").facts?.scanError).toBeNull();
-    expect(row("core").project.parentId).toBe(row("suite").project.id);
-    expect(row("web").project.parentId).toBe(row("suite").project.id);
-  });
-
-  it("keeps a valid repository as one project, even with projects inside", async () => {
-    mkdirSync(join(root, "mono"));
-    execFileSync("git", ["init", "-q"], { cwd: join(root, "mono") });
-    make("mono/sub/package.json");
-    await runScan(db, root);
-
-    expect(row("mono").project.kind).toBe("project");
-    expect(db.select().from(projects).all()).toHaveLength(1);
-  });
-
-  it("counts a .git file as a repository", async () => {
+  it("does not count an empty .git folder as a repository, but counts a .git file", async () => {
+    const empty = register("empty");
+    mkdirSync(join(root, "empty", ".git"));
+    const worktree = register("worktree");
     make("worktree/.git", "gitdir: /nowhere\n");
-    await runScan(db, root);
-    expect(row("worktree").project.kind).toBe("project");
-    expect(row("worktree").facts?.hasGit).toBe(true);
+    await refreshAll();
+    expect(row(empty).facts?.hasGit).toBe(false);
+    expect(row(worktree).facts?.hasGit).toBe(true);
   });
 
-  it("treats a folder with a Makefile as one project, not as a group", async () => {
-    make("sim/Makefile", "");
-    make("sim/rust/Cargo.toml");
-    make("sim/godot/project.godot");
-    await runScan(db, root);
-    expect(row("sim").project.kind).toBe("project");
-    expect(row("sim").facts?.stacks).toEqual(["Godot", "Rust"]);
-    expect(db.select().from(projects).all()).toHaveLength(1);
-  });
-
-  it("creates a group for a folder of projects and links its children", async () => {
-    make("platform/core/composer.json");
-    make("platform/form/composer.json");
-    make("platform/.idea/x.xml", "");
-    await runScan(db, root);
-
-    const group = row("platform").project;
-    expect(group.kind).toBe("group");
-    expect(row("core").project.parentId).toBe(group.id);
-    expect(row("form").project.parentId).toBe(group.id);
-  });
-
-  it("keeps a plain folder, skips dot folders and does not follow symlinks", async () => {
-    mkdirSync(join(root, "objectifs"));
-    mkdirSync(join(root, ".idea"));
-    make("real/package.json");
-    symlinkSync(join(root, "real"), join(root, "link"));
-    await runScan(db, root);
-
-    expect(row("objectifs").project.kind).toBe("folder");
-    expect(
-      db.select().from(projects).all().map((p) => p.name).sort(),
-    ).toEqual(["objectifs", "real"]);
-  });
-
-  it("records an unreadable folder without stopping the scan", async () => {
-    make("ok/package.json");
-    mkdirSync(join(root, "locked"));
+  it("records an unreadable folder without stopping the others", async () => {
+    const ok = register("ok");
+    const locked = register("locked");
     chmodSync(join(root, "locked"), 0o000);
-    const result = await runScan(db, root);
+    const result = await refreshAll();
     chmodSync(join(root, "locked"), 0o755);
 
-    expect(row("locked").facts?.scanError).toBe("EACCES");
-    expect(row("ok").facts?.scanError).toBeNull();
+    expect(row(locked).facts?.scanError).toBe("EACCES");
+    expect(row(ok).facts?.scanError).toBeNull();
     expect(result.errorCount).toBe(1);
   });
 
-  it("keeps the user's data across rescans and when a folder disappears", async () => {
-    make("app/package.json");
-    await runScan(db, root);
-    const { id } = row("app").project;
-    db.insert(projectMeta).values({ projectId: id, note: "reprendre ici" }).run();
+  it("flags a folder that disappears, keeps the user's data, and clears the flag when it returns", async () => {
+    const app = register("app");
+    await refreshAll();
+    db.insert(projectMeta).values({ projectId: app, note: "reprendre ici" }).run();
 
     renameSync(join(root, "app"), join(root, "renamed"));
-    await runScan(db, root);
-    expect(row("app").project.missingAt).not.toBeNull();
-    expect(row("renamed").project.missingAt).toBeNull();
+    await refreshAll();
+    expect(row(app).project?.missingAt).not.toBeNull();
     expect(db.select().from(projectMeta).get()?.note).toBe("reprendre ici");
 
     renameSync(join(root, "renamed"), join(root, "app"));
-    await runScan(db, root);
-    expect(row("app").project.id).toBe(id);
-    expect(row("app").project.missingAt).toBeNull();
-    expect(row("renamed").project.missingAt).not.toBeNull();
+    await refreshAll();
+    expect(row(app).project?.missingAt).toBeNull();
   });
 
-  it("leaves containers and size to their own steps", async () => {
-    make("app/package.json");
-    await runScan(db, root);
-    const { id } = row("app").project;
-    db.update(projectFacts).set({ sizeBytes: 42 }).where(eq(projectFacts.projectId, id)).run();
-    await runScan(db, root);
-    expect(row("app").facts?.sizeBytes).toBe(42);
+  it("checks a multi-project's folder without giving it facts", async () => {
+    const group = register("suite", "group");
+    const child = register("suite/core", "project", group);
+    make("suite/package.json");
+    make("suite/core/package.json");
+    await refreshAll();
+    expect(row(group).facts?.stacks).toEqual([]);
+    expect(row(child).facts?.stacks).toEqual(["Node"]);
+
+    rmSync(join(root, "suite"), { recursive: true });
+    await refreshAll();
+    expect(row(group).project?.missingAt).not.toBeNull();
+    expect(row(child).project?.missingAt).not.toBeNull();
+  });
+
+  it("leaves the size to its own step", async () => {
+    const app = register("app");
+    db.update(projectFacts).set({ sizeBytes: 42 }).where(eq(projectFacts.projectId, app)).run();
+    await refreshAll();
+    expect(row(app).facts?.sizeBytes).toBe(42);
   });
 
   it("attaches containers to their project and clears them once gone", async () => {
-    make("app/docker-compose.yml", "");
-    make("other/package.json");
+    const app = register("app");
+    const other = register("other");
     const container = {
       name: "app-db",
       service: "db",
@@ -206,101 +174,81 @@ describe("runScan", () => {
       ports: "",
       workingDir: join(root, "app", "deploy"),
     };
-    await realRunScan(db, root, { docker: async () => ({ containers: [container], error: null }) });
-    expect(row("app").facts?.containers).toEqual([container]);
-    expect(row("other").facts?.containers).toEqual([]);
+    await realRefreshAll(db, { docker: async () => ({ containers: [container], error: null }) });
+    expect(row(app).facts?.containers).toEqual([container]);
+    expect(row(other).facts?.containers).toEqual([]);
 
-    await runScan(db, root);
-    expect(row("app").facts?.containers).toEqual([]);
+    await refreshAll();
+    expect(row(app).facts?.containers).toEqual([]);
   });
 
-  it("keeps scanning when Docker is unavailable and records a warning", async () => {
-    make("app/package.json");
-    await realRunScan(db, root, { docker: async () => ({ containers: [], error: "daemon down" }) });
-    const scan = db.select().from(scans).get();
-    expect(scan?.status).toBe("done");
-    expect(scan?.warning).toBe("daemon down");
+  it("keeps going when Docker is unavailable and records a warning", async () => {
+    register("app");
+    await realRefreshAll(db, { docker: async () => ({ containers: [], error: "daemon down" }) });
+    expect(db.select().from(scans).get()).toMatchObject({ status: "done", warning: "daemon down" });
   });
 
-  it("refreshes one project without touching the others or the user's data", async () => {
+  it("clears a run left over by a stopped server", async () => {
+    db.insert(scans).values({}).run();
+    await refreshAll();
+    const rows = db.select().from(scans).all();
+    expect(rows.map((scan) => scan.status)).toEqual(["failed", "done"]);
+    expect(rows[0].error).toBe("Actualisation interrompue");
+  });
+
+  it("never opens an abandoned project, even once its folder is gone", async () => {
+    const app = register("app");
     make("app/package.json");
-    make("other/package.json");
-    await runScan(db, root);
-    const { id } = row("app").project;
-    db.insert(projectMeta).values({ projectId: id, note: "garder" }).run();
+    await refreshAll();
+    setAbandoned(db, [app], true);
 
     make("app/composer.json");
-    make("other/composer.json");
-    expect(await rescanProject(db, id, { docker: noDocker })).toBe(true);
-
-    expect(row("app").facts?.stacks.sort()).toEqual(["Node", "PHP"]);
-    expect(row("other").facts?.stacks).toEqual(["Node"]);
-    expect(db.select().from(projectMeta).get()?.note).toBe("garder");
-  });
-
-  it("never opens an abandoned project again, and keeps its data as it was", async () => {
-    make("app/package.json");
-    make("group/child/package.json");
-    make("group/other/package.json");
-    saveSettings(db, { root });
-    await realRunScan(db, getSettings(db).root, { docker: noDocker });
-    const app = row("app").project.id;
-    const child = row("child").project.id;
-    setAbandoned(db, [app, child], true);
-
-    make("app/composer.json");
-    make("group/child/composer.json");
-    make("other/package.json");
-    await realRunScan(db, getSettings(db).root, { docker: noDocker });
-
-    expect(row("app").facts?.stacks).toEqual(["Node"]);
-    expect(row("child").facts?.stacks).toEqual(["Node"]);
-    expect(row("app").project.abandoned).toBe(true);
-    expect(row("other").project.kind).toBe("project");
+    await refreshAll();
+    expect(row(app).facts?.stacks).toEqual(["Node"]);
     expect(await rescanProject(db, app, { docker: noDocker })).toBe(false);
-    expect(row("app").facts?.stacks).toEqual(["Node"]);
+    expect(row(app).facts?.stacks).toEqual(["Node"]);
 
     rmSync(join(root, "app"), { recursive: true });
-    await realRunScan(db, getSettings(db).root, { docker: noDocker });
-    expect(row("app").project.missingAt).toBeNull();
-
-    setAbandoned(db, [child], false);
-    await realRunScan(db, getSettings(db).root, { docker: noDocker });
-    expect(row("child").facts?.stacks.sort()).toEqual(["Node", "PHP"]);
+    await refreshAll();
+    expect(row(app).project?.missingAt).toBeNull();
   });
 
   it("does not attach containers to an abandoned project", async () => {
-    make("app/docker-compose.yml", "");
-    await runScan(db, root);
-    setAbandoned(db, [row("app").project.id], true);
-    const container = {
-      name: "c",
-      service: "c",
-      state: "running",
-      status: "Up",
-      ports: "",
-      workingDir: join(root, "app"),
-    };
-    await realRunScan(db, root, { docker: async () => ({ containers: [container], error: null }) });
-    expect(row("app").facts?.containers).toEqual([]);
+    const app = register("app");
+    setAbandoned(db, [app], true);
+    const container = { name: "c", service: "c", state: "running", status: "Up", ports: "", workingDir: join(root, "app") };
+    await realRefreshAll(db, { docker: async () => ({ containers: [container], error: null }) });
+    expect(row(app).facts?.containers).toEqual([]);
   });
+});
 
-  it("marks a project as missing when refreshing a deleted folder", async () => {
+describe("refreshProjects", () => {
+  it("touches only the given projects and none of the user's data", async () => {
+    const app = register("app");
+    const other = register("other");
     make("app/package.json");
-    await runScan(db, root);
-    const { id } = row("app").project;
-    rmSync(join(root, "app"), { recursive: true });
+    make("other/package.json");
+    await refreshAll();
+    db.insert(projectMeta).values({ projectId: app, note: "garder" }).run();
 
-    expect(await rescanProject(db, id, { docker: noDocker })).toBe(false);
-    expect(row("app").project.missingAt).not.toBeNull();
-    expect(await rescanProject(db, 9999, { docker: noDocker })).toBe(false);
+    make("app/composer.json");
+    make("other/composer.json");
+    await refreshProjects(db, [app], { docker: noDocker });
+
+    expect(row(app).facts?.stacks.sort()).toEqual(["Node", "PHP"]);
+    expect(row(other).facts?.stacks).toEqual(["Node"]);
+    expect(db.select().from(projectMeta).get()?.note).toBe("garder");
+    expect(db.select().from(scans).all()).toHaveLength(1);
   });
+});
 
-  it("marks the scan as failed when the root does not exist, and clears stale runs", async () => {
-    db.insert(scans).values({}).run();
-    await expect(runScan(db, join(root, "nope"))).rejects.toThrow("n'existe pas");
-    const rows = db.select().from(scans).all();
-    expect(rows.map((s) => s.status)).toEqual(["failed", "failed"]);
-    expect(rows[0].error).toBe("Scan interrompu");
+describe("rescanProject", () => {
+  it("says when the folder is gone, or the project unknown", async () => {
+    const app = register("app");
+    expect(await rescanProject(db, app, { docker: noDocker })).toBe(true);
+    rmSync(join(root, "app"), { recursive: true });
+    expect(await rescanProject(db, app, { docker: noDocker })).toBe(false);
+    expect(row(app).project?.missingAt).not.toBeNull();
+    expect(await rescanProject(db, 9999, { docker: noDocker })).toBe(false);
   });
 });

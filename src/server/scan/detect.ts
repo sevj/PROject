@@ -4,13 +4,9 @@ import { join } from "node:path";
 import { ENV_FILE } from "../project-files";
 import { readTooling, type Tooling } from "./tooling";
 
-export type DetectedKind = "project" | "group" | "folder";
-
 export type DetectedFolder = {
   path: string;
   name: string;
-  kind: DetectedKind;
-  parentPath: string | null;
   hasGit: boolean;
   hasCompose: boolean;
   stacks: string[];
@@ -32,9 +28,7 @@ const MANIFESTS: Record<string, string> = {
   "project.godot": "Godot",
 };
 
-// A project without git or a root manifest, like rust/ + godot/ driven by a Makefile.
-const PROJECT_FILES = new Set(["Makefile", "justfile", "AGENTS.md", "CLAUDE.md"]);
-const COMPOSE_FILE =/^(docker-)?compose(\.[\w-]+)?\.ya?ml$/;
+const COMPOSE_FILE = /^(docker-)?compose(\.[\w-]+)?\.ya?ml$/;
 const ROOT_DOC = /^(readme|changelog|agents|claude|todo|roadmap)(\.[\w-]+)?\.(md|txt|rst)$/i;
 const DOC_FILE = /\.(md|txt|rst)$/i;
 const IGNORED_DIRS = new Set(["node_modules", "vendor", "target", "dist", "build", "var", ".git"]);
@@ -48,10 +42,10 @@ async function list(path: string): Promise<Listing> {
   let hasGit = false;
   for (const entry of entries) {
     // A `.git` file is a worktree or a submodule. A `.git` folder without HEAD, such as
-    // an empty one, is not a repository and must not hide the projects below it.
+    // an empty one, is not a repository.
     if (entry.name === ".git") hasGit = entry.isFile() || existsSync(join(path, ".git", "HEAD"));
     else if (entry.isFile()) files.push(entry.name);
-    // Symlinks are not followed: they could leave the root or form a cycle.
+    // Symlinks are not followed: they could form a cycle.
     else if (entry.isDirectory()) dirs.push(entry.name);
   }
   return { files, dirs, hasGit };
@@ -59,14 +53,6 @@ async function list(path: string): Promise<Listing> {
 
 function stacksOf(files: string[]): string[] {
   return [...new Set(files.flatMap((file) => MANIFESTS[file] ?? []))];
-}
-
-function hasMarkers({ files, hasGit }: Listing): boolean {
-  return (
-    hasGit ||
-    stacksOf(files).length > 0 ||
-    files.some((file) => COMPOSE_FILE.test(file) || PROJECT_FILES.has(file))
-  );
 }
 
 function isVisitable(dir: string): boolean {
@@ -101,19 +87,29 @@ async function docsOf(path: string, listing: Listing): Promise<string[]> {
   return docs;
 }
 
-async function describeProject(
-  path: string,
-  name: string,
-  parentPath: string | null,
-  listing: Listing,
-): Promise<DetectedFolder> {
+/** Reads what a project's folder contains. Writes nothing and never opens a `.env` file. */
+export async function readFolder(path: string, name: string): Promise<DetectedFolder> {
+  let listing: Listing;
+  try {
+    listing = await list(path);
+  } catch (error) {
+    return {
+      path,
+      name,
+      hasGit: false,
+      hasCompose: false,
+      stacks: [],
+      docs: [],
+      envFiles: [],
+      tooling: NO_TOOLING,
+      error: (error as NodeJS.ErrnoException).code ?? String(error),
+    };
+  }
   const rootStacks = stacksOf(listing.files);
   const nested = rootStacks.length > 0 ? [] : await nestedFolders(path, listing.dirs);
   return {
     path,
     name,
-    kind: "project",
-    parentPath,
     hasGit: listing.hasGit,
     hasCompose: listing.files.some((file) => COMPOSE_FILE.test(file)),
     stacks: rootStacks.length > 0 ? rootStacks : [...new Set(nested.flatMap(({ files }) => stacksOf(files)))].sort(),
@@ -123,71 +119,4 @@ async function describeProject(
     tooling: await readTooling([{ path, files: listing.files }, ...nested]),
     error: null,
   };
-}
-
-function emptyFolder(path: string, name: string, kind: DetectedKind, error: string | null): DetectedFolder {
-  return {
-    path,
-    name,
-    kind,
-    parentPath: null,
-    hasGit: false,
-    hasCompose: false,
-    stacks: [],
-    docs: [],
-    envFiles: [],
-    tooling: NO_TOOLING,
-    error,
-  };
-}
-
-export async function detectFolder(
-  path: string,
-  name: string,
-  skipped: ReadonlySet<string> = new Set(),
-): Promise<DetectedFolder[]> {
-  let listing: Listing;
-  try {
-    listing = await list(path);
-  } catch (error) {
-    return [emptyFolder(path, name, "folder", (error as NodeJS.ErrnoException).code ?? String(error))];
-  }
-
-  if (hasMarkers(listing)) {
-    return [await describeProject(path, name, null, listing)];
-  }
-
-  const children = await Promise.all(
-    listing.dirs.filter(isVisitable).map(async (dir) => {
-      const childPath = join(path, dir);
-      if (skipped.has(childPath)) return null;
-      try {
-        const childListing = await list(childPath);
-        return hasMarkers(childListing) ? describeProject(childPath, dir, path, childListing) : null;
-      } catch {
-        return null;
-      }
-    }),
-  );
-  const projects = children.filter((child) => child !== null);
-  if (projects.length > 0) {
-    return [emptyFolder(path, name, "group", null), ...projects];
-  }
-  return [emptyFolder(path, name, "folder", null)];
-}
-
-/**
- * Lists what lives under `root`. Writes nothing and never opens a `.env` file.
- * `skipped` folders are not even opened, which is what makes a project abandoned.
- */
-export async function detectFolders(root: string, skipped: ReadonlySet<string> = new Set()): Promise<DetectedFolder[]> {
-  if (!existsSync(root)) {
-    throw new Error(`Le dossier racine n'existe pas : ${root}`);
-  }
-  const { dirs } = await list(root);
-  const visitable = dirs
-    .filter((dir) => isVisitable(dir) && !skipped.has(join(root, dir)))
-    .sort((a, b) => a.localeCompare(b));
-  const detected = await Promise.all(visitable.map((dir) => detectFolder(join(root, dir), dir, skipped)));
-  return detected.flat();
 }

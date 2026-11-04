@@ -11,6 +11,7 @@ import { isSizing } from "@/server/scan/jobs";
 import { ClassificationEditor } from "../../classification-editor";
 import { ProjectButtons } from "../../project-buttons";
 import { ProjectDescription } from "../../project-description";
+import { ProjectDirectory } from "../../project-directory";
 import { ProjectFacts } from "../../project-facts";
 import { ProjectName } from "../../project-name";
 import { TagPicker } from "../../tag-picker";
@@ -69,7 +70,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   // An abandoned project is not read anymore, except for what is explicitly opened below.
   const commits = row.hasGit && !row.missing && !row.abandoned ? await readRecentCommits(absolutePath) : [];
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
-  // Only a path found by the scan can be opened: `doc` comes from the URL.
+  // Only a path found on disk beforehand can be opened: `doc` comes from the URL.
   const selectedDoc = typeof doc === "string" && docs.includes(doc) ? doc : defaultDoc;
   const docContent = selectedDoc && !row.missing ? await readProjectDoc(absolutePath, selectedDoc) : null;
 
@@ -82,7 +83,13 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
           <Link href="/" className="inline-flex min-h-8 items-center text-mut underline hover:text-ink">
             Retour au registre
           </Link>
-          <div className={`${DATA} text-mut`}>{row.path}</div>
+          <ProjectDirectory
+            projectId={row.id}
+            path={row.path}
+            subdirectory={row.subdirectory}
+            parentPath={row.parentPath}
+            missing={row.missing}
+          />
           <div className="mt-0.5">
             <ProjectName
               projectId={row.id}
@@ -103,12 +110,12 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
       {row.abandoned ? (
         <p role="status" className={`${DATA} border-b border-rule px-5 py-2 text-mut`}>
-          Projet abandonné : il n&apos;est plus scanné, ces informations datent de son dernier scan.
+          Projet abandonné : il n&apos;est plus actualisé, ces informations datent de sa dernière lecture.
         </p>
       ) : null}
       {row.missing ? (
         <p role="alert" className={`${DATA} border-b border-alert px-5 py-2 text-alert`}>
-          Ce dossier n&apos;existe plus sur le disque. Tes notes et ton classement sont conservés.
+          Ce répertoire est introuvable. Tes notes et ton classement sont conservés : modifie le chemin s&apos;il a été déplacé.
         </p>
       ) : null}
       {row.scanError ? (

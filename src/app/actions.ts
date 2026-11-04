@@ -22,19 +22,61 @@ import { ideCommandFor } from "@/lib/commands";
 import { composeDirectories, launch, runCompose } from "@/server/project-actions";
 import { type EnvEntry, readEnvFile } from "@/server/project-files";
 import { getProject } from "@/server/registry";
-import { startScan, startSizing } from "@/server/scan/jobs";
-import { rescanProject } from "@/server/scan/run";
+import {
+  changeDirectory,
+  type ProjectInput,
+  type Registered,
+  registerMultiProject,
+  registerProject,
+  registerSubProject,
+  removeProjects,
+  type SubProjectInput,
+} from "@/server/projects";
+import { startRefresh, startSizing } from "@/server/scan/jobs";
+import { refreshProjects, rescanProject } from "@/server/scan/run";
 import { getSettings, saveSettings } from "@/server/settings";
 
-export async function scanNow(): Promise<{ error: string | null }> {
+export async function refreshEverything(): Promise<{ error: string | null }> {
   try {
-    await startScan();
+    await startRefresh();
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
   } finally {
     revalidatePath("/");
   }
+}
+
+/** Reads the folders that were just registered, so that they appear with their facts. */
+async function readRegistered(result: Registered): Promise<Registered> {
+  if ("ids" in result) {
+    await refreshProjects(getDb(), result.ids);
+    startSizing(result.ids);
+  }
+  revalidatePath("/", "layout");
+  return result;
+}
+
+export async function addProject(input: ProjectInput): Promise<Registered> {
+  return readRegistered(registerProject(getDb(), input));
+}
+
+export async function addMultiProject(input: ProjectInput, subProjects: SubProjectInput[]): Promise<Registered> {
+  return readRegistered(registerMultiProject(getDb(), input, subProjects));
+}
+
+export async function addSubProject(groupId: number, input: SubProjectInput): Promise<Registered> {
+  return readRegistered(registerSubProject(getDb(), groupId, input));
+}
+
+export async function moveProject(projectId: number, directory: string): Promise<string | null> {
+  const result = await readRegistered(changeDirectory(getDb(), projectId, directory));
+  return "error" in result ? result.error : null;
+}
+
+export async function removeFromList(projectIds: number[]): Promise<void> {
+  removeProjects(getDb(), ids(projectIds));
+  revalidatePath("/", "layout");
 }
 
 export async function refreshProject(projectId: number): Promise<void> {
@@ -162,11 +204,7 @@ export async function saveSettingsForm(form: Record<string, string>): Promise<st
     if (key.startsWith("ide:") && clean(value)) ideCommands[key.slice(4)] = clean(value);
   }
   if (!clean(form.terminal) || !ideCommands.default) return "Toutes les commandes requises doivent être remplies.";
-  const error = saveSettings(getDb(), {
-    root: clean(form.root).replace(/\/+$/, "") || "/",
-    terminalCommand: clean(form.terminal),
-    ideCommands,
-  });
+  saveSettings(getDb(), { terminalCommand: clean(form.terminal), ideCommands });
   refreshAll();
-  return error;
+  return null;
 }

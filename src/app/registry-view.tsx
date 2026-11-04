@@ -19,9 +19,11 @@ import {
   STATUS_LABELS,
 } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
-import { markAbandoned, scanNow, updateStatus } from "./actions";
+import { markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
+import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ClassificationEditor } from "./classification-editor";
 import { ProjectDescription } from "./project-description";
+import { ProjectDirectory } from "./project-directory";
 import { ProjectFacts } from "./project-facts";
 import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
@@ -37,6 +39,9 @@ const VIEWS: { id: View; label: string }[] = [
   { id: "abandoned", label: "Abandonnés" },
 ];
 
+const PANEL =
+  "min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto";
+const PANEL_TITLE = "text-[32px] leading-[1.05] font-bold tracking-tight";
 const FILTER =
   "group inline-flex min-h-9 max-w-full cursor-pointer items-center gap-2 border border-rule px-2.5 hover:border-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-bg";
 const VIEW_TAB =
@@ -98,19 +103,23 @@ function GroupHeader({
   collapsed,
   checkedCount,
   now,
+  selected,
   onToggle,
+  onSelect,
   onCheck,
 }: {
   group: ProjectGroup;
   collapsed: boolean;
   checkedCount: number;
   now: number;
+  selected: boolean;
   onToggle: () => void;
+  onSelect: () => void;
   onCheck: (value: boolean) => void;
 }) {
   const total = group.rows.length;
   return (
-    <div className="flex min-h-11 bg-panel hover:bg-sel">
+    <div className={`flex min-h-11 hover:bg-sel ${selected ? "bg-sel shadow-[inset_3px_0_0_var(--ink)]" : "bg-panel"}`}>
       <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
         <span className="sr-only">Sélectionner les projets de {group.name}</span>
         <input
@@ -123,8 +132,8 @@ function GroupHeader({
           onChange={(event) => onCheck(event.target.checked)}
         />
       </label>
-      {/* A click anywhere folds the block; the chevron is the real control for the keyboard. */}
-      <div onClick={onToggle} className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}>
+      {/* A click anywhere opens the multi-project; its name is the real control for the keyboard. */}
+      <div onClick={onSelect} className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}>
         <span className="flex min-w-0 items-baseline gap-2">
           <button
             type="button"
@@ -138,15 +147,17 @@ function GroupHeader({
           >
             {collapsed ? "▸" : "▾"}
           </button>
-          <span className="min-w-0 flex-1" onClick={(event) => event.stopPropagation()}>
-            <ProjectName
-              projectId={group.parentId}
-              name={group.name}
-              folderName={group.folderName}
-              className="font-bold"
-              compact
-            />
-          </span>
+          <button
+            type="button"
+            aria-pressed={selected}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect();
+            }}
+            className="min-w-0 cursor-pointer truncate text-left font-bold"
+          >
+            {group.name}
+          </button>
         </span>
         <span className={`${DATA} col-span-2 text-mut`}>
           {total} sous-projet{total > 1 ? "s" : ""}
@@ -160,6 +171,91 @@ function GroupHeader({
         <span className={`${DATA} text-right text-mut`}>{formatSize(group.sizeBytes)}</span>
       </div>
     </div>
+  );
+}
+
+const removalMessage = (subject: string) =>
+  `Retirer ${subject} de la liste ?\n\nLe nom, la description, les tags et la note saisis ici seront perdus. Rien n'est supprimé sur le disque.`;
+
+function RemoveButton({ projectId, subject }: { projectId: number; subject: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      className="mt-3 flex min-h-11 cursor-pointer items-center text-mut underline hover:text-alert"
+      onClick={() => {
+        if (window.confirm(removalMessage(subject))) start(() => removeFromList([projectId]));
+      }}
+    >
+      Retirer de la liste
+    </button>
+  );
+}
+
+function GroupInspector({
+  group,
+  onSelect,
+  onCreated,
+}: {
+  group: ProjectGroup;
+  onSelect: (id: number) => void;
+  onCreated: (id: number) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  return (
+    <section aria-label="Multi-projet sélectionné" className={PANEL}>
+      <ProjectDirectory
+        key={`path-${group.parentId}`}
+        projectId={group.parentId}
+        path={group.path}
+        subdirectory={null}
+        parentPath={null}
+        missing={group.missing}
+      />
+      <div className="mt-1 mb-4">
+        <ProjectName
+          key={group.parentId}
+          projectId={group.parentId}
+          name={group.name}
+          folderName={group.folderName}
+          className={PANEL_TITLE}
+        />
+      </div>
+      <div className="mb-5">
+        <ProjectDescription key={group.parentId} projectId={group.parentId} description={group.description} detected={null} />
+      </div>
+      <h2 className={`${LABEL} border-b border-ink pb-1`}>Dépôts</h2>
+      <ul className="mb-4">
+        {group.rows.map((row) => (
+          <li key={row.id} className="border-b border-rule">
+            <button
+              type="button"
+              onClick={() => onSelect(row.id)}
+              className="flex min-h-11 w-full cursor-pointer items-baseline justify-between gap-4 py-2 text-left hover:bg-sel"
+            >
+              <span className="min-w-0 truncate font-semibold">{row.name}</span>
+              <span className={`${DATA} shrink-0 ${row.missing ? "text-alert" : "text-mut"}`}>{row.subdirectory}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {adding ? (
+        <AddSubProjectForm
+          groupId={group.parentId}
+          onCancel={() => setAdding(false)}
+          onCreated={(id) => {
+            setAdding(false);
+            onCreated(id);
+          }}
+        />
+      ) : (
+        <button type="button" onClick={() => setAdding(true)} className={BUTTON}>
+          Ajouter un dépôt
+        </button>
+      )}
+      <RemoveButton projectId={group.parentId} subject={`${group.name} et tous ses dépôts`} />
+    </section>
   );
 }
 
@@ -219,6 +315,21 @@ function BulkBar({
       >
         {view === "abandoned" ? "Restaurer" : "Abandonner"}
       </button>
+      <button
+        type="button"
+        disabled={pending}
+        className={BUTTON}
+        onClick={() => {
+          const count = selected.length;
+          if (!window.confirm(removalMessage(`${count} projet${count > 1 ? "s" : ""}`))) return;
+          start(async () => {
+            await removeFromList(selected);
+            onClear();
+          });
+        }}
+      >
+        Retirer de la liste
+      </button>
       <button type="button" onClick={onClear} className={BUTTON}>
         Désélectionner
       </button>
@@ -229,17 +340,43 @@ function BulkBar({
   );
 }
 
-function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; knownTags: string[] }) {
+function Inspector({
+  row,
+  now,
+  knownTags,
+  onSelect,
+}: {
+  row: RegistryRow;
+  now: number;
+  knownTags: string[];
+  onSelect: (id: number) => void;
+}) {
   return (
-    <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto">
-      <div className={`${DATA} break-all text-mut`}>{row.path}</div>
+    <section aria-label="Projet sélectionné" className={PANEL}>
+      {row.parentId !== null ? (
+        <button
+          type="button"
+          onClick={() => row.parentId !== null && onSelect(row.parentId)}
+          className="mb-1 block max-w-full cursor-pointer truncate text-mut underline hover:text-ink"
+        >
+          {row.parentName}
+        </button>
+      ) : null}
+      <ProjectDirectory
+        key={`path-${row.id}`}
+        projectId={row.id}
+        path={row.path}
+        subdirectory={row.subdirectory}
+        parentPath={row.parentPath}
+        missing={row.missing}
+      />
       <div className="mt-1 mb-4">
         <ProjectName
           key={row.id}
           projectId={row.id}
           name={row.name}
           folderName={row.folderName}
-          className="text-[32px] leading-[1.05] font-bold tracking-tight"
+          className={PANEL_TITLE}
         />
       </div>
       <div className="mb-4">
@@ -279,6 +416,7 @@ function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; kno
       <Link href={`/projects/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-medium underline">
         Ouvrir la fiche complète
       </Link>
+      <RemoveButton projectId={row.id} subject={row.name} />
     </section>
   );
 }
@@ -305,22 +443,17 @@ export function RegistryView({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<RegistrySort>("commit");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [scanning, startScan] = useTransition();
+  const [adding, setAdding] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshing, startRefresh] = useTransition();
 
-  const scan = () => {
-    startScan(async () => {
-      setScanError((await scanNow()).error);
+  const refresh = () => {
+    startRefresh(async () => {
+      setRefreshError((await refreshEverything()).error);
     });
   };
 
-  // The only automatic scan: the database is empty on the very first launch.
-  const neverScanned = lastScan === null;
-  useEffect(() => {
-    if (neverScanned) scan();
-  }, [neverScanned]);
-
-  // Sizes arrive after the scan: new values appear as they are measured.
+  // Sizes arrive after the facts: new values appear as they are measured.
   useEffect(() => {
     if (!sizing) return;
     const timer = setInterval(() => router.refresh(), 3000);
@@ -379,6 +512,19 @@ export function RegistryView({
     });
   };
 
+  const select = (id: number) => {
+    setAdding(false);
+    setSelectedId(id);
+  };
+  /** A filter left on could hide what was just added. */
+  const showCreated = (id: number) => {
+    setQuery("");
+    setSelectedTags([]);
+    setUntagged(false);
+    setView("all");
+    select(id);
+  };
+
   const renderRow = (row: RegistryRow, nested: boolean) => (
     <div
       key={row.id}
@@ -395,8 +541,8 @@ export function RegistryView({
       </label>
       <button
         type="button"
-        aria-pressed={row.id === selected?.id}
-        onClick={() => setSelectedId(row.id)}
+        aria-pressed={!showForm && row.id === selected?.id}
+        onClick={() => select(row.id)}
         className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}
       >
         <span className={`min-w-0 ${nested ? "border-l-2 border-rule pl-3" : ""}`}>
@@ -406,7 +552,11 @@ export function RegistryView({
           </span>
           <TagList tags={row.tags} />
         </span>
-        <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
+        {row.missing ? (
+          <span className={`${DATA} truncate font-medium text-alert`}>introuvable</span>
+        ) : (
+          <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
+        )}
         <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
           {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
         </span>
@@ -420,8 +570,12 @@ export function RegistryView({
       </button>
     </div>
   );
-  const selected = visible.find((row) => row.id === selectedId) ?? visible[0] ?? null;
-  const error = scanError ?? lastScan?.error ?? null;
+  const selectedGroup =
+    items.flatMap((item) => (item.kind === "group" && item.group.parentId === selectedId ? [item.group] : []))[0] ?? null;
+  const selected = visible.find((row) => row.id === selectedId) ?? (selectedGroup ? null : (visible[0] ?? null));
+  const error = refreshError ?? lastScan?.error ?? null;
+  // With nothing to show, the panel has only one use.
+  const showForm = adding || rows.length === 0;
 
   return (
     <main className="flex-1">
@@ -475,34 +629,37 @@ export function RegistryView({
 
         <div className="flex items-center gap-3">
           <span className={`${DATA} text-mut`} role="status">
-            {scanning
-              ? "Scan en cours…"
+            {refreshing
+              ? "Actualisation…"
               : sizing
                 ? "Calcul des tailles…"
                 : lastScan
-                  ? `Scanné il y a ${formatAge(lastScan.at, now)}`
-                  : "Jamais scanné"}
+                  ? `Actualisé il y a ${formatAge(lastScan.at, now)}`
+                  : null}
           </span>
+          <button type="button" onClick={refresh} disabled={refreshing || rows.length === 0} className={BUTTON}>
+            Actualiser
+          </button>
           <button
             type="button"
-            onClick={scan}
-            disabled={scanning}
-            className="h-10 cursor-pointer border border-ink px-3.5 font-medium hover:bg-ink hover:text-bg disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-ink"
+            aria-pressed={showForm}
+            onClick={() => setAdding(true)}
+            className={`${BUTTON} bg-ink text-bg hover:bg-transparent hover:text-ink`}
           >
-            Rescanner
+            Ajouter un projet
           </button>
         </div>
       </div>
 
       {error ? (
         <p role="alert" className={`${DATA} border-b border-alert px-4 py-2 text-alert`}>
-          Le dernier scan a échoué : {error}
+          La dernière actualisation a échoué : {error}
         </p>
       ) : null}
 
       {lastScan?.warning ? (
         <p role="status" className={`${DATA} border-b border-rule px-4 py-2 text-mut`}>
-          Docker n&apos;a pas répondu pendant le scan, l&apos;état des conteneurs est inconnu.
+          Docker n&apos;a pas répondu pendant l&apos;actualisation, l&apos;état des conteneurs est inconnu.
         </p>
       ) : null}
 
@@ -549,6 +706,8 @@ export function RegistryView({
                     collapsed={collapsedGroups.has(item.group.parentId)}
                     checkedCount={item.group.rows.filter((row) => checked.has(row.id)).length}
                     now={now}
+                    selected={!showForm && selectedGroup?.parentId === item.group.parentId}
+                    onSelect={() => select(item.group.parentId)}
                     onToggle={() => toggleGroup(item.group.parentId)}
                     onCheck={(value) => setCheckedRows(item.group.rows, value)}
                   />
@@ -559,8 +718,8 @@ export function RegistryView({
           </div>
           {visible.length === 0 ? (
             <p className="px-4 py-8 text-mut">
-              {scanning
-                ? "Premier scan en cours…"
+              {rows.length === 0
+                ? "Aucun projet pour l'instant : ajoute le premier avec le formulaire."
                 : view === "abandoned" && countView(rows, "abandoned") === 0
                   ? "Aucun projet abandonné."
                   : "Aucun projet ne correspond à ce filtre."}
@@ -585,7 +744,18 @@ export function RegistryView({
           </div>
         </div>
 
-        {selected ? <Inspector row={selected} now={now} knownTags={knownTags} /> : null}
+        {showForm ? (
+          <section aria-label="Nouveau projet" className={PANEL}>
+            <AddProjectForm
+              onCreated={showCreated}
+              onCancel={rows.length > 0 ? () => setAdding(false) : undefined}
+            />
+          </section>
+        ) : selectedGroup ? (
+          <GroupInspector key={selectedGroup.parentId} group={selectedGroup} onSelect={select} onCreated={showCreated} />
+        ) : selected ? (
+          <Inspector row={selected} now={now} knownTags={knownTags} onSelect={select} />
+        ) : null}
       </div>
     </main>
   );

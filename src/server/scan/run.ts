@@ -1,15 +1,17 @@
-import { and, eq, isNull, like, notInArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { existsSync } from "node:fs";
 import type { Db } from "../db/client";
 import { projectFacts, projects, scans } from "../db/schema";
-import { type DetectedFolder, detectFolder, detectFolders } from "./detect";
+import { type DetectedFolder, readFolder } from "./detect";
 import { assignContainers, type DockerState, readDocker } from "./docker";
 import { type GitFacts, readGitFacts } from "./git";
 import { mapLimit } from "./limit";
 
 const GIT_CONCURRENCY = 8;
 
+type Options = { docker?: () => Promise<DockerState> };
 type Scanned = { folder: DetectedFolder; git: GitFacts | null; error: string | null };
+type Target = typeof projects.$inferSelect;
 
 async function scanFolder(folder: DetectedFolder): Promise<Scanned> {
   if (!folder.hasGit) return { folder, git: null, error: folder.error };
@@ -21,19 +23,8 @@ async function scanFolder(folder: DetectedFolder): Promise<Scanned> {
   }
 }
 
-function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | null, now: Date): number {
-  const { id } = db
-    .insert(projects)
-    .values({ path: folder.path, name: folder.name, kind: folder.kind, parentId, lastSeenAt: now })
-    .onConflictDoUpdate({
-      target: projects.path,
-      // `abandoned` belongs to the user and stays untouched.
-      set: { name: folder.name, kind: folder.kind, parentId, lastSeenAt: now, missingAt: null },
-    })
-    .returning({ id: projects.id })
-    .get();
-
-  // Containers and size are written by their own steps, so they are not part of this write.
+/** Containers and size are written by their own steps, so they are not part of this write. */
+function saveFacts(db: Db, projectId: number, { folder, git, error }: Scanned, now: Date) {
   const facts = {
     stacks: folder.stacks,
     hasGit: folder.hasGit,
@@ -63,122 +54,105 @@ function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | 
     scannedAt: now,
   };
   db.insert(projectFacts)
-    .values({ projectId: id, ...facts })
+    .values({ projectId, ...facts })
     .onConflictDoUpdate({ target: projectFacts.projectId, set: facts })
     .run();
-  return id;
 }
 
-/** Refreshes one project. False when its folder is gone, or when it is abandoned. */
-export async function rescanProject(
-  db: Db,
-  projectId: number,
-  { docker = readDocker }: { docker?: () => Promise<DockerState> } = {},
-): Promise<boolean> {
-  const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
-  if (!project || project.abandoned) return false;
+/** Only ever opens the given folders: nothing is discovered. */
+async function refresh(db: Db, targets: Target[], docker: () => Promise<DockerState>) {
   const now = new Date();
+  const present = targets.filter(({ path }) => existsSync(path));
+  const presentIds = new Set(present.map(({ id }) => id));
+  const gone = targets.filter(({ id }) => !presentIds.has(id));
 
-  if (!existsSync(project.path)) {
-    db.update(projects).set({ missingAt: now }).where(eq(projects.id, projectId)).run();
-    return false;
-  }
+  const [scanned, dockerState] = await Promise.all([
+    mapLimit(
+      present.filter(({ kind }) => kind === "project"),
+      GIT_CONCURRENCY,
+      async ({ id, path, name }) => ({ id, path, result: await scanFolder(await readFolder(path, name)) }),
+    ),
+    docker(),
+  ]);
 
-  const detected = await detectFolder(project.path, project.name);
-  const folder = detected.find((item) => item.path === project.path);
-  if (!folder) return false;
-
-  const [scanned, dockerState] = await Promise.all([scanFolder(folder), docker()]);
   const known = db
     .select({ path: projects.path })
     .from(projects)
     .where(and(eq(projects.kind, "project"), eq(projects.abandoned, false)))
     .all()
     .map(({ path }) => path);
+  const assigned = assignContainers(known, dockerState.containers);
 
   db.transaction((tx) => {
-    saveFolder(tx as unknown as Db, scanned, project.parentId, now);
-    tx.update(projectFacts)
-      .set({ containers: assignContainers(known, dockerState.containers).get(project.path) ?? [] })
-      .where(eq(projectFacts.projectId, projectId))
-      .run();
+    for (const { id } of present) {
+      tx.update(projects).set({ lastSeenAt: now, missingAt: null }).where(eq(projects.id, id)).run();
+    }
+    for (const { id, path, result } of scanned) {
+      saveFacts(tx as unknown as Db, id, result, now);
+      tx.update(projectFacts)
+        .set({ containers: assigned.get(path) ?? [] })
+        .where(eq(projectFacts.projectId, id))
+        .run();
+    }
+    for (const { id } of gone) {
+      // Keeps the first date, and the row: the user's data must survive a moved folder.
+      tx.update(projects)
+        .set({ missingAt: now })
+        .where(and(eq(projects.id, id), isNull(projects.missingAt)))
+        .run();
+      tx.update(projectFacts).set({ containers: [] }).where(eq(projectFacts.projectId, id)).run();
+    }
   });
-  return true;
+
+  return {
+    projectCount: targets.filter(({ kind }) => kind === "project").length,
+    errorCount: gone.length + scanned.filter(({ result }) => result.error !== null).length,
+    warning: dockerState.error,
+  };
 }
 
-export type ScanResult = { scanId: number; projectCount: number; errorCount: number };
-
-export async function runScan(
+/** Refreshes the given projects, leaving aside the abandoned ones. */
+export async function refreshProjects(
   db: Db,
-  root: string,
-  { now = new Date(), docker = readDocker }: { now?: Date; docker?: () => Promise<DockerState> } = {},
-): Promise<ScanResult> {
-  // A running row can only be a leftover here: the server stopped during that scan.
+  projectIds: number[],
+  { docker = readDocker }: Options = {},
+): Promise<void> {
+  if (projectIds.length === 0) return;
+  const targets = db
+    .select()
+    .from(projects)
+    .where(and(inArray(projects.id, projectIds), eq(projects.abandoned, false)))
+    .all();
+  if (targets.length > 0) await refresh(db, targets, docker);
+}
+
+/** Refreshes one project. False when its folder is gone, or when it is abandoned. */
+export async function rescanProject(db: Db, projectId: number, options: Options = {}): Promise<boolean> {
+  const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
+  if (!project || project.abandoned) return false;
+  await refreshProjects(db, [projectId], options);
+  return existsSync(project.path);
+}
+
+export type RefreshResult = { scanId: number; projectCount: number; errorCount: number };
+
+/** Refreshes every project of the list. */
+export async function refreshAll(
+  db: Db,
+  { now = new Date(), docker = readDocker }: Options & { now?: Date } = {},
+): Promise<RefreshResult> {
+  // A running row can only be a leftover here: the server stopped during that refresh.
   db.update(scans)
-    .set({ status: "failed", finishedAt: now, error: "Scan interrompu" })
+    .set({ status: "failed", finishedAt: now, error: "Actualisation interrompue" })
     .where(eq(scans.status, "running"))
     .run();
   const { id: scanId } = db.insert(scans).values({ startedAt: now }).returning().get();
 
   try {
-    const abandoned = new Set(
-      db
-        .select({ path: projects.path })
-        .from(projects)
-        .where(eq(projects.abandoned, true))
-        .all()
-        .map(({ path }) => path),
-    );
-    const [scanned, dockerState] = await Promise.all([
-      detectFolders(root, abandoned).then((folders) => mapLimit(folders, GIT_CONCURRENCY, scanFolder)),
-      docker(),
-    ]);
-
-    const result = db.transaction((tx) => {
-      const ids = new Map<string, number>();
-      // Top-level folders first: children need the id of their parent.
-      const ordered = [...scanned].sort(
-        (a, b) => Number(a.folder.parentPath !== null) - Number(b.folder.parentPath !== null),
-      );
-      for (const item of ordered) {
-        const parentId = item.folder.parentPath ? (ids.get(item.folder.parentPath) ?? null) : null;
-        ids.set(item.folder.path, saveFolder(tx as unknown as Db, item, parentId, now));
-      }
-
-      const assigned = assignContainers(
-        scanned.filter((item) => item.folder.kind === "project").map((item) => item.folder.path),
-        dockerState.containers,
-      );
-      for (const [path, id] of ids) {
-        tx.update(projectFacts)
-          .set({ containers: assigned.get(path) ?? [] })
-          .where(eq(projectFacts.projectId, id))
-          .run();
-      }
-
-      // Rows are kept: the user's classification must survive a folder that disappears.
-      const seen = [...ids.values()];
-      tx.update(projects)
-        .set({ missingAt: now })
-        .where(
-          and(
-            isNull(projects.missingAt),
-            // Not looking at a folder says nothing about whether it still exists.
-            eq(projects.abandoned, false),
-            or(eq(projects.path, root), like(projects.path, `${root}/%`)),
-            seen.length > 0 ? notInArray(projects.id, seen) : undefined,
-          ),
-        )
-        .run();
-
-      return {
-        projectCount: scanned.filter((item) => item.folder.kind === "project").length,
-        errorCount: scanned.filter((item) => item.error !== null).length,
-      };
-    });
-
+    const targets = db.select().from(projects).where(eq(projects.abandoned, false)).all();
+    const { warning, ...result } = await refresh(db, targets, docker);
     db.update(scans)
-      .set({ status: "done", finishedAt: new Date(), warning: dockerState.error, ...result })
+      .set({ status: "done", finishedAt: new Date(), warning, ...result })
       .where(eq(scans.id, scanId))
       .run();
     return { scanId, ...result };

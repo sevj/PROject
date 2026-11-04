@@ -9,7 +9,8 @@ import {
 
 const now = sql`(unixepoch())`;
 
-export const PROJECT_KINDS = ["project", "group", "folder"] as const;
+/** A group is a multi-project: a heading for its sub-projects, with no facts of its own. */
+export const PROJECT_KINDS = ["project", "group"] as const;
 export const PROJECT_STATUSES = ["active", "paused", "resume"] as const;
 
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -34,14 +35,14 @@ export const projects = sqliteTable("projects", {
   parentId: integer("parent_id").references((): AnySQLiteColumn => projects.id, {
     onDelete: "set null",
   }),
-  /** Set aside by the user: never scanned again, and shown only in its own view. */
+  /** Set aside by the user: never read again, and shown only in its own view. */
   abandoned: integer("abandoned", { mode: "boolean" }).notNull().default(false),
   firstSeenAt: integer("first_seen_at", { mode: "timestamp" }).notNull().default(now),
   lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull().default(now),
   missingAt: integer("missing_at", { mode: "timestamp" }),
 });
 
-/** Everything detected on disk. A scan overwrites the whole row. */
+/** Everything read on disk. A refresh overwrites the whole row. */
 export const projectFacts = sqliteTable("project_facts", {
   projectId: integer("project_id")
     .primaryKey()
@@ -79,7 +80,7 @@ export const projectFacts = sqliteTable("project_facts", {
   scannedAt: integer("scanned_at", { mode: "timestamp" }).notNull().default(now),
 });
 
-/** Everything the user decides. A scan never writes here. */
+/** Everything the user decides. A refresh never writes here. */
 export const projectMeta = sqliteTable("project_meta", {
   projectId: integer("project_id")
     .primaryKey()
@@ -126,6 +127,6 @@ export const scans = sqliteTable("scans", {
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   value: text("value", { mode: "json" })
-    .$type<{ root: string; ideCommands: Record<string, string>; terminalCommand: string }>()
+    .$type<{ ideCommands: Record<string, string>; terminalCommand: string }>()
     .notNull(),
 });

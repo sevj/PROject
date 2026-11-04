@@ -21,8 +21,11 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     parentId: null,
     parentName: null,
     parentFolderName: null,
+    parentPath: null,
+    parentDescription: null,
+    parentMissing: false,
     parentSizeBytes: null,
-    kind: "project",
+    subdirectory: null,
     missing: false,
     stacks: [],
     hasGit: true,
@@ -77,17 +80,16 @@ const rows = [
   }),
   row("empty", { lastCommitAt: null, commitCount: 0 }),
   row("nogit", { hasGit: false, dirtyCount: null, lastCommitAt: null }),
-  row("plain", { kind: "folder", hasGit: false, dirtyCount: null, lastCommitAt: null }),
-  row("gone", { missing: true, dirtyCount: 9 }),
+  row("gone", { missing: true, dirtyCount: 1 }),
   row("dropped", { abandoned: true, dirtyCount: 7, containers: [{ name: "c", service: "c", state: "running", status: "Up", ports: "" }] }),
-  row("broken", { kind: "folder", hasGit: false, dirtyCount: null, lastCommitAt: null, scanError: "EACCES" }),
 ];
 
 const names = (list: RegistryRow[]) => list.map((item) => item.name);
 
 describe("selectRows", () => {
-  it("shows projects only in the default view, most recent first and empty ones last", () => {
+  it("keeps a project whose folder moved in the default view, most recent first and empty ones last", () => {
     expect(names(selectRows(rows, { view: "all", query: "", sort: "commit" }))).toEqual([
+      "gone",
       "recent",
       "dirty",
       "old",
@@ -98,7 +100,7 @@ describe("selectRows", () => {
 
   it("shows abandoned projects only in their own view, even once deleted", () => {
     expect(countView(rows, "abandoned")).toBe(1);
-    expect(countView(rows, "all")).toBe(5);
+    expect(countView(rows, "all")).toBe(6);
     expect(names(selectRows(rows, { view: "abandoned", query: "", sort: "name" }))).toEqual(["dropped"]);
     const deleted = [row("deleted", { abandoned: true, missing: true })];
     expect(names(selectRows(deleted, { view: "abandoned", query: "", sort: "name" }))).toEqual(["deleted"]);
@@ -138,7 +140,6 @@ describe("tag filters", () => {
     row("b", { tags: ["Client"] }),
     row("c"),
     row("dropped", { tags: ["Client"], abandoned: true }),
-    row("plain", { kind: "folder" }),
   ];
   const select = (options: { tags?: string[]; untagged?: boolean }) =>
     names(selectRows(tagged, { view: "all", query: "", sort: "name", ...options }));

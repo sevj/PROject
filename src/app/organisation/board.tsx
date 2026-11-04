@@ -134,8 +134,7 @@ export function Board({
     ...knownTags.map((name) => ({ value: name, label: name })),
   ];
   const shown = optimistic.filter(
-    (row) =>
-      !row.missing && !row.abandoned && row.kind === "project" && (tag === null || row.tags.includes(tag)),
+    (row) => !row.abandoned && (tag === null || row.tags.includes(tag)),
   );
 
   return (

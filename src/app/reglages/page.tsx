@@ -8,7 +8,7 @@ import { SettingsForm } from "./settings-form";
 async function Settings() {
   await connection();
   const db = getDb();
-  const { root, ideCommands, terminalCommand } = getSettings(db);
+  const { ideCommands, terminalCommand } = getSettings(db);
   const { rows, knownTags } = getRegistry(db);
   const stacks = [...new Set([...rows.flatMap((row) => row.stacks), ...Object.keys(ideCommands)])]
     .filter((stack) => stack !== "default")
@@ -16,7 +16,6 @@ async function Settings() {
 
   return (
     <SettingsForm
-      root={root}
       ideCommands={ideCommands}
       terminalCommand={terminalCommand}
       stacks={stacks}

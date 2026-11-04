@@ -48,9 +48,20 @@ function loadKnownTags(db: Db): string[] {
     .sort((a, b) => a.localeCompare(b, "fr"));
 }
 
+function toParent({ project, facts }: Joined, { meta }: Classification) {
+  return {
+    name: meta?.displayName ?? project.name,
+    folderName: project.name,
+    absolutePath: project.path,
+    description: meta?.description ?? null,
+    missing: project.missingAt !== null,
+    sizeBytes: facts.sizeBytes,
+  };
+}
+
 function toRow(
   { project, facts }: Joined,
-  parent: { name: string; folderName: string; sizeBytes: number | null } | null,
+  parent: ReturnType<typeof toParent> | null,
   { meta, tags: rowTags }: Classification,
   ideCommands: Record<string, string>,
 ): RegistryRow {
@@ -59,11 +70,14 @@ function toRow(
     name: meta?.displayName ?? project.name,
     folderName: project.name,
     path: displayPath(project.path),
+    subdirectory: parent ? project.path.slice(parent.absolutePath.length + 1) : null,
     parentId: project.parentId,
     parentName: parent?.name ?? null,
     parentFolderName: parent?.folderName ?? null,
+    parentPath: parent ? displayPath(parent.absolutePath) : null,
+    parentDescription: parent?.description ?? null,
+    parentMissing: parent?.missing ?? false,
     parentSizeBytes: parent?.sizeBytes ?? null,
-    kind: project.kind === "folder" ? "folder" : "project",
     missing: project.missingAt !== null,
     stacks: facts.stacks,
     hasGit: facts.hasGit,
@@ -112,18 +126,16 @@ export function getProject(db: Db, id: number) {
     .where(eq(projects.id, id))
     .get();
   if (!joined) return null;
-  const parentRow = joined.project.parentId
+  const { parentId } = joined.project;
+  const parentRow = parentId
     ? db
-        .select({ name: projects.name, sizeBytes: projectFacts.sizeBytes, displayName: projectMeta.displayName })
+        .select({ project: projects, facts: projectFacts })
         .from(projects)
         .innerJoin(projectFacts, eq(projectFacts.projectId, projects.id))
-        .leftJoin(projectMeta, eq(projectMeta.projectId, projects.id))
-        .where(eq(projects.id, joined.project.parentId))
+        .where(eq(projects.id, parentId))
         .get()
     : undefined;
-  const parent = parentRow
-    ? { name: parentRow.displayName ?? parentRow.name, folderName: parentRow.name, sizeBytes: parentRow.sizeBytes }
-    : null;
+  const parent = parentRow && parentId ? toParent(parentRow, loadClassification(db, parentId)(parentId)) : null;
   return {
     row: toRow(joined, parent, loadClassification(db, id)(id), getSettings(db).ideCommands),
     compose: { hasCompose: joined.facts.hasCompose, containers: joined.facts.containers },
@@ -143,25 +155,14 @@ export function getRegistry(db: Db) {
     .all();
 
   const classificationOf = loadClassification(db);
-  const { root, ideCommands } = getSettings(db);
-  const parents = new Map(
-    all.map(({ project, facts }) => [
-      project.id,
-      {
-        name: classificationOf(project.id).meta?.displayName ?? project.name,
-        folderName: project.name,
-        sizeBytes: facts.sizeBytes,
-      },
-    ]),
-  );
+  const { ideCommands } = getSettings(db);
+  const parents = new Map(all.map((joined) => [joined.project.id, toParent(joined, classificationOf(joined.project.id))]));
 
   const rows: RegistryRow[] = [];
   for (const joined of all) {
     const { project } = joined;
     // A group is only a heading for its children.
     if (project.kind === "group") continue;
-    // Rows from a previous root stay in the database, ready if it is restored.
-    if (!project.path.startsWith(`${root}/`)) continue;
     const parent = project.parentId ? (parents.get(project.parentId) ?? null) : null;
     rows.push(toRow(joined, parent, classificationOf(project.id), ideCommands));
   }

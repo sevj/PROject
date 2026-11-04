@@ -1,20 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { deleteTagByName, renameTagByName, saveSettingsForm, scanNow } from "../actions";
+import { deleteTagByName, renameTagByName, saveSettingsForm } from "../actions";
 import { BUTTON, DATA, FIELD, LABEL } from "../ui";
 
 const SECTION = "border-b border-rule px-5 pt-5 pb-6";
 
 type Props = {
-  root: string;
   ideCommands: Record<string, string>;
   terminalCommand: string;
   stacks: string[];
   tags: { name: string; count: number }[];
 };
 
-export function SettingsForm({ root, ideCommands, terminalCommand, stacks, tags }: Props) {
+export function SettingsForm({ ideCommands, terminalCommand, stacks, tags }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [tagMessage, setTagMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -29,19 +28,10 @@ export function SettingsForm({ root, ideCommands, terminalCommand, stacks, tags 
           setMessage(null);
           start(async () => {
             const error = await saveSettingsForm(Object.fromEntries(data) as Record<string, string>);
-            if (error) {
-              setMessage(error);
-              return;
-            }
-            if (String(data.get("root")).trim() !== root) await scanNow();
-            setMessage("Réglages enregistrés.");
+            setMessage(error ?? "Réglages enregistrés.");
           });
         }}
       >
-        <label>
-          <span className={`${LABEL} block pb-1`}>Dossier racine</span>
-          <input name="root" defaultValue={root} required className={`${FIELD} ${DATA}`} />
-        </label>
         <label>
           <span className={`${LABEL} block pb-1`}>Commande du terminal</span>
           <input name="terminal" defaultValue={terminalCommand} required className={`${FIELD} ${DATA}`} />

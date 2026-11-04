@@ -69,7 +69,7 @@ export function setAbandoned(db: Db, projectIds: number[], abandoned: boolean) {
   db.transaction((tx) => {
     tx.update(projects).set({ abandoned }).where(inArray(projects.id, projectIds)).run();
     if (abandoned) {
-      // No scan will update these again, so a running state would stay wrong forever.
+      // No refresh will update these again, so a running state would stay wrong forever.
       tx.update(projectFacts).set({ containers: [] }).where(inArray(projectFacts.projectId, projectIds)).run();
     }
   });
@@ -147,7 +147,7 @@ export function exportClassification(db: Db): ClassificationExport {
       .filter((item) => item.projectId === project.id)
       .flatMap((item) => tagNames.get(item.tagId) ?? [])
       .sort((a, b) => a.localeCompare(b, "fr"));
-    // Only what the user decided: everything else is recalculated by a scan.
+    // Only what the user decided: everything else is recalculated by a refresh.
     if (!meta && !project.abandoned && withTags.length === 0) continue;
     exported.push({
       path: project.path,

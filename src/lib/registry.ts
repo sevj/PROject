@@ -12,12 +12,16 @@ export type RegistryRow = {
   name: string;
   folderName: string;
   path: string;
+  /** Inside its multi-project, null for a project on its own. */
+  subdirectory: string | null;
   parentId: number | null;
   parentName: string | null;
   parentFolderName: string | null;
+  parentPath: string | null;
+  parentDescription: string | null;
+  parentMissing: boolean;
   /** Measured on the parent folder itself, so it counts the files outside any project. */
   parentSizeBytes: number | null;
-  kind: "project" | "folder";
   missing: boolean;
   stacks: string[];
   hasGit: boolean;
@@ -71,8 +75,8 @@ export function dockerLabel(row: RegistryRow): string {
 }
 
 const VIEW_TESTS: Record<RegistryView, (row: RegistryRow) => boolean> = {
-  all: (row) => !row.missing && !row.abandoned && row.kind === "project",
-  // Includes a folder deleted since: its row is the only trace left of that decision.
+  // A folder that moved stays listed: only the user can point it elsewhere or remove it.
+  all: (row) => !row.abandoned,
   abandoned: (row) => row.abandoned,
 };
 
@@ -118,6 +122,9 @@ export type ProjectGroup = {
   parentId: number;
   name: string;
   folderName: string;
+  path: string;
+  description: string | null;
+  missing: boolean;
   rows: RegistryRow[];
   dirtyCount: number;
   running: number;
@@ -143,6 +150,9 @@ function toGroup(parentId: number, rows: RegistryRow[], useFolderSize: boolean):
     parentId,
     name: rows[0].parentName ?? folderName,
     folderName,
+    path: rows[0].parentPath ?? "",
+    description: rows[0].parentDescription,
+    missing: rows[0].parentMissing,
     rows,
     dirtyCount: rows.reduce((sum, row) => sum + (row.dirtyCount ?? 0), 0),
     running: rows.reduce((sum, row) => sum + runningCount(row), 0),
