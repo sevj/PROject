@@ -56,7 +56,8 @@ function toRow(
 ): RegistryRow {
   return {
     id: project.id,
-    name: project.name,
+    name: meta?.displayName ?? project.name,
+    folderName: project.name,
     path: displayPath(project.path),
     parentId: project.parentId,
     parentName: parent?.name ?? null,

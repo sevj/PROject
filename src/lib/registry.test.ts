@@ -16,6 +16,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
   return {
     id: 1,
     name,
+    folderName: name,
     path: `~/Projects/${name}`,
     parentId: null,
     parentName: null,
@@ -92,6 +93,12 @@ describe("selectRows", () => {
   it("sorts by modified files, and searches the path case-insensitively", () => {
     expect(names(selectRows(rows, { view: "all", query: "", sort: "dirty" }))[0]).toBe("dirty");
     expect(names(selectRows(rows, { view: "all", query: " OLD ", sort: "name" }))).toEqual(["old"]);
+  });
+
+  it("finds a project by its chosen name", () => {
+    const named = [row("Mon outil", { path: "~/Projects/tool", folderName: "tool" })];
+    expect(names(selectRows(named, { view: "all", query: "outil", sort: "name" }))).toEqual(["Mon outil"]);
+    expect(names(selectRows(named, { view: "all", query: "tool", sort: "name" }))).toEqual(["Mon outil"]);
   });
 
   it("does not change the input order", () => {

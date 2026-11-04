@@ -1,0 +1,1 @@
+ALTER TABLE `project_meta` ADD `display_name` text;

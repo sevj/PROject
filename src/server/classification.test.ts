@@ -7,6 +7,7 @@ import {
   removeTag,
   renameTag,
   setAbandoned,
+  setDisplayName,
   setFavorite,
   setNote,
   setStatus,
@@ -39,6 +40,25 @@ describe("meta", () => {
     setNote(db, a, "");
     const meta = db.select().from(projectMeta).all()[0];
     expect([meta.status, meta.note, meta.favorite]).toEqual([null, null, true]);
+  });
+});
+
+describe("display name", () => {
+  const stored = () => db.select().from(projectMeta).get()?.displayName;
+
+  it("cleans the name, and goes back to the folder when empty or identical", () => {
+    setDisplayName(db, a, "  Mon   projet ");
+    expect(stored()).toBe("Mon projet");
+    setDisplayName(db, a, "   ");
+    expect(stored()).toBeNull();
+    setDisplayName(db, a, "Autre");
+    setDisplayName(db, a, "a");
+    expect(stored()).toBeNull();
+  });
+
+  it("ignores an unknown project", () => {
+    setDisplayName(db, 9999, "x");
+    expect(db.select().from(projectMeta).all()).toEqual([]);
   });
 });
 
@@ -104,12 +124,21 @@ describe("export and import", () => {
     setStatus(db, [a], "active");
     setFavorite(db, a, true);
     setNote(db, a, "note");
+    setDisplayName(db, a, "Le projet A");
     addTag(db, [a], "php");
     setAbandoned(db, [b], true);
   }
 
-  const exportedA = { path: "/p/a", status: "active", favorite: true, note: "note", abandoned: false, tags: ["php"] };
-  const exportedB = { path: "/p/b", status: null, favorite: false, note: null, abandoned: true, tags: [] };
+  const exportedA = {
+    path: "/p/a",
+    status: "active",
+    favorite: true,
+    note: "note",
+    displayName: "Le projet A",
+    abandoned: false,
+    tags: ["php"],
+  };
+  const exportedB = { path: "/p/b", status: null, favorite: false, note: null, displayName: null, abandoned: true, tags: [] };
 
   it("exports only what the user decided, including abandoned projects", () => {
     db.insert(projects).values({ path: "/p/untouched", name: "untouched" }).run();
@@ -143,7 +172,7 @@ describe("export and import", () => {
     };
     expect(importClassification(db, JSON.stringify(old))).toEqual({ imported: 1, unknownPaths: [] });
     expect(exportClassification(db).projects).toEqual([
-      { path: "/p/a", status: null, favorite: false, note: null, abandoned: true, tags: ["Perso", "php"] },
+      { path: "/p/a", status: null, favorite: false, note: null, displayName: null, abandoned: true, tags: ["Perso", "php"] },
     ]);
   });
 

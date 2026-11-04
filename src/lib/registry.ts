@@ -8,7 +8,9 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
 
 export type RegistryRow = {
   id: number;
+  /** The name chosen by the user, or else the folder's. */
   name: string;
+  folderName: string;
   path: string;
   parentId: number | null;
   parentName: string | null;
@@ -83,6 +85,7 @@ export function selectRows(
     .filter(
       (row) =>
         !needle ||
+        row.name.toLowerCase().includes(needle) ||
         row.path.toLowerCase().includes(needle) ||
         row.tags.some((tag) => tag.toLowerCase().includes(needle)),
     )

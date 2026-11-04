@@ -20,6 +20,7 @@ import {
 import type { ProjectStatus } from "@/server/db/schema";
 import { markAbandoned, scanNow, updateStatus } from "./actions";
 import { ClassificationEditor } from "./classification-editor";
+import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
 import { BUTTON, CHECKBOX, DATA, LABEL } from "./ui";
@@ -232,7 +233,15 @@ function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; kno
   return (
     <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6">
       <div className={`${DATA} break-all text-mut`}>{row.path}</div>
-      <h1 className="mt-1 mb-4 text-[32px] leading-[1.05] font-bold tracking-tight break-words">{row.name}</h1>
+      <div className="mt-1 mb-4">
+        <ProjectName
+          key={row.id}
+          projectId={row.id}
+          name={row.name}
+          folderName={row.folderName}
+          className="text-[32px] leading-[1.05] font-bold tracking-tight"
+        />
+      </div>
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
       {/* Stays open from one project to the next, to tag several in a row. */}
       <details className="group/tags mb-5 border-y border-rule">

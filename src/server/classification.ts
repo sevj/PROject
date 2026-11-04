@@ -23,7 +23,7 @@ export function isStatus(value: unknown): value is ProjectStatus {
   return PROJECT_STATUSES.includes(value as ProjectStatus);
 }
 
-type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "status" | "favorite" | "note">>;
+type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "status" | "favorite" | "note" | "displayName">>;
 
 function patchMeta(db: Db, projectIds: number[], patch: MetaPatch) {
   db.transaction((tx) => {
@@ -49,6 +49,14 @@ export function setFavorite(db: Db, projectId: number, favorite: boolean) {
 
 export function setNote(db: Db, projectId: number, note: string) {
   patchMeta(db, [projectId], { note: note.slice(0, MAX_NOTE) || null });
+}
+
+/** An empty name, or the folder's own name, goes back to following the folder. */
+export function setDisplayName(db: Db, projectId: number, name: string) {
+  const project = db.select({ name: projects.name }).from(projects).where(eq(projects.id, projectId)).get();
+  if (!project) return;
+  const clean = cleanName(name);
+  patchMeta(db, [projectId], { displayName: clean && clean !== project.name ? clean : null });
 }
 
 export function setAbandoned(db: Db, projectIds: number[], abandoned: boolean) {
@@ -114,6 +122,7 @@ export type ExportedProject = {
   status: ProjectStatus | null;
   favorite: boolean;
   note: string | null;
+  displayName: string | null;
   abandoned: boolean;
   tags: string[];
 };
@@ -139,6 +148,7 @@ export function exportClassification(db: Db): ClassificationExport {
       status: meta?.status ?? null,
       favorite: meta?.favorite ?? false,
       note: meta?.note ?? null,
+      displayName: meta?.displayName ?? null,
       abandoned: project.abandoned,
       tags: withTags,
     });
@@ -162,7 +172,10 @@ function parseProject(input: unknown, version: number): ExportedProject | null {
   ) {
     return null;
   }
-  const base = { path: item.path, status: item.status, favorite: item.favorite, note: item.note };
+  // Absent from exports made before project names existed.
+  const displayName = item.displayName ?? null;
+  if (displayName !== null && typeof displayName !== "string") return null;
+  const base = { path: item.path, status: item.status, favorite: item.favorite, note: item.note, displayName };
   if (version === 2) {
     return typeof item.abandoned === "boolean" ? { ...base, abandoned: item.abandoned, tags: item.tags } : null;
   }
@@ -207,7 +220,12 @@ export function importClassification(db: Db, json: string): ImportResult {
         unknownPaths.push(item.path);
         continue;
       }
-      patchMeta(txDb, [projectId], { status: item.status, favorite: item.favorite, note: item.note });
+      patchMeta(txDb, [projectId], {
+        status: item.status,
+        favorite: item.favorite,
+        note: item.note,
+        displayName: item.displayName,
+      });
       setAbandoned(txDb, [projectId], item.abandoned);
       tx.delete(projectTags).where(eq(projectTags.projectId, projectId)).run();
       for (const name of item.tags) addTag(txDb, [projectId], name);

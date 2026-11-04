@@ -43,6 +43,13 @@
       "when": 1793805250403,
       "tag": "0005_remove_archived_status",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793805912097,
+      "tag": "0006_classy_thundra",
+      "breakpoints": true
     }
   ]
 }

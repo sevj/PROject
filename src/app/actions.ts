@@ -10,6 +10,7 @@ import {
   removeTag,
   renameTag,
   setAbandoned,
+  setDisplayName,
   setFavorite,
   setNote,
   setStatus,
@@ -68,6 +69,11 @@ export async function toggleFavorite(projectId: number, favorite: boolean): Prom
 
 export async function saveNote(projectId: number, note: string): Promise<void> {
   setNote(getDb(), projectId, String(note));
+  refreshAll();
+}
+
+export async function renameProject(projectId: number, name: string): Promise<void> {
+  setDisplayName(getDb(), projectId, String(name));
   refreshAll();
 }
 

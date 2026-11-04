@@ -10,6 +10,7 @@ import { readRecentCommits } from "@/server/scan/git";
 import { isSizing } from "@/server/scan/jobs";
 import { ClassificationEditor } from "../../classification-editor";
 import { ProjectButtons } from "../../project-buttons";
+import { ProjectName } from "../../project-name";
 import { TagPicker } from "../../tag-picker";
 import { DATA, LABEL } from "../../ui";
 import { EnvFiles } from "./env-files";
@@ -92,9 +93,14 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             Retour au registre
           </Link>
           <div className={`${DATA} text-mut`}>{row.path}</div>
-          <h1 className="mt-0.5 text-[72px] leading-none font-bold tracking-[-.04em] break-words max-sm:text-[44px]">
-            {row.name}
-          </h1>
+          <div className="mt-0.5">
+            <ProjectName
+              projectId={row.id}
+              name={row.name}
+              folderName={row.folderName}
+              className="text-[72px] leading-none font-bold tracking-[-.04em] max-sm:text-[44px]"
+            />
+          </div>
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <ProjectButtons row={row} />

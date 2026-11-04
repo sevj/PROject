@@ -74,6 +74,8 @@ export const projectMeta = sqliteTable("project_meta", {
   status: text("status", { enum: PROJECT_STATUSES }),
   favorite: integer("favorite", { mode: "boolean" }).notNull().default(false),
   note: text("note"),
+  /** Replaces the folder name on screen. The folder itself is never renamed. */
+  displayName: text("display_name"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
 });
 
