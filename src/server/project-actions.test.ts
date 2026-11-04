@@ -37,7 +37,7 @@ describe("composeDirectories", () => {
 
 describe("runCompose", () => {
   it("reports a project without compose file instead of running anything", async () => {
-    expect(await runCompose("up", [])).toContain("Aucun fichier");
+    expect(await runCompose("up", [])).toContain("No Docker Compose");
   });
 });
 
@@ -47,7 +47,7 @@ describe("launch", () => {
   });
 
   it("reports a missing program and an empty command", async () => {
-    expect(await launch("no-such-program-xyz {path}", "/tmp")).toContain("Impossible de lancer");
-    expect(await launch("  ", "/tmp")).toContain("Aucune commande");
+    expect(await launch("no-such-program-xyz {path}", "/tmp")).toContain("Could not start");
+    expect(await launch("  ", "/tmp")).toContain("No command");
   });
 });

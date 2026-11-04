@@ -127,6 +127,6 @@ export const scans = sqliteTable("scans", {
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   value: text("value", { mode: "json" })
-    .$type<{ ideCommands: Record<string, string>; terminalCommand: string }>()
+    .$type<{ locale?: string; ideCommands: Record<string, string>; terminalCommand: string }>()
     .notNull(),
 });

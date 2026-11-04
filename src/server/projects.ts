@@ -5,6 +5,7 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 import { cleanName, setDescription, setDisplayName } from "./classification";
 import type { Db } from "./db/client";
 import { projectFacts, projects } from "./db/schema";
+import { serverMessages } from "./i18n";
 
 export type ProjectInput = { name: string; description: string; directory: string };
 export type SubProjectInput = { name: string; description: string; subdirectory: string };
@@ -21,26 +22,28 @@ function isDirectory(path: string): boolean {
   }
 }
 
-function readDirectory(value: string): { path: string } | { error: string } {
+function readDirectory(db: Db, value: string): { path: string } | { error: string } {
+  const m = serverMessages(db).errors;
   const expanded = expandHome(String(value ?? "").trim());
-  if (!expanded) return { error: "Le répertoire est requis." };
-  if (!isAbsolute(expanded)) return { error: `« ${expanded} » doit être un chemin complet, comme ~/Projects/mon-projet.` };
+  if (!expanded) return { error: m.directoryRequired };
+  if (!isAbsolute(expanded)) return { error: m.directoryNotAbsolute(expanded) };
   const path = resolve(expanded);
-  return isDirectory(path) ? { path } : { error: `Le répertoire ${path} n'existe pas.` };
+  return isDirectory(path) ? { path } : { error: m.directoryMissing(path) };
 }
 
 /** Relative to the multi-project, and a full path inside it is accepted too. */
-function readSubdirectory(root: string, value: string): { path: string } | { error: string } {
+function readSubdirectory(db: Db, root: string, value: string): { path: string } | { error: string } {
+  const m = serverMessages(db).errors;
   const expanded = expandHome(String(value ?? "").trim());
-  if (!expanded) return { error: "Le sous-répertoire est requis." };
+  if (!expanded) return { error: m.subdirectoryRequired };
   const path = resolve(root, expanded);
-  if (!path.startsWith(`${root}/`)) return { error: `« ${expanded} » doit se trouver dans ${root}.` };
-  return isDirectory(path) ? { path } : { error: `Le répertoire ${path} n'existe pas.` };
+  if (!path.startsWith(`${root}/`)) return { error: m.subdirectoryOutside(expanded, root) };
+  return isDirectory(path) ? { path } : { error: m.directoryMissing(path) };
 }
 
 function takenBy(db: Db, path: string): string | null {
   return db.select({ id: projects.id }).from(projects).where(eq(projects.path, path)).get()
-    ? `Le répertoire ${path} est déjà dans la liste.`
+    ? serverMessages(db).errors.directoryTaken(path)
     : null;
 }
 
@@ -62,8 +65,8 @@ function insert(
 
 export function registerProject(db: Db, input: ProjectInput): Registered {
   const name = cleanName(input.name);
-  if (!name) return { error: "Le nom est requis (80 caractères au plus)." };
-  const directory = readDirectory(input.directory);
+  if (!name) return { error: serverMessages(db).errors.nameRequired };
+  const directory = readDirectory(db, input.directory);
   if ("error" in directory) return directory;
   const taken = takenBy(db, directory.path);
   if (taken) return { error: taken };
@@ -80,19 +83,20 @@ function readSubProjects(
   db: Db,
   root: string,
   subProjects: SubProjectInput[],
+  locate: boolean,
 ): { items: { path: string; name: string; description: string }[] } | { error: string } {
+  const m = serverMessages(db).errors;
   const items: { path: string; name: string; description: string }[] = [];
   for (const [index, item] of subProjects.entries()) {
-    const label = `Dépôt ${index + 1} : `;
+    // Adding to an existing multi-project has only one form, which needs no position.
+    const located = (message: string) => ({ error: locate ? m.repository(index + 1, message) : message });
     const name = cleanName(item.name);
-    if (!name) return { error: `${label}le nom est requis (80 caractères au plus).` };
-    const directory = readSubdirectory(root, item.subdirectory);
-    if ("error" in directory) return { error: label + directory.error };
+    if (!name) return located(m.nameRequired);
+    const directory = readSubdirectory(db, root, item.subdirectory);
+    if ("error" in directory) return located(directory.error);
     const taken = takenBy(db, directory.path);
-    if (taken) return { error: label + taken };
-    if (items.some(({ path }) => path === directory.path)) {
-      return { error: `${label}ce sous-répertoire est saisi deux fois.` };
-    }
+    if (taken) return located(taken);
+    if (items.some(({ path }) => path === directory.path)) return located(m.subdirectoryTwice);
     items.push({ path: directory.path, name, description: item.description });
   }
   return { items };
@@ -101,13 +105,13 @@ function readSubProjects(
 /** The first id is the multi-project itself, the others its sub-projects. */
 export function registerMultiProject(db: Db, input: ProjectInput, subProjects: SubProjectInput[]): Registered {
   const name = cleanName(input.name);
-  if (!name) return { error: "Le nom est requis (80 caractères au plus)." };
-  const directory = readDirectory(input.directory);
+  if (!name) return { error: serverMessages(db).errors.nameRequired };
+  const directory = readDirectory(db, input.directory);
   if ("error" in directory) return directory;
   const taken = takenBy(db, directory.path);
   if (taken) return { error: taken };
-  if (subProjects.length === 0) return { error: "Ajoute au moins un dépôt." };
-  const read = readSubProjects(db, directory.path, subProjects);
+  if (subProjects.length === 0) return { error: serverMessages(db).errors.noRepository };
+  const read = readSubProjects(db, directory.path, subProjects, true);
   if ("error" in read) return read;
 
   return {
@@ -124,9 +128,9 @@ export function registerMultiProject(db: Db, input: ProjectInput, subProjects: S
 
 export function registerSubProject(db: Db, groupId: number, input: SubProjectInput): Registered {
   const group = db.select().from(projects).where(eq(projects.id, groupId)).get();
-  if (!group || group.kind !== "group") return { error: "Ce multi-projet n'existe plus." };
-  const read = readSubProjects(db, group.path, [input]);
-  if ("error" in read) return { error: read.error.replace(/^Dépôt 1 : /, "") };
+  if (!group || group.kind !== "group") return { error: serverMessages(db).errors.multiProjectGone };
+  const read = readSubProjects(db, group.path, [input], false);
+  if ("error" in read) return read;
   const [item] = read.items;
   return {
     ids: [
@@ -141,11 +145,11 @@ export function registerSubProject(db: Db, groupId: number, input: SubProjectInp
  */
 export function changeDirectory(db: Db, projectId: number, value: string): Registered {
   const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
-  if (!project) return { error: "Ce projet n'existe plus." };
+  if (!project) return { error: serverMessages(db).errors.projectGone };
   const parent = project.parentId
     ? db.select().from(projects).where(eq(projects.id, project.parentId)).get()
     : undefined;
-  const directory = parent ? readSubdirectory(parent.path, value) : readDirectory(value);
+  const directory = parent ? readSubdirectory(db, parent.path, value) : readDirectory(db, value);
   if ("error" in directory) return directory;
   const { path } = directory;
 

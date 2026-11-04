@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { revealEnvFile } from "@/app/actions";
+import { useMessages } from "@/i18n/provider";
 import type { EnvEntry } from "@/server/project-files";
 import { DATA } from "../../ui";
 
 function EnvFile({ projectId, file }: { projectId: number; file: string }) {
+  const m = useMessages().env;
   // Values stay in memory only while revealed, and are dropped when masked again.
   const [entries, setEntries] = useState<EnvEntry[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -34,19 +36,19 @@ function EnvFile({ projectId, file }: { projectId: number; file: string }) {
           aria-expanded={entries !== null}
           className="min-h-9 cursor-pointer border border-rule px-3 hover:border-ink disabled:cursor-default disabled:opacity-50"
         >
-          {entries ? "Masquer" : "Afficher"}
+          {entries ? m.hide : m.show}
         </button>
       </div>
-      {failed ? <p className="pt-2 text-alert">Ce fichier n&apos;a pas pu être lu.</p> : null}
+      {failed ? <p className="pt-2 text-alert">{m.unreadable}</p> : null}
       {entries ? (
         entries.length === 0 ? (
-          <p className="pt-2 text-mut">Aucune variable.</p>
+          <p className="pt-2 text-mut">{m.noVariables}</p>
         ) : (
           <dl className="mt-2 overflow-x-auto">
             {entries.map(({ key, value }, index) => (
               <div key={`${key}-${index}`} className={`${DATA} flex gap-3 py-1 whitespace-nowrap`}>
                 <dt className="text-mut">{key}</dt>
-                <dd>{value || "(vide)"}</dd>
+                <dd>{value || m.empty}</dd>
               </div>
             ))}
           </dl>

@@ -2,23 +2,20 @@
 
 import Link from "next/link";
 import { useOptimistic, useRef, useState, useTransition } from "react";
-import { formatAge, groupRows, type RegistryRow, STATUS_LABELS } from "@/lib/registry";
+import { useMessages } from "@/i18n/provider";
+import { formatAge, groupRows, type RegistryRow } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
 import { importBackup, updateStatus } from "../actions";
 import { TagList } from "../tag-list";
 import { BUTTON, DATA } from "../ui";
 
-const COLUMNS: { status: ProjectStatus | null; label: string }[] = [
-  { status: null, label: "Sans statut" },
-  { status: "active", label: STATUS_LABELS.active },
-  { status: "paused", label: STATUS_LABELS.paused },
-  { status: "resume", label: STATUS_LABELS.resume },
-];
+const COLUMNS: (ProjectStatus | null)[] = [null, "active", "paused", "resume"];
 
 const MOVE =
   "h-full min-h-[60px] cursor-pointer border-l border-rule font-mono hover:bg-ink hover:text-bg disabled:cursor-default disabled:text-rule disabled:hover:bg-transparent";
 
 function Backup() {
+  const m = useMessages().board;
   const input = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -30,10 +27,7 @@ function Backup() {
       if ("error" in result) {
         setMessage(result.error);
       } else {
-        const unknown = result.unknownPaths.length;
-        setMessage(
-          `${result.imported} projet${result.imported > 1 ? "s" : ""} restauré${result.imported > 1 ? "s" : ""}${unknown > 0 ? `, ${unknown} chemins inconnus ignorés` : ""}.`,
-        );
+        setMessage(m.restored(result.imported, result.unknownPaths.length));
       }
       if (input.current) input.current.value = "";
     });
@@ -47,17 +41,17 @@ function Backup() {
         </span>
       ) : null}
       <a href="/api/classification" download className={`${BUTTON} inline-flex items-center`}>
-        Exporter
+        {m.export}
       </a>
       <button type="button" disabled={pending} onClick={() => input.current?.click()} className={BUTTON}>
-        {pending ? "Import…" : "Importer"}
+        {pending ? m.importing : m.import}
       </button>
       <input
         ref={input}
         type="file"
         accept="application/json,.json"
         className="sr-only"
-        aria-label="Importer un export de classement"
+        aria-label={m.importLabel}
         tabIndex={-1}
         onChange={(event) => onFile(event.target.files?.[0])}
       />
@@ -74,6 +68,8 @@ export function Board({
   knownTags: string[];
   now: number;
 }) {
+  const messages = useMessages();
+  const m = messages.board;
   const [tag, setTag] = useState<string | null>(null);
   const [, start] = useTransition();
   const [optimistic, applyMove] = useOptimistic(
@@ -83,7 +79,7 @@ export function Board({
   );
 
   const move = (row: RegistryRow, index: number) => {
-    const { status } = COLUMNS[index];
+    const status = COLUMNS[index];
     start(async () => {
       applyMove({ id: row.id, status });
       await updateStatus([row.id], status);
@@ -101,9 +97,9 @@ export function Board({
           {row.name}
         </div>
         <div className={`${DATA} truncate text-mut`}>
-          {row.hasGit ? formatAge(row.lastCommitAt, now) : "sans git"}
+          {row.hasGit ? formatAge(row.lastCommitAt, now, messages.age) : m.noGit}
           {(row.dirtyCount ?? 0) > 0 ? (
-            <span className="font-medium text-alert"> · {row.dirtyCount} modif{(row.dirtyCount ?? 0) > 1 ? "s" : ""}</span>
+            <span className="font-medium text-alert"> · {m.changes(row.dirtyCount ?? 0)}</span>
           ) : null}
         </div>
         <TagList tags={row.tags} />
@@ -112,7 +108,7 @@ export function Board({
         type="button"
         className={MOVE}
         disabled={index === 0}
-        aria-label={`Déplacer ${row.name} vers la colonne précédente`}
+        aria-label={m.previous(row.name)}
         onClick={() => move(row, index - 1)}
       >
         ←
@@ -121,7 +117,7 @@ export function Board({
         type="button"
         className={MOVE}
         disabled={index === COLUMNS.length - 1}
-        aria-label={`Déplacer ${row.name} vers la colonne suivante`}
+        aria-label={m.next(row.name)}
         onClick={() => move(row, index + 1)}
       >
         →
@@ -130,7 +126,7 @@ export function Board({
   );
 
   const filters: { value: string | null; label: string }[] = [
-    { value: null, label: "Tous" },
+    { value: null, label: m.all },
     ...knownTags.map((name) => ({ value: name, label: name })),
   ];
   const shown = optimistic.filter(
@@ -140,7 +136,7 @@ export function Board({
   return (
     <main className="flex-1">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink px-4 py-2">
-        <div role="group" aria-label="Filtrer par tag" className="flex flex-wrap pl-px">
+        <div role="group" aria-label={m.filterByTag} className="flex flex-wrap pl-px">
           {filters.map(({ value, label }) => (
             <button
               key={label}
@@ -157,7 +153,8 @@ export function Board({
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))]">
-        {COLUMNS.map(({ status, label }, index) => {
+        {COLUMNS.map((status, index) => {
+          const label = messages.status[status ?? "none"];
           const items = shown.filter((row) => row.status === status);
           return (
             <section key={label} aria-label={label} className="min-w-0 border-r border-rule last:border-r-0">
@@ -178,7 +175,7 @@ export function Board({
                   </div>
                 ),
               )}
-              {items.length === 0 ? <p className="px-4 py-5 text-mut">Aucun projet</p> : null}
+              {items.length === 0 ? <p className="px-4 py-5 text-mut">{m.noProjects}</p> : null}
             </section>
           );
         })}

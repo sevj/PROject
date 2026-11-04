@@ -1,10 +1,7 @@
+import type { Messages } from "@/i18n";
 import type { ContainerFact, ProjectStatus, VersionFact } from "@/server/db/schema";
 
-export const STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: "Actif",
-  paused: "En pause",
-  resume: "À reprendre",
-};
+export const STATUSES: ProjectStatus[] = ["active", "paused", "resume"];
 
 export type RegistryRow = {
   id: number;
@@ -68,10 +65,10 @@ export function runningCount(row: RegistryRow): number {
   return row.containers.filter((container) => container.state === "running").length;
 }
 
-export function dockerLabel(row: RegistryRow): string {
+export function dockerLabel(row: RegistryRow, m: Messages["docker"]): string {
   const running = runningCount(row);
-  if (running > 0) return `${running} up`;
-  return row.hasCompose || row.containers.length > 0 ? "arrêté" : "—";
+  if (running > 0) return m.up(running);
+  return row.hasCompose || row.containers.length > 0 ? m.stopped : "—";
 }
 
 const VIEW_TESTS: Record<RegistryView, (row: RegistryRow) => boolean> = {
@@ -195,30 +192,27 @@ export function countTags(rows: RegistryRow[], view: RegistryView) {
 }
 
 /** `now` is passed in so that the server and the client render the same text. */
-export function formatAge(timestamp: number | null, now: number): string {
-  if (timestamp === null) return "aucun";
+export function formatAge(timestamp: number | null, now: number, m: Messages["age"]): string {
+  if (timestamp === null) return m.none;
   const minutes = Math.max(0, Math.floor((now - timestamp) / 60_000));
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return m.minutes(minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours} h`;
+  if (hours < 48) return m.hours(hours);
   const days = Math.floor(hours / 24);
-  if (days < 14) return `${days} j`;
-  if (days < 60) return `${Math.floor(days / 7)} sem.`;
-  if (days < 365) return `${Math.floor(days / 30)} mois`;
-  const years = Math.floor(days / 365);
-  return `${years} an${years > 1 ? "s" : ""}`;
+  if (days < 14) return m.days(days);
+  if (days < 60) return m.weeks(Math.floor(days / 7));
+  if (days < 365) return m.months(Math.floor(days / 30));
+  return m.years(Math.floor(days / 365));
 }
 
-const SIZE_UNITS = ["o", "Ko", "Mo", "Go", "To"];
-
-export function formatSize(bytes: number | null): string {
+export function formatSize(bytes: number | null, m: Messages["size"]): string {
   if (bytes === null) return "—";
   let value = bytes;
   let unit = 0;
-  while (value >= 1024 && unit < SIZE_UNITS.length - 1) {
+  while (value >= 1024 && unit < m.units.length - 1) {
     value /= 1024;
     unit += 1;
   }
   const digits = value < 10 && unit > 0 ? 1 : 0;
-  return `${value.toFixed(digits).replace(".", ",")} ${SIZE_UNITS[unit]}`;
+  return `${value.toFixed(digits).replace(".", m.decimal)} ${m.units[unit]}`;
 }

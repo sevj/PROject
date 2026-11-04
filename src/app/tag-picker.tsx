@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimistic, useState, useTransition } from "react";
+import { useMessages } from "@/i18n/provider";
 import { addTagTo, removeTagFrom } from "./actions";
 import { FIELD, LABEL } from "./ui";
 
@@ -25,6 +26,7 @@ export function TagPicker({
   /** For each tag, how many of `projectIds` carry it. */
   counts: Record<string, number>;
 }) {
+  const m = useMessages().tags;
   const [query, setQuery] = useState("");
   const [, start] = useTransition();
   const [changes, applyChange] = useOptimistic<Change[], Change>([], (current, change) => [
@@ -66,7 +68,7 @@ export function TagPicker({
 
   return (
     <div>
-      {showLabel ? <div className={`${LABEL} pb-1.5`}>Tags</div> : null}
+      {showLabel ? <div className={`${LABEL} pb-1.5`}>{m.label}</div> : null}
       {shown.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 pb-2">
           {shown.map((name) => {
@@ -76,7 +78,7 @@ export function TagPicker({
                 key={name}
                 type="button"
                 aria-pressed={state === "all" ? true : state === "some" ? "mixed" : false}
-                title={state === "all" ? `Retirer ${name}` : `Ajouter ${name}`}
+                title={state === "all" ? m.remove(name) : m.add(name)}
                 onClick={() => setTag(name, state !== "all")}
                 className={TAG}
               >
@@ -95,18 +97,18 @@ export function TagPicker({
         }}
       >
         <label className="min-w-0 flex-1">
-          <span className="sr-only">Chercher ou créer un tag</span>
+          <span className="sr-only">{m.search}</span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={names.length > 0 ? "Chercher ou créer un tag" : "Nom du premier tag"}
+            placeholder={names.length > 0 ? m.search : m.first}
             maxLength={80}
             className={`${FIELD} placeholder:text-mut`}
           />
         </label>
         {clean && !exact ? (
           <button type="submit" className="min-h-10 max-w-[55%] cursor-pointer truncate border border-ink px-3 font-medium hover:bg-ink hover:text-bg">
-            Créer « {clean} »
+            {m.create(clean)}
           </button>
         ) : null}
       </form>

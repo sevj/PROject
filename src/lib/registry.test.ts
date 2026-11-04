@@ -8,6 +8,8 @@ import {
   type RegistryRow,
   selectRows,
 } from "./registry";
+import { en } from "@/i18n/en";
+import { fr } from "@/i18n/fr";
 
 const DAY = 24 * 3600 * 1000;
 const NOW = 1000 * DAY;
@@ -222,13 +224,13 @@ describe("groupRows", () => {
 describe("formatSize", () => {
   it.each([
     [null, "—"],
-    [0, "0 o"],
-    [1023, "1023 o"],
-    [1536, "1,5 Ko"],
-    [146 * 1024 * 1024, "146 Mo"],
-    [8.8 * 1024 ** 3, "8,8 Go"],
+    [0, "0 B"],
+    [1023, "1023 B"],
+    [1536, "1.5 KB"],
+    [146 * 1024 * 1024, "146 MB"],
+    [8.8 * 1024 ** 3, "8.8 GB"],
   ])("formats %s as %s", (bytes, expected) => {
-    expect(formatSize(bytes)).toBe(expected);
+    expect(formatSize(bytes, en.size)).toBe(expected);
   });
 
   it("sorts unmeasured projects last", () => {
@@ -238,16 +240,25 @@ describe("formatSize", () => {
 
 describe("formatAge", () => {
   it.each([
-    [null, "aucun"],
+    [null, "none"],
     [NOW - 5 * 60_000, "5 min"],
     [NOW - 5 * 3_600_000, "5 h"],
-    [NOW - 3 * DAY, "3 j"],
-    [NOW - 28 * DAY, "4 sem."],
-    [NOW - 150 * DAY, "5 mois"],
-    [NOW - 400 * DAY, "1 an"],
-    [NOW - 800 * DAY, "2 ans"],
+    [NOW - 3 * DAY, "3 d"],
+    [NOW - 28 * DAY, "4 wk"],
+    [NOW - 150 * DAY, "5 mo"],
+    [NOW - 400 * DAY, "1 yr"],
+    [NOW - 800 * DAY, "2 yrs"],
     [NOW + 60_000, "0 min"],
   ])("formats %s as %s", (timestamp, expected) => {
-    expect(formatAge(timestamp, NOW)).toBe(expected);
+    expect(formatAge(timestamp, NOW, en.age)).toBe(expected);
+  });
+});
+
+describe("French formats", () => {
+  it("uses its own units, decimals and plurals", () => {
+    expect(formatSize(1536, fr.size)).toBe("1,5 Ko");
+    expect(formatAge(NOW - 3 * DAY, NOW, fr.age)).toBe("3 j");
+    expect(formatAge(NOW - 800 * DAY, NOW, fr.age)).toBe("2 ans");
+    expect(formatAge(NOW - 400 * DAY, NOW, fr.age)).toBe("1 an");
   });
 });

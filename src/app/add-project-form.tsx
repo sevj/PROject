@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useMessages } from "@/i18n/provider";
 import { addMultiProject, addProject, addSubProject } from "./actions";
 import { BUTTON, DATA, FIELD, LABEL } from "./ui";
 
@@ -38,14 +39,15 @@ function TextField({
 }
 
 function DescriptionField({ name }: { name: string }) {
+  const m = useMessages().form;
   return (
     <label>
-      <span className={`${LABEL} block pb-1`}>Description</span>
+      <span className={`${LABEL} block pb-1`}>{m.description}</span>
       <textarea
         name={name}
         rows={2}
         maxLength={500}
-        placeholder="À quoi sert ce projet ?"
+        placeholder={m.descriptionPlaceholder}
         className={`${FIELD} block resize-y py-2 placeholder:text-mut`}
       />
     </label>
@@ -53,11 +55,12 @@ function DescriptionField({ name }: { name: string }) {
 }
 
 function SubProjectFields({ prefix, autoFocus = false }: { prefix: string; autoFocus?: boolean }) {
+  const m = useMessages().form;
   return (
     <>
-      <TextField label="Nom" name={`${prefix}name`} autoFocus={autoFocus} />
+      <TextField label={m.name} name={`${prefix}name`} autoFocus={autoFocus} />
       <DescriptionField name={`${prefix}description`} />
-      <TextField label="Sous-répertoire" name={`${prefix}subdirectory`} placeholder="front" mono />
+      <TextField label={m.subdirectory} name={`${prefix}subdirectory`} placeholder="front" mono />
     </>
   );
 }
@@ -85,6 +88,8 @@ export function AddProjectForm({
   onCreated: (id: number) => void;
   onCancel?: () => void;
 }) {
+  const messages = useMessages();
+  const m = messages.form;
   const [multi, setMulti] = useState(false);
   const [repoKeys, setRepoKeys] = useState([0]);
   const [error, setError] = useState<string | null>(null);
@@ -114,23 +119,23 @@ export function AddProjectForm({
         submit(new FormData(event.currentTarget));
       }}
     >
-      <h2 className="text-[32px] leading-[1.05] font-bold tracking-tight">Ajouter un projet</h2>
+      <h2 className="text-[32px] leading-[1.05] font-bold tracking-tight">{m.title}</h2>
 
-      <div role="group" aria-label="Type de projet" className="flex">
+      <div role="group" aria-label={m.type} className="flex">
         <button type="button" aria-pressed={!multi} onClick={() => setMulti(false)} className={MODE}>
-          Projet
+          {m.project}
         </button>
         <button type="button" aria-pressed={multi} onClick={() => setMulti(true)} className={MODE}>
-          Multi-projet
+          {m.multiProject}
         </button>
       </div>
 
-      <TextField label="Nom" name="name" autoFocus />
+      <TextField label={m.name} name="name" autoFocus />
       <DescriptionField name="description" />
       <TextField
-        label={multi ? "Répertoire racine" : "Répertoire"}
+        label={multi ? m.rootDirectory : m.directory}
         name="directory"
-        placeholder="~/Projects/mon-projet"
+        placeholder={m.directoryPlaceholder}
         mono
       />
 
@@ -139,15 +144,15 @@ export function AddProjectForm({
           {repoKeys.map((key, index) => (
             <fieldset key={key} className="grid gap-3 border-t border-ink pt-3">
               <div className="flex items-center justify-between gap-3">
-                <legend className="contents font-semibold">Dépôt {index + 1}</legend>
+                <legend className="contents font-semibold">{m.repository(index + 1)}</legend>
                 {repoKeys.length > 1 ? (
                   <button
                     type="button"
                     onClick={() => setRepoKeys((keys) => keys.filter((item) => item !== key))}
-                    aria-label={`Enlever le dépôt ${index + 1}`}
+                    aria-label={m.removeRepositoryLabel(index + 1)}
                     className="min-h-8 cursor-pointer text-mut underline hover:text-ink"
                   >
-                    Enlever
+                    {m.removeRepository}
                   </button>
                 ) : null}
               </div>
@@ -159,7 +164,7 @@ export function AddProjectForm({
             className={BUTTON}
             onClick={() => setRepoKeys((keys) => [...keys, Math.max(...keys) + 1])}
           >
-            Ajouter un dépôt
+            {messages.panel.addRepository}
           </button>
         </>
       ) : null}
@@ -172,11 +177,11 @@ export function AddProjectForm({
           disabled={pending}
           className={`${BUTTON} bg-ink text-bg hover:bg-transparent hover:text-ink`}
         >
-          {pending ? "Ajout…" : multi ? "Ajouter le multi-projet" : "Ajouter le projet"}
+          {pending ? messages.common.adding : multi ? m.addMultiProject : m.addProject}
         </button>
         {onCancel ? (
           <button type="button" onClick={onCancel} className={BUTTON}>
-            Annuler
+            {messages.common.cancel}
           </button>
         ) : null}
       </div>
@@ -193,6 +198,7 @@ export function AddSubProjectForm({
   onCreated: (id: number) => void;
   onCancel: () => void;
 }) {
+  const m = useMessages();
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -214,10 +220,10 @@ export function AddSubProjectForm({
       <FormError message={error} />
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending} className={BUTTON}>
-          {pending ? "Ajout…" : "Ajouter le dépôt"}
+          {pending ? m.common.adding : m.panel.addRepository}
         </button>
         <button type="button" onClick={onCancel} className={BUTTON}>
-          Annuler
+          {m.common.cancel}
         </button>
       </div>
     </form>

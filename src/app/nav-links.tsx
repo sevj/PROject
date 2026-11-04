@@ -2,18 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const LINKS = [
-  { href: "/", label: "Registre" },
-  { href: "/organisation", label: "Organisation" },
-  { href: "/reglages", label: "Réglages" },
-] as const;
+import { useMessages } from "@/i18n/provider";
 
 export function NavLinks() {
   const pathname = usePathname();
+  const m = useMessages().nav;
+  const links = [
+    { href: "/", label: m.projects },
+    { href: "/board", label: m.board },
+    { href: "/settings", label: m.settings },
+  ];
   return (
-    <nav aria-label="Vues principales" className="flex self-stretch">
-      {LINKS.map(({ href, label }) => (
+    <nav aria-label={m.label} className="flex self-stretch">
+      {links.map(({ href, label }) => (
         <Link
           key={href}
           href={href}

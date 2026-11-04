@@ -1,13 +1,16 @@
 "use client";
 
 import { useTransition } from "react";
-import { STATUS_LABELS, type RegistryRow } from "@/lib/registry";
+import { useMessages } from "@/i18n/provider";
+import { STATUSES, type RegistryRow } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
 import { saveNote, toggleFavorite, updateStatus } from "./actions";
 import { FIELD, LABEL } from "./ui";
 
 /** Mount with `key={row.id}`: the note field keeps its own text while typing. */
 export function ClassificationEditor({ row }: { row: RegistryRow }) {
+  const messages = useMessages();
+  const m = messages.classification;
   const [, start] = useTransition();
   const run = (action: () => Promise<void>) => start(action);
 
@@ -15,7 +18,7 @@ export function ClassificationEditor({ row }: { row: RegistryRow }) {
     <div className="grid gap-3">
       <div className="grid grid-cols-2 gap-2">
         <label>
-          <span className={`${LABEL} block pb-1`}>Statut</span>
+          <span className={`${LABEL} block pb-1`}>{m.status}</span>
           <select
             className={FIELD}
             value={row.status ?? ""}
@@ -23,33 +26,33 @@ export function ClassificationEditor({ row }: { row: RegistryRow }) {
               run(() => updateStatus([row.id], (event.target.value || null) as ProjectStatus | null))
             }
           >
-            <option value="">Sans statut</option>
-            {Object.entries(STATUS_LABELS).map(([status, label]) => (
+            <option value="">{messages.status.none}</option>
+            {STATUSES.map((status) => (
               <option key={status} value={status}>
-                {label}
+                {messages.status[status]}
               </option>
             ))}
           </select>
         </label>
         <div>
-          <span className={`${LABEL} block pb-1`}>Favori</span>
+          <span className={`${LABEL} block pb-1`}>{m.favorite}</span>
           <button
             type="button"
             aria-pressed={row.favorite}
             onClick={() => run(() => toggleFavorite(row.id, !row.favorite))}
             className={`${FIELD} cursor-pointer text-left hover:border-ink aria-pressed:border-ink`}
           >
-            {row.favorite ? "★ Favori" : "☆ Ajouter"}
+            {row.favorite ? m.isFavorite : m.addFavorite}
           </button>
         </div>
       </div>
 
       <label>
-        <span className={`${LABEL} block pb-1`}>Note</span>
+        <span className={`${LABEL} block pb-1`}>{m.note}</span>
         <textarea
           rows={3}
           defaultValue={row.note ?? ""}
-          placeholder="Prochaine étape, point à ne pas oublier"
+          placeholder={m.notePlaceholder}
           onBlur={(event) => {
             if (event.target.value !== (row.note ?? "")) {
               const note = event.target.value;

@@ -193,7 +193,7 @@ describe("refreshAll", () => {
     await refreshAll();
     const rows = db.select().from(scans).all();
     expect(rows.map((scan) => scan.status)).toEqual(["failed", "done"]);
-    expect(rows[0].error).toBe("Actualisation interrompue");
+    expect(rows[0].error).toBe("interrupted");
   });
 
   it("never opens an abandoned project, even once its folder is gone", async () => {

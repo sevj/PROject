@@ -11,6 +11,10 @@ pnpm dev
 
 Puis ouvrir http://127.0.0.1:4300. Les projets s'ajoutent à la main (nom, description, répertoire), seuls ou en multi-projet avec un sous-répertoire par dépôt. Rien n'est découvert automatiquement, et leurs informations se rafraîchissent à la demande.
 
+## Langues
+
+L'interface est en anglais par défaut, et la langue se choisit dans Settings. Pour en ajouter une : copier `src/i18n/fr.ts`, le traduire, puis l'ajouter à `LANGUAGES` dans `src/i18n/index.ts`. TypeScript signale toute clé manquante.
+
 ## Données et sécurité
 
 - **Base :** SQLite dans `~/.local/share/project-manager/pm.db`. `PM_DB_PATH` permet de pointer ailleurs.

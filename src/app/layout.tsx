@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { DM_Mono, Schibsted_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
+import { DEFAULT_LOCALE } from "@/i18n";
+import { LocaleBoundary } from "./locale-boundary";
 import { NavLinks } from "./nav-links";
 import "./globals.css";
 
@@ -18,22 +20,26 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   title: "Project Manager",
-  description: "Visualiser et organiser les projets de la machine",
+  description: "See and organize the projects on this machine",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={`${schibsted.variable} ${dmMono.variable} h-full antialiased`}>
+    <html lang={DEFAULT_LOCALE} className={`${schibsted.variable} ${dmMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
-        <header className="flex min-h-14 flex-wrap items-center gap-x-6 border-b border-ink px-4">
-          <Link href="/" className="text-[15px] font-bold tracking-tight">
-            Project Manager
-          </Link>
-          <Suspense>
-            <NavLinks />
-          </Suspense>
-        </header>
-        {children}
+        <Suspense>
+          <LocaleBoundary>
+            <header className="flex min-h-14 flex-wrap items-center gap-x-6 border-b border-ink px-4">
+              <Link href="/" className="text-[15px] font-bold tracking-tight">
+                Project Manager
+              </Link>
+              <Suspense>
+                <NavLinks />
+              </Suspense>
+            </header>
+            {children}
+          </LocaleBoundary>
+        </Suspense>
       </body>
     </html>
   );

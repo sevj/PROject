@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { en, type Messages } from "@/i18n/en";
 import { buildCommand } from "@/lib/commands";
 import type { ContainerFact } from "./db/schema";
 
@@ -8,12 +9,12 @@ const run = promisify(execFile);
 const COMPOSE_TIMEOUT = 5 * 60_000;
 
 /** Starts a GUI program without waiting for it to close. Resolves with an error message. */
-export function launch(template: string, path: string): Promise<string | null> {
+export function launch(template: string, path: string, m: Messages["errors"] = en.errors): Promise<string | null> {
   const command = buildCommand(template, path);
-  if (!command) return Promise.resolve("Aucune commande n'est configurée.");
+  if (!command) return Promise.resolve(m.noCommand);
   return new Promise((resolve) => {
     const child = spawn(command.file, command.args, { cwd: path, detached: true, stdio: "ignore" });
-    child.once("error", (error) => resolve(`Impossible de lancer ${command.file} : ${error.message}`));
+    child.once("error", (error) => resolve(m.launchFailed(command.file, error.message)));
     child.once("spawn", () => {
       child.unref();
       resolve(null);
@@ -39,8 +40,12 @@ export function composeDirectories(
  * `stop`, never `down`: containers are kept, along with anonymous volumes and any
  * state they hold, so that starting again is harmless.
  */
-export async function runCompose(mode: "up" | "stop", directories: string[]): Promise<string | null> {
-  if (directories.length === 0) return "Aucun fichier Docker Compose n'a été trouvé pour ce projet.";
+export async function runCompose(
+  mode: "up" | "stop",
+  directories: string[],
+  m: Messages["errors"] = en.errors,
+): Promise<string | null> {
+  if (directories.length === 0) return m.noCompose;
   const args = mode === "up" ? ["compose", "up", "-d"] : ["compose", "stop"];
   for (const cwd of directories) {
     try {

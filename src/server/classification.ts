@@ -9,6 +9,7 @@ import {
   projectTags,
   tags,
 } from "./db/schema";
+import { serverMessages } from "./i18n";
 
 const MAX_NAME = 80;
 const MAX_NOTE = 20_000;
@@ -106,13 +107,14 @@ export function removeTag(db: Db, projectIds: number[], name: string) {
 }
 
 export function renameTag(db: Db, name: string, nextName: string): string | null {
+  const m = serverMessages(db).errors;
   const clean = cleanName(nextName);
-  if (!clean) return "Ce nom de tag n'est pas valide.";
+  if (!clean) return m.tagInvalid;
   const tag = db.select().from(tags).where(eq(tags.name, name)).get();
-  if (!tag) return "Ce tag n'existe plus.";
+  if (!tag) return m.tagGone;
   const lower = clean.toLocaleLowerCase("fr");
   const taken = db.select().from(tags).all().find((item) => item.name.toLocaleLowerCase("fr") === lower);
-  if (taken && taken.id !== tag.id) return `Le tag « ${taken.name} » existe déjà.`;
+  if (taken && taken.id !== tag.id) return m.tagExists(taken.name);
   db.update(tags).set({ name: clean }).where(eq(tags.id, tag.id)).run();
   return null;
 }
@@ -219,10 +221,10 @@ export function importClassification(db: Db, json: string): ImportResult {
   try {
     parsed = JSON.parse(json);
   } catch {
-    return { error: "Ce fichier n'est pas du JSON valide." };
+    return { error: serverMessages(db).errors.importNotJson };
   }
   const items = parseExport(parsed);
-  if (!items) return { error: "Ce fichier n'est pas un export de Project Manager." };
+  if (!items) return { error: serverMessages(db).errors.importNotExport };
 
   return db.transaction((tx) => {
     const txDb = tx as unknown as Db;

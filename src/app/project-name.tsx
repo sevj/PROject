@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimistic, useRef, useState, useTransition } from "react";
+import { useMessages } from "@/i18n/provider";
 import { renameProject } from "./actions";
 
 export function ProjectName({
@@ -14,6 +15,7 @@ export function ProjectName({
   folderName: string;
   className: string;
 }) {
+  const m = useMessages().name;
   const [editing, setEditing] = useState(false);
   const [, start] = useTransition();
   const [shownName, showName] = useOptimistic(name);
@@ -46,7 +48,7 @@ export function ProjectName({
         }}
       >
         <label>
-          <span className="sr-only">Nom du projet, vide pour reprendre le nom du dossier</span>
+          <span className="sr-only">{m.label}</span>
           <input
             name="name"
             defaultValue={name === folderName ? "" : name}
@@ -71,7 +73,7 @@ export function ProjectName({
     <div className="flex flex-wrap items-baseline gap-x-3">
       <h1 className={`${className} min-w-0 break-words`}>{shownName}</h1>
       <button type="button" onClick={open} className="min-h-8 cursor-pointer text-mut underline hover:text-ink">
-        Renommer
+        {m.rename}
       </button>
     </div>
   );

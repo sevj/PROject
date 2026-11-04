@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useMessages } from "@/i18n/provider";
 import { moveProject } from "./actions";
 import { BUTTON, DATA, FIELD } from "./ui";
 
@@ -19,6 +20,7 @@ export function ProjectDirectory({
   parentPath: string | null;
   missing: boolean;
 }) {
+  const m = useMessages();
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -27,14 +29,14 @@ export function ProjectDirectory({
     return (
       <div className={`${DATA} break-all`}>
         <span className={missing ? "text-alert" : "text-mut"}>{path}</span>{" "}
-        {missing ? <span className="text-alert">introuvable </span> : null}
+        {missing ? <span className="text-alert">{m.directory.notFound} </span> : null}
         <button
           type="button"
           onClick={() => setEditing(true)}
-          aria-label="Modifier le répertoire"
+          aria-label={m.directory.editLabel}
           className="cursor-pointer text-mut underline hover:text-ink"
         >
-          Modifier
+          {m.directory.edit}
         </button>
       </div>
     );
@@ -56,7 +58,7 @@ export function ProjectDirectory({
     >
       <label>
         <span className={`${DATA} block pb-1 break-all text-mut`}>
-          {parentPath ? `Sous-répertoire de ${parentPath}` : "Répertoire"}
+          {parentPath ? m.directory.subdirectoryOf(parentPath) : m.directory.label}
         </span>
         <input
           name="directory"
@@ -78,10 +80,10 @@ export function ProjectDirectory({
       ) : null}
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending} className={BUTTON}>
-          {pending ? "Enregistrement…" : "Enregistrer"}
+          {pending ? m.common.saving : m.common.save}
         </button>
         <button type="button" onClick={() => setEditing(false)} className={BUTTON}>
-          Annuler
+          {m.common.cancel}
         </button>
       </div>
     </form>

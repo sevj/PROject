@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useMessages } from "@/i18n/provider";
 import { type RegistryRow, runningCount } from "@/lib/registry";
 import { dockerAction, markAbandoned, openIde, openTerminal } from "./actions";
 import { BUTTON, DATA } from "./ui";
 
 export function ProjectButtons({ row }: { row: RegistryRow }) {
+  const m = useMessages().buttons;
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const running = runningCount(row);
@@ -18,8 +20,7 @@ export function ProjectButtons({ row }: { row: RegistryRow }) {
 
   const abandon = () => {
     // Abandoning does not stop anything, and these containers would then run unseen.
-    const warning = `${running} conteneur${running > 1 ? "s tournent" : " tourne"} encore pour ce projet et ne ${running > 1 ? "seront" : "sera"} plus suivi${running > 1 ? "s" : ""}. Abandonner quand même ?`;
-    if (running === 0 || window.confirm(warning)) {
+    if (running === 0 || window.confirm(m.confirmAbandon(running))) {
       act(() => markAbandoned([row.id], true));
     }
   };
@@ -35,27 +36,27 @@ export function ProjectButtons({ row }: { row: RegistryRow }) {
               {row.ideLabel}
             </button>
             <button type="button" disabled={pending} className={BUTTON} onClick={() => act(() => openTerminal(row.id))}>
-              Terminal
+              {m.terminal}
             </button>
           </>
         )}
         {row.abandoned ? (
           <button type="button" disabled={pending} className={BUTTON} onClick={() => act(() => markAbandoned([row.id], false))}>
-            {pending ? "Restauration…" : "Restaurer"}
+            {pending ? m.restoring : m.restore}
           </button>
         ) : (
           <>
             {running > 0 ? (
               <button type="button" disabled={pending} className={BUTTON} onClick={() => act(() => dockerAction(row.id, "stop"))}>
-                {pending ? "Docker…" : `Arrêter ${running} conteneur${running > 1 ? "s" : ""}`}
+                {pending ? m.docker : m.stop(running)}
               </button>
             ) : canStart ? (
               <button type="button" disabled={pending} className={BUTTON} onClick={() => act(() => dockerAction(row.id, "up"))}>
-                {pending ? "Docker…" : "Démarrer Docker"}
+                {pending ? m.docker : m.start}
               </button>
             ) : null}
             <button type="button" disabled={pending} className={BUTTON} onClick={abandon}>
-              Abandonner
+              {m.abandon}
             </button>
           </>
         )}

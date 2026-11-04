@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useTransition } from "react";
 import { refreshProject } from "@/app/actions";
+import { useMessages } from "@/i18n/provider";
 
 export function RefreshButton({ projectId, sizing }: { projectId: number; sizing: boolean }) {
+  const m = useMessages().sheet;
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -18,7 +20,7 @@ export function RefreshButton({ projectId, sizing }: { projectId: number; sizing
     <div className="flex items-center gap-3">
       {sizing && !pending ? (
         <span role="status" className="font-mono text-[12.5px] text-mut">
-          Calcul des tailles…
+          {m.sizing}
         </span>
       ) : null}
       <button
@@ -27,7 +29,7 @@ export function RefreshButton({ projectId, sizing }: { projectId: number; sizing
         onClick={() => start(() => refreshProject(projectId))}
         className="min-h-11 cursor-pointer border border-ink px-4 font-medium hover:bg-ink hover:text-bg disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-ink"
       >
-        {pending ? "Rafraîchissement…" : "Rafraîchir"}
+        {pending ? m.refreshing : m.refresh}
       </button>
     </div>
   );

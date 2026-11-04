@@ -116,9 +116,9 @@ describe("tags", () => {
     addTag(db, [a], "perso");
     addTag(db, [a], "client");
     expect(renameTag(db, "perso", "Perso")).toBeNull();
-    expect(renameTag(db, "Perso", "CLIENT")).toContain("existe déjà");
-    expect(renameTag(db, "Perso", "  ")).toContain("pas valide");
-    expect(renameTag(db, "absent", "x")).toContain("n'existe plus");
+    expect(renameTag(db, "Perso", "CLIENT")).toContain("already exists");
+    expect(renameTag(db, "Perso", "  ")).toContain("not valid");
+    expect(renameTag(db, "absent", "x")).toContain("no longer exists");
     expect(tagNames()).toEqual(["client", "Perso"].sort());
   });
 
@@ -216,12 +216,12 @@ describe("export and import", () => {
   });
 
   it.each([
-    ["pas du json", "n'est pas du JSON"],
-    ["{}", "n'est pas un export"],
-    ['{"version":3,"projects":[]}', "n'est pas un export"],
-    ['{"version":2,"projects":[{"path":"/p/a","status":"x","favorite":false,"note":null,"abandoned":false,"tags":[]}]}', "n'est pas un export"],
-    ['{"version":2,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "n'est pas un export"],
-    ['{"version":1,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "n'est pas un export"],
+    ["pas du json", "not valid JSON"],
+    ["{}", "not a Project Manager export"],
+    ['{"version":3,"projects":[]}', "not a Project Manager export"],
+    ['{"version":2,"projects":[{"path":"/p/a","status":"x","favorite":false,"note":null,"abandoned":false,"tags":[]}]}', "not a Project Manager export"],
+    ['{"version":2,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "not a Project Manager export"],
+    ['{"version":1,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "not a Project Manager export"],
   ])("refuses %s without changing anything", (json, message) => {
     classify();
     const before = exportClassification(db);

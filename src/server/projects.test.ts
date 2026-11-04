@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addTag, setAbandoned } from "./classification";
 import { type Db, openDb } from "./db/client";
-import { projectFacts, projectMeta, projects, projectTags } from "./db/schema";
+import { projectFacts, projectMeta, projects, projectTags, settings } from "./db/schema";
 import {
   changeDirectory,
   registerMultiProject,
@@ -14,6 +14,7 @@ import {
   removeProjects,
 } from "./projects";
 import { getRegistry } from "./registry";
+import { getSettings, saveSettings } from "./settings";
 
 let root: string;
 let db: Db;
@@ -63,10 +64,10 @@ describe("registerProject", () => {
   });
 
   it.each([
-    ["an empty name", { name: "  ", description: "", directory: "/" }, "nom"],
-    ["an empty directory", { name: "a", description: "", directory: " " }, "requis"],
-    ["a relative directory", { name: "a", description: "", directory: "Projects/a" }, "chemin complet"],
-    ["an unknown directory", { name: "a", description: "", directory: "/nulle/part" }, "n'existe pas"],
+    ["an empty name", { name: "  ", description: "", directory: "/" }, "name"],
+    ["an empty directory", { name: "a", description: "", directory: " " }, "required"],
+    ["a relative directory", { name: "a", description: "", directory: "Projects/a" }, "full path"],
+    ["an unknown directory", { name: "a", description: "", directory: "/nulle/part" }, "does not exist"],
   ])("refuses %s", (_, input, message) => {
     const result = registerProject(db, input);
     expect("error" in result && result.error).toContain(message);
@@ -78,7 +79,22 @@ describe("registerProject", () => {
     expect(registerProject(db, { name: "a", description: "", directory: join(root, "file") })).toHaveProperty("error");
     ids(registerProject(db, { name: "a", description: "", directory: dir("app") }));
     const again = registerProject(db, { name: "b", description: "", directory: dir("app") });
-    expect("error" in again && again.error).toContain("déjà");
+    expect("error" in again && again.error).toContain("already");
+  });
+});
+
+describe("language", () => {
+  it("speaks English by default, and the chosen language once set", () => {
+    const refused = (result: ReturnType<typeof registerProject>) => ("error" in result ? result.error : null);
+    const input = { name: "a", description: "", directory: "/nulle/part" };
+    expect(refused(registerProject(db, input))).toBe("The directory /nulle/part does not exist.");
+    saveSettings(db, { locale: "fr" });
+    expect(refused(registerProject(db, input))).toBe("Le répertoire /nulle/part n'existe pas.");
+  });
+
+  it("falls back to English when the stored language no longer exists", () => {
+    db.insert(settings).values({ id: 1, value: { locale: "xx", ideCommands: {}, terminalCommand: "t" } }).run();
+    expect(getSettings(db).locale).toBe("en");
   });
 });
 
@@ -107,7 +123,7 @@ describe("registerMultiProject", () => {
   it("adds nothing at all when one repository is wrong", () => {
     dir("suite/front");
     const result = registerMultiProject(db, input(), [repo("Front", "front"), repo("Absent", "absent")]);
-    expect("error" in result && result.error).toContain("Dépôt 2");
+    expect("error" in result && result.error).toContain("Repository 2");
     expect(paths()).toEqual([]);
   });
 
@@ -142,9 +158,9 @@ describe("registerSubProject", () => {
     expect(db.select().from(projects).where(eq(projects.id, id)).get()).toMatchObject({ parentId: groupId, path: back });
 
     const refused = registerSubProject(db, front, { name: "x", description: "", subdirectory: "x" });
-    expect("error" in refused && refused.error).toContain("n'existe plus");
+    expect("error" in refused && refused.error).toContain("no longer exists");
     const twice = registerSubProject(db, groupId, { name: "Back", description: "", subdirectory: "back" });
-    expect("error" in twice && twice.error).toContain("déjà");
+    expect("error" in twice && twice.error).toContain("already");
   });
 });
 

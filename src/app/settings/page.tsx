@@ -3,12 +3,13 @@ import { Suspense } from "react";
 import { getDb } from "@/server/db/client";
 import { getRegistry } from "@/server/registry";
 import { getSettings } from "@/server/settings";
+import { LoadingFallback } from "../loading-fallback";
 import { SettingsForm } from "./settings-form";
 
 async function Settings() {
   await connection();
   const db = getDb();
-  const { ideCommands, terminalCommand } = getSettings(db);
+  const { ideCommands, terminalCommand, locale } = getSettings(db);
   const { rows, knownTags } = getRegistry(db);
   const stacks = [...new Set([...rows.flatMap((row) => row.stacks), ...Object.keys(ideCommands)])]
     .filter((stack) => stack !== "default")
@@ -16,6 +17,7 @@ async function Settings() {
 
   return (
     <SettingsForm
+      locale={locale}
       ideCommands={ideCommands}
       terminalCommand={terminalCommand}
       stacks={stacks}
@@ -26,7 +28,7 @@ async function Settings() {
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<main className="flex-1 p-4 font-mono text-[12.5px] text-mut">Chargement…</main>}>
+    <Suspense fallback={<LoadingFallback />}>
       <Settings />
     </Suspense>
   );

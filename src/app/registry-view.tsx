@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMessages } from "@/i18n/provider";
 import {
   countTags,
   countView,
@@ -16,7 +17,7 @@ import {
   type RegistryView as View,
   runningCount,
   selectRows,
-  STATUS_LABELS,
+  STATUSES,
 } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
 import { markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
@@ -34,10 +35,7 @@ const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
 const COLUMNS =
   "grid min-w-[798px] flex-1 grid-cols-[minmax(150px,1.4fr)_104px_100px_56px_68px_134px_56px_64px] items-center gap-x-2.5 pr-4";
 
-const VIEWS: { id: View; label: string }[] = [
-  { id: "all", label: "Tous" },
-  { id: "abandoned", label: "Abandonnés" },
-];
+const VIEWS: View[] = ["all", "abandoned"];
 
 const PANEL =
   "min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto";
@@ -55,16 +53,17 @@ function cellColor(commits: number): string {
 }
 
 function ActivityStrip({ weeks }: { weeks: number[] | null }) {
+  const m = useMessages().registry;
   if (!weeks) return <span className={`${DATA} text-mut`}>—</span>;
   const total = weeks.reduce((sum, commits) => sum + commits, 0);
   return (
-    <span className="flex h-4 gap-px" role="img" aria-label={`${total} commits sur 26 semaines`}>
+    <span className="flex h-4 gap-px" role="img" aria-label={m.activity(total)}>
       {weeks.map((commits, index) => (
         <span
           key={index}
           className="block h-4 w-1"
           style={{ background: cellColor(commits) }}
-          title={`Il y a ${weeks.length - 1 - index} sem. : ${commits} commit${commits > 1 ? "s" : ""}`}
+          title={m.activityWeek(weeks.length - 1 - index, commits)}
         />
       ))}
     </span>
@@ -117,11 +116,13 @@ function GroupHeader({
   onSelect: () => void;
   onCheck: (value: boolean) => void;
 }) {
+  const messages = useMessages();
+  const m = messages.registry;
   const total = group.rows.length;
   return (
     <div className={`flex min-h-11 hover:bg-sel ${selected ? "bg-sel shadow-[inset_3px_0_0_var(--ink)]" : "bg-panel"}`}>
       <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
-        <span className="sr-only">Sélectionner les projets de {group.name}</span>
+        <span className="sr-only">{m.selectGroup(group.name)}</span>
         <input
           type="checkbox"
           className={CHECKBOX}
@@ -138,7 +139,7 @@ function GroupHeader({
           <button
             type="button"
             aria-expanded={!collapsed}
-            aria-label={`${collapsed ? "Déplier" : "Replier"} ${group.name}`}
+            aria-label={collapsed ? m.expand(group.name) : m.collapse(group.name)}
             onClick={(event) => {
               event.stopPropagation();
               onToggle();
@@ -160,24 +161,22 @@ function GroupHeader({
           </button>
         </span>
         <span className={`${DATA} col-span-2 text-mut`}>
-          {total} sous-projet{total > 1 ? "s" : ""}
+          {m.repositoryCount(total)}
         </span>
         <span className={`${DATA} text-right ${group.dirtyCount > 0 ? "font-medium text-alert" : "text-mut"}`}>
           {group.dirtyCount || "—"}
         </span>
-        <span className={DATA}>{group.lastCommitAt === null ? "—" : formatAge(group.lastCommitAt, now)}</span>
+        <span className={DATA}>{group.lastCommitAt === null ? "—" : formatAge(group.lastCommitAt, now, messages.age)}</span>
         <ActivityStrip weeks={group.weeklyCommits} />
-        <span className={`${DATA} ${group.running > 0 ? "" : "text-mut"}`}>{group.running > 0 ? `${group.running} up` : "—"}</span>
-        <span className={`${DATA} text-right text-mut`}>{formatSize(group.sizeBytes)}</span>
+        <span className={`${DATA} ${group.running > 0 ? "" : "text-mut"}`}>{group.running > 0 ? messages.docker.up(group.running) : "—"}</span>
+        <span className={`${DATA} text-right text-mut`}>{formatSize(group.sizeBytes, messages.size)}</span>
       </div>
     </div>
   );
 }
 
-const removalMessage = (subject: string) =>
-  `Retirer ${subject} de la liste ?\n\nLe nom, la description, les tags et la note saisis ici seront perdus. Rien n'est supprimé sur le disque.`;
-
 function RemoveButton({ projectId, subject }: { projectId: number; subject: string }) {
+  const m = useMessages().panel;
   const [pending, start] = useTransition();
   return (
     <button
@@ -185,10 +184,10 @@ function RemoveButton({ projectId, subject }: { projectId: number; subject: stri
       disabled={pending}
       className="mt-3 flex min-h-11 cursor-pointer items-center text-mut underline hover:text-alert"
       onClick={() => {
-        if (window.confirm(removalMessage(subject))) start(() => removeFromList([projectId]));
+        if (window.confirm(m.confirmRemoval(subject))) start(() => removeFromList([projectId]));
       }}
     >
-      Retirer de la liste
+      {m.removeFromList}
     </button>
   );
 }
@@ -202,9 +201,10 @@ function GroupInspector({
   onSelect: (id: number) => void;
   onCreated: (id: number) => void;
 }) {
+  const m = useMessages().panel;
   const [adding, setAdding] = useState(false);
   return (
-    <section aria-label="Multi-projet sélectionné" className={PANEL}>
+    <section aria-label={m.selectedMultiProject} className={PANEL}>
       <ProjectDirectory
         key={`path-${group.parentId}`}
         projectId={group.parentId}
@@ -225,7 +225,7 @@ function GroupInspector({
       <div className="mb-5">
         <ProjectDescription key={group.parentId} projectId={group.parentId} description={group.description} detected={null} />
       </div>
-      <h2 className={`${LABEL} border-b border-ink pb-1`}>Dépôts</h2>
+      <h2 className={`${LABEL} border-b border-ink pb-1`}>{m.repositories}</h2>
       <ul className="mb-4">
         {group.rows.map((row) => (
           <li key={row.id} className="border-b border-rule">
@@ -251,10 +251,10 @@ function GroupInspector({
         />
       ) : (
         <button type="button" onClick={() => setAdding(true)} className={BUTTON}>
-          Ajouter un dépôt
+          {m.addRepository}
         </button>
       )}
-      <RemoveButton projectId={group.parentId} subject={`${group.name} et tous ses dépôts`} />
+      <RemoveButton projectId={group.parentId} subject={m.withRepositories(group.name)} />
     </section>
   );
 }
@@ -272,6 +272,8 @@ function BulkBar({
   knownTags: string[];
   onClear: () => void;
 }) {
+  const messages = useMessages();
+  const m = messages.bulk;
   const [pending, start] = useTransition();
   const counts: Record<string, number> = {};
   for (const row of rows) {
@@ -279,12 +281,12 @@ function BulkBar({
     for (const tag of row.tags) counts[tag] = (counts[tag] ?? 0) + 1;
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-ink bg-panel px-4 py-2" role="group" aria-label="Actions groupées">
+    <div className="flex flex-wrap items-center gap-2 border-b border-ink bg-panel px-4 py-2" role="group" aria-label={m.label}>
       <span className="font-semibold">
-        {selected.length} sélectionné{selected.length > 1 ? "s" : ""}
+        {m.selected(selected.length)}
       </span>
       <select
-        aria-label="Changer le statut"
+        aria-label={m.changeStatus}
         disabled={pending}
         value=""
         onChange={(event) => {
@@ -294,11 +296,11 @@ function BulkBar({
         }}
         className={BULK_FIELD}
       >
-        <option value="">Statut…</option>
-        <option value="none">Sans statut</option>
-        {Object.entries(STATUS_LABELS).map(([status, label]) => (
+        <option value="">{m.statusPlaceholder}</option>
+        <option value="none">{messages.status.none}</option>
+        {STATUSES.map((status) => (
           <option key={status} value={status}>
-            {label}
+            {messages.status[status]}
           </option>
         ))}
       </select>
@@ -313,25 +315,24 @@ function BulkBar({
           })
         }
       >
-        {view === "abandoned" ? "Restaurer" : "Abandonner"}
+        {view === "abandoned" ? m.restore : m.abandon}
       </button>
       <button
         type="button"
         disabled={pending}
         className={BUTTON}
         onClick={() => {
-          const count = selected.length;
-          if (!window.confirm(removalMessage(`${count} projet${count > 1 ? "s" : ""}`))) return;
+          if (!window.confirm(messages.panel.confirmRemoval(m.projects(selected.length)))) return;
           start(async () => {
             await removeFromList(selected);
             onClear();
           });
         }}
       >
-        Retirer de la liste
+        {messages.panel.removeFromList}
       </button>
       <button type="button" onClick={onClear} className={BUTTON}>
-        Désélectionner
+        {m.deselect}
       </button>
       <div className="w-full max-w-3xl pt-1">
         <TagPicker projectIds={selected} knownTags={knownTags} counts={counts} />
@@ -351,8 +352,9 @@ function Inspector({
   knownTags: string[];
   onSelect: (id: number) => void;
 }) {
+  const m = useMessages().panel;
   return (
-    <section aria-label="Projet sélectionné" className={PANEL}>
+    <section aria-label={m.selectedProject} className={PANEL}>
       {row.parentId !== null ? (
         <button
           type="button"
@@ -392,8 +394,8 @@ function Inspector({
       <details className="group/tags mb-5 border-y border-rule">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-2 hover:text-ink [&::-webkit-details-marker]:hidden">
           <span className="min-w-0">
-            <span className={`${LABEL} block`}>Tags</span>
-            {row.tags.length > 0 ? <TagList tags={row.tags} /> : <span className="text-mut">Aucun tag</span>}
+            <span className={`${LABEL} block`}>{m.tags}</span>
+            {row.tags.length > 0 ? <TagList tags={row.tags} /> : <span className="text-mut">{m.noTags}</span>}
           </span>
           <span aria-hidden="true" className="font-mono text-mut group-open/tags:rotate-90">
             ▸
@@ -414,7 +416,7 @@ function Inspector({
         <ClassificationEditor key={row.id} row={row} />
       </div>
       <Link href={`/projects/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-medium underline">
-        Ouvrir la fiche complète
+        {m.openSheet}
       </Link>
       <RemoveButton projectId={row.id} subject={row.name} />
     </section>
@@ -434,6 +436,8 @@ export function RegistryView({
   now: number;
   sizing: boolean;
 }) {
+  const messages = useMessages();
+  const m = messages.registry;
   const router = useRouter();
   const [view, setView] = useState<View>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -531,7 +535,7 @@ export function RegistryView({
       className={`flex min-h-11 hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_3px_0_0_var(--ink)] ${nested ? "border-t border-rule" : "border-b border-rule"}`}
     >
       <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
-        <span className="sr-only">Sélectionner {row.name}</span>
+        <span className="sr-only">{m.select(row.name)}</span>
         <input
           type="checkbox"
           className={CHECKBOX}
@@ -547,26 +551,26 @@ export function RegistryView({
       >
         <span className={`min-w-0 ${nested ? "border-l-2 border-rule pl-3" : ""}`}>
           <span className="block truncate font-semibold">
-            {row.favorite ? <span aria-label="Favori">★ </span> : null}
+            {row.favorite ? <span aria-label={m.favorite}>★ </span> : null}
             {row.name}
           </span>
           <TagList tags={row.tags} />
         </span>
         {row.missing ? (
-          <span className={`${DATA} truncate font-medium text-alert`}>introuvable</span>
+          <span className={`${DATA} truncate font-medium text-alert`}>{m.notFound}</span>
         ) : (
           <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
         )}
         <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
-          {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
+          {row.hasGit ? (row.branch ?? m.detached) : m.noGit}
         </span>
         <span className={`${DATA} text-right ${(row.dirtyCount ?? 0) > 0 ? "font-medium text-alert" : "text-mut"}`}>
           {row.dirtyCount || "—"}
         </span>
-        <span className={DATA}>{row.hasGit ? formatAge(row.lastCommitAt, now) : "—"}</span>
+        <span className={DATA}>{row.hasGit ? formatAge(row.lastCommitAt, now, messages.age) : "—"}</span>
         <ActivityStrip weeks={row.weeklyCommits} />
-        <span className={`${DATA} ${runningCount(row) > 0 ? "" : "text-mut"}`}>{dockerLabel(row)}</span>
-        <span className={`${DATA} text-right text-mut`}>{formatSize(row.sizeBytes)}</span>
+        <span className={`${DATA} ${runningCount(row) > 0 ? "" : "text-mut"}`}>{dockerLabel(row, messages.docker)}</span>
+        <span className={`${DATA} text-right text-mut`}>{formatSize(row.sizeBytes, messages.size)}</span>
       </button>
     </div>
   );
@@ -581,17 +585,17 @@ export function RegistryView({
     <main className="flex-1">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-ink px-4 py-2.5">
         <label className="min-w-[200px] flex-[0_1_260px]">
-          <span className="sr-only">Rechercher un projet</span>
+          <span className="sr-only">{m.search}</span>
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Rechercher un projet"
+            placeholder={m.search}
             className={`${DATA} h-10 w-full border border-rule bg-panel px-2.5 placeholder:text-mut`}
           />
         </label>
 
-        <div role="group" aria-label="Filtrer par tag" className="flex min-w-0 flex-[1_1_320px] flex-wrap items-center gap-1.5">
+        <div role="group" aria-label={m.filterByTag} className="flex min-w-0 flex-[1_1_320px] flex-wrap items-center gap-1.5">
           <button
             type="button"
             aria-pressed={untagged}
@@ -601,7 +605,7 @@ export function RegistryView({
             }}
             className={FILTER}
           >
-            <span>Sans tag</span>
+            <span>{m.untagged}</span>
             <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.untagged}</span>
           </button>
           {knownTags.map((tag) => (
@@ -618,10 +622,10 @@ export function RegistryView({
           ))}
         </div>
 
-        <div role="group" aria-label="Vue" className="flex">
-          {VIEWS.map(({ id, label }) => (
+        <div role="group" aria-label={m.view} className="flex">
+          {VIEWS.map((id) => (
             <button key={id} type="button" aria-pressed={view === id} onClick={() => switchView(id)} className={VIEW_TAB}>
-              <span>{label}</span>
+              <span>{m[id]}</span>
               <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{countView(rows, id)}</span>
             </button>
           ))}
@@ -630,15 +634,15 @@ export function RegistryView({
         <div className="flex items-center gap-3">
           <span className={`${DATA} text-mut`} role="status">
             {refreshing
-              ? "Actualisation…"
+              ? m.refreshing
               : sizing
-                ? "Calcul des tailles…"
+                ? m.sizing
                 : lastScan
-                  ? `Actualisé il y a ${formatAge(lastScan.at, now)}`
+                  ? m.refreshedAgo(formatAge(lastScan.at, now, messages.age))
                   : null}
           </span>
           <button type="button" onClick={refresh} disabled={refreshing || rows.length === 0} className={BUTTON}>
-            Actualiser
+            {m.refresh}
           </button>
           <button
             type="button"
@@ -646,20 +650,20 @@ export function RegistryView({
             onClick={() => setAdding(true)}
             className={`${BUTTON} bg-ink text-bg hover:bg-transparent hover:text-ink`}
           >
-            Ajouter un projet
+            {m.addProject}
           </button>
         </div>
       </div>
 
       {error ? (
         <p role="alert" className={`${DATA} border-b border-alert px-4 py-2 text-alert`}>
-          La dernière actualisation a échoué : {error}
+          {m.refreshFailed(error)}
         </p>
       ) : null}
 
       {lastScan?.warning ? (
         <p role="status" className={`${DATA} border-b border-rule px-4 py-2 text-mut`}>
-          Docker n&apos;a pas répondu pendant l&apos;actualisation, l&apos;état des conteneurs est inconnu.
+          {m.dockerSilent}
         </p>
       ) : null}
 
@@ -672,7 +676,7 @@ export function RegistryView({
           <div className="overflow-x-auto">
             <div className="flex h-[38px] border-b border-ink">
               <label className="flex w-9 shrink-0 items-center justify-center">
-                <span className="sr-only">Tout sélectionner</span>
+                <span className="sr-only">{m.selectAll}</span>
                 <input
                   type="checkbox"
                   className={CHECKBOX}
@@ -681,14 +685,14 @@ export function RegistryView({
                 />
               </label>
               <div className={COLUMNS}>
-              <SortButton id="name" sort={sort} onSort={setSort}>Projet</SortButton>
-              <span className={LABEL}>Stack</span>
-              <span className={LABEL}>Branche</span>
-              <SortButton id="dirty" sort={sort} onSort={setSort} right>Modifs</SortButton>
-              <SortButton id="commit" sort={sort} onSort={setSort}>Commit</SortButton>
-              <span className={LABEL}>26 semaines</span>
-              <span className={LABEL}>Docker</span>
-              <SortButton id="size" sort={sort} onSort={setSort} right>Taille</SortButton>
+              <SortButton id="name" sort={sort} onSort={setSort}>{m.columns.project}</SortButton>
+              <span className={LABEL}>{m.columns.stack}</span>
+              <span className={LABEL}>{m.columns.branch}</span>
+              <SortButton id="dirty" sort={sort} onSort={setSort} right>{m.columns.changes}</SortButton>
+              <SortButton id="commit" sort={sort} onSort={setSort}>{m.columns.commit}</SortButton>
+              <span className={LABEL}>{m.columns.weeks}</span>
+              <span className={LABEL}>{m.columns.docker}</span>
+              <SortButton id="size" sort={sort} onSort={setSort} right>{m.columns.size}</SortButton>
               </div>
             </div>
             {items.map((item) =>
@@ -719,16 +723,16 @@ export function RegistryView({
           {visible.length === 0 ? (
             <p className="px-4 py-8 text-mut">
               {rows.length === 0
-                ? "Aucun projet pour l'instant : ajoute le premier avec le formulaire."
+                ? m.noProjects
                 : view === "abandoned" && countView(rows, "abandoned") === 0
-                  ? "Aucun projet abandonné."
-                  : "Aucun projet ne correspond à ce filtre."}
+                  ? m.noAbandoned
+                  : m.noMatch}
             </p>
           ) : null}
           <div className={`${DATA} flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 text-mut`}>
-            <span>{visible.length} affichés</span>
+            <span>{m.shown(visible.length)}</span>
             <span className="flex items-center gap-1.5">
-              Commits par semaine
+              {m.commitsPerWeek}
               {[
                 ["var(--r0)", "0"],
                 ["var(--r1)", "1–4"],
@@ -745,7 +749,7 @@ export function RegistryView({
         </div>
 
         {showForm ? (
-          <section aria-label="Nouveau projet" className={PANEL}>
+          <section aria-label={messages.panel.newProject} className={PANEL}>
             <AddProjectForm
               onCreated={showCreated}
               onCancel={rows.length > 0 ? () => setAdding(false) : undefined}

@@ -17,7 +17,9 @@ import {
   setStatus,
 } from "@/server/classification";
 import { getDb } from "@/server/db/client";
+import { serverMessages } from "@/server/i18n";
 import type { ProjectStatus } from "@/server/db/schema";
+import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
 import { composeDirectories, launch, runCompose } from "@/server/project-actions";
 import { type EnvEntry, readEnvFile } from "@/server/project-files";
@@ -172,25 +174,28 @@ function launchable(projectId: number) {
 }
 
 export async function openIde(projectId: number): Promise<string | null> {
+  const m = serverMessages(getDb()).errors;
   const project = launchable(projectId);
-  if (!project) return "Ce projet n'existe plus.";
+  if (!project) return m.projectGone;
   const { ideCommands } = getSettings(getDb());
-  return launch(ideCommandFor(project.row.stacks, ideCommands), project.absolutePath);
+  return launch(ideCommandFor(project.row.stacks, ideCommands), project.absolutePath, m);
 }
 
 export async function openTerminal(projectId: number): Promise<string | null> {
+  const m = serverMessages(getDb()).errors;
   const project = launchable(projectId);
-  if (!project) return "Ce projet n'existe plus.";
-  return launch(getSettings(getDb()).terminalCommand, project.absolutePath);
+  if (!project) return m.projectGone;
+  return launch(getSettings(getDb()).terminalCommand, project.absolutePath, m);
 }
 
 export async function dockerAction(projectId: number, mode: "up" | "stop"): Promise<string | null> {
+  const m = serverMessages(getDb()).errors;
   const project = launchable(projectId);
-  if (!project) return "Ce projet n'existe plus.";
-  if (mode !== "up" && mode !== "stop") return "Action inconnue.";
-  if (project.row.abandoned) return "Ce projet est abandonné : restaure-le d'abord.";
+  if (!project) return m.projectGone;
+  if (mode !== "up" && mode !== "stop") return m.unknownAction;
+  if (project.row.abandoned) return m.abandonedProject;
   const { hasCompose, containers } = project.compose;
-  const error = await runCompose(mode, composeDirectories(mode, project.absolutePath, hasCompose, containers));
+  const error = await runCompose(mode, composeDirectories(mode, project.absolutePath, hasCompose, containers), m);
   // Docker has no live view: without this, the button would show a stale state.
   await rescanProject(getDb(), projectId);
   refreshAll();
@@ -203,8 +208,12 @@ export async function saveSettingsForm(form: Record<string, string>): Promise<st
   for (const [key, value] of Object.entries(form)) {
     if (key.startsWith("ide:") && clean(value)) ideCommands[key.slice(4)] = clean(value);
   }
-  if (!clean(form.terminal) || !ideCommands.default) return "Toutes les commandes requises doivent être remplies.";
-  saveSettings(getDb(), { terminalCommand: clean(form.terminal), ideCommands });
+  if (!clean(form.terminal) || !ideCommands.default) return serverMessages(getDb()).errors.commandsRequired;
+  saveSettings(getDb(), {
+    terminalCommand: clean(form.terminal),
+    ideCommands,
+    ...(isLocale(form.locale) ? { locale: form.locale } : {}),
+  });
   refreshAll();
   return null;
 }

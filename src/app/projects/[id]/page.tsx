@@ -3,12 +3,15 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { formatAge, runningCount } from "@/lib/registry";
+import type { Messages } from "@/i18n";
 import { getDb } from "@/server/db/client";
+import { serverMessages } from "@/server/i18n";
 import { readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import { readRecentCommits } from "@/server/scan/git";
 import { isSizing } from "@/server/scan/jobs";
 import { ClassificationEditor } from "../../classification-editor";
+import { LoadingFallback } from "../../loading-fallback";
 import { ProjectButtons } from "../../project-buttons";
 import { ProjectDescription } from "../../project-description";
 import { ProjectDirectory } from "../../project-directory";
@@ -21,27 +24,27 @@ import { RefreshButton } from "./refresh-button";
 
 const SECTION = "border-b border-rule px-5 pt-[18px] pb-[22px]";
 
-function ActivityChart({ weeks }: { weeks: number[] }) {
+function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) {
   const peak = Math.max(...weeks, 1);
   const total = weeks.reduce((sum, commits) => sum + commits, 0);
   return (
     <>
       <div className="mb-3.5 flex flex-wrap justify-between gap-x-4 gap-y-1">
-        <h2 className={LABEL}>Commits par semaine, 26 dernières semaines</h2>
+        <h2 className={LABEL}>{m.weeklyCommits}</h2>
         <span className={`${DATA} text-mut`}>
-          {total} au total · pic à {Math.max(...weeks)}
+          {m.peak(total, Math.max(...weeks))}
         </span>
       </div>
       <div
         className="grid h-[150px] grid-cols-[repeat(26,minmax(0,1fr))] items-end gap-x-0.5 border-b border-ink"
         role="img"
-        aria-label={`${total} commits sur 26 semaines, pic à ${Math.max(...weeks)}`}
+        aria-label={m.weeklyLabel(total, Math.max(...weeks))}
       >
         {weeks.map((commits, index) => (
           <div
             key={index}
             className="group flex h-full items-end"
-            title={`Il y a ${weeks.length - 1 - index} sem. : ${commits} commit${commits > 1 ? "s" : ""}`}
+            title={m.weekTitle(weeks.length - 1 - index, commits)}
           >
             <span
               className="block w-full bg-ink group-hover:bg-alert"
@@ -51,8 +54,8 @@ function ActivityChart({ weeks }: { weeks: number[] }) {
         ))}
       </div>
       <div className={`${DATA} flex justify-between pt-1.5 text-mut`}>
-        <span>il y a 25 sem.</span>
-        <span>cette semaine</span>
+        <span>{m.weeksAgo}</span>
+        <span>{m.thisWeek}</span>
       </div>
     </>
   );
@@ -67,6 +70,8 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   if (!project) notFound();
 
   const { row, absolutePath, docs, envFiles, now, knownTags } = project;
+  const messages = serverMessages(getDb());
+  const m = messages.sheet;
   // An abandoned project is not read anymore, except for what is explicitly opened below.
   const commits = row.hasGit && !row.missing && !row.abandoned ? await readRecentCommits(absolutePath) : [];
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
@@ -81,7 +86,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b border-ink px-5 pt-7 pb-6">
         <div className="min-w-0">
           <Link href="/" className="inline-flex min-h-8 items-center text-mut underline hover:text-ink">
-            Retour au registre
+            {m.back}
           </Link>
           <ProjectDirectory
             projectId={row.id}
@@ -110,12 +115,12 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
       {row.abandoned ? (
         <p role="status" className={`${DATA} border-b border-rule px-5 py-2 text-mut`}>
-          Projet abandonné : il n&apos;est plus actualisé, ces informations datent de sa dernière lecture.
+          {m.abandoned}
         </p>
       ) : null}
       {row.missing ? (
         <p role="alert" className={`${DATA} border-b border-alert px-5 py-2 text-alert`}>
-          Ce répertoire est introuvable. Tes notes et ton classement sont conservés : modifie le chemin s&apos;il a été déplacé.
+          {m.missing}
         </p>
       ) : null}
       {row.scanError ? (
@@ -128,32 +133,32 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
         <div className="min-w-0 flex-[999_1_620px] border-r border-rule">
           {row.weeklyCommits ? (
             <section className={SECTION}>
-              <ActivityChart weeks={row.weeklyCommits} />
+              <ActivityChart weeks={row.weeklyCommits} m={m} />
             </section>
           ) : null}
 
           {commits.length > 0 ? (
             <section className={SECTION}>
-              <h2 className={`${LABEL} mb-3.5`}>Derniers commits</h2>
+              <h2 className={`${LABEL} mb-3.5`}>{m.recentCommits}</h2>
               {commits.map((commit, index) => (
                 <div
                   key={index}
                   className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-b border-rule py-[9px] last:border-b-0"
                 >
                   <span className="break-words">{commit.subject}</span>
-                  <span className={`${DATA} text-mut`}>{formatAge(commit.at.getTime(), now)}</span>
+                  <span className={`${DATA} text-mut`}>{formatAge(commit.at.getTime(), now, messages.age)}</span>
                 </div>
               ))}
             </section>
           ) : null}
 
           <section className={`${SECTION} border-b-0`}>
-            <h2 className={`${LABEL} mb-3.5`}>Documentation</h2>
+            <h2 className={`${LABEL} mb-3.5`}>{m.documentation}</h2>
             {docs.length === 0 ? (
-              <p className="text-mut">Aucun document détecté.</p>
+              <p className="text-mut">{m.noDocs}</p>
             ) : (
               <>
-                <nav aria-label="Documents" className={`${DATA} mb-4 flex flex-wrap gap-x-5 gap-y-1`}>
+                <nav aria-label={m.documents} className={`${DATA} mb-4 flex flex-wrap gap-x-5 gap-y-1`}>
                   {docs.map((file) => (
                     <Link
                       key={file}
@@ -166,7 +171,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                   ))}
                 </nav>
                 {docContent === null ? (
-                  <p className="text-mut">Ce document n&apos;a pas pu être lu ou il est trop volumineux.</p>
+                  <p className="text-mut">{m.unreadableDoc}</p>
                 ) : (
                   <pre className={`${DATA} max-h-[640px] overflow-auto border border-rule bg-panel p-4 break-words whitespace-pre-wrap`}>
                     {docContent}
@@ -179,7 +184,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
         <aside className="min-w-0 flex-[1_1_400px] bg-panel">
           <section className={SECTION}>
-            <h2 className={`${LABEL} mb-3.5`}>Organisation</h2>
+            <h2 className={`${LABEL} mb-3.5`}>{m.organization}</h2>
             <div className="grid gap-4">
               <TagPicker
                 projectIds={[row.id]}
@@ -194,11 +199,11 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
           </section>
           <section className={SECTION}>
             <h2 className={`${LABEL} mb-3.5`}>
-              Conteneurs · {running} lancé{running > 1 ? "s" : ""}
+              {m.containers(running)}
             </h2>
             {row.containers.length === 0 ? (
               <p className="text-mut">
-                {row.hasCompose ? "Aucun conteneur créé pour ce projet." : "Pas de Docker Compose détecté."}
+                {row.hasCompose ? m.noContainers : m.noCompose}
               </p>
             ) : (
               row.containers.map((container) => (
@@ -215,9 +220,9 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             )}
           </section>
           <section className={`${SECTION} border-b-0`}>
-            <h2 className={`${LABEL} mb-3.5`}>Variables d&apos;environnement</h2>
+            <h2 className={`${LABEL} mb-3.5`}>{m.environment}</h2>
             {envFiles.length === 0 ? (
-              <p className="text-mut">Aucun fichier .env détecté.</p>
+              <p className="text-mut">{m.noEnv}</p>
             ) : (
               <EnvFiles projectId={row.id} files={envFiles} />
             )}
@@ -230,7 +235,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
 export default function ProjectPage(props: PageProps<"/projects/[id]">) {
   return (
-    <Suspense fallback={<main className="flex-1 p-4 font-mono text-[12.5px] text-mut">Chargement…</main>}>
+    <Suspense fallback={<LoadingFallback />}>
       <Sheet {...props} />
     </Suspense>
   );

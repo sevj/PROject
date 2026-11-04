@@ -8,7 +8,7 @@ export async function GET() {
   return new Response(JSON.stringify(exportClassification(getDb()), null, 2), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": `attachment; filename="project-manager-classement-${date}.json"`,
+      "Content-Disposition": `attachment; filename="project-manager-classification-${date}.json"`,
     },
   });
 }

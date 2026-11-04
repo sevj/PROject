@@ -4,6 +4,8 @@ import { ideCommandFor, ideLabel } from "@/lib/commands";
 import type { RegistryRow } from "@/lib/registry";
 import type { Db } from "./db/client";
 import { projectFacts, projectMeta, projects, projectTags, scans, tags } from "./db/schema";
+import { serverMessages } from "./i18n";
+import { REFRESH_INTERRUPTED } from "./scan/run";
 import { getSettings } from "./settings";
 
 export function displayPath(path: string): string {
@@ -167,6 +169,7 @@ export function getRegistry(db: Db) {
     rows.push(toRow(joined, parent, classificationOf(project.id), ideCommands));
   }
 
+  const m = serverMessages(db).registry;
   const lastScan = db.select().from(scans).orderBy(desc(scans.id)).limit(1).get();
   return {
     rows,
@@ -176,7 +179,7 @@ export function getRegistry(db: Db) {
       ? {
           status: lastScan.status,
           at: (lastScan.finishedAt ?? lastScan.startedAt).getTime(),
-          error: lastScan.error,
+          error: lastScan.error === REFRESH_INTERRUPTED ? m.interrupted : lastScan.error,
           warning: lastScan.warning,
         }
       : null,

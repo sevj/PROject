@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useMessages } from "@/i18n/provider";
 import { dockerLabel, formatAge, formatSize, type RegistryRow, runningCount } from "@/lib/registry";
 import { parseRemote, publishedPorts } from "@/lib/remote";
 import { DATA, LABEL } from "./ui";
@@ -25,6 +28,8 @@ const list = (items: string[]) => items.join(", ") || "—";
 const count = (value: number | null) => (value === null ? "—" : String(value));
 
 export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
+  const messages = useMessages();
+  const m = messages.facts;
   const remote = row.remoteUrl ? parseRemote(row.remoteUrl) : null;
   const ports = [...new Set(row.containers.flatMap((container) => publishedPorts(container.ports)))];
   const total = row.containers.length;
@@ -33,32 +38,30 @@ export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
 
   return (
     <div className="grid gap-5">
-      <Section title="Projet">
-        <Fact label="Stack">{row.stacks.join(" + ") || "—"}</Fact>
+      <Section title={m.project}>
+        <Fact label={m.stack}>{row.stacks.join(" + ") || "—"}</Fact>
         {row.versions.map(({ label, value }) => (
           <Fact key={label} label={label}>
             {value}
           </Fact>
         ))}
-        <Fact label="Paquets">{list(row.packageManagers)}</Fact>
-        <Fact label="CI">{list(row.ci)}</Fact>
-        <Fact label="Tests">{list(row.testTools)}</Fact>
-        <Fact label="Documentation">
-          {docCount === 0 ? "aucune" : `${docCount} fichier${docCount > 1 ? "s" : ""}${hasReadme ? ", README" : ""}`}
-        </Fact>
+        <Fact label={m.packages}>{list(row.packageManagers)}</Fact>
+        <Fact label={m.ci}>{list(row.ci)}</Fact>
+        <Fact label={m.tests}>{list(row.testTools)}</Fact>
+        <Fact label={m.documentation}>{docCount === 0 ? m.noDocs : m.docCount(docCount, hasReadme)}</Fact>
       </Section>
 
       {row.hasGit ? (
-        <Section title="Git">
-          <Fact label="Dernier commit">{row.lastCommitAt === null ? "aucun" : formatAge(row.lastCommitAt, now)}</Fact>
+        <Section title={m.git}>
+          <Fact label={m.lastCommit}>{row.lastCommitAt === null ? m.none : formatAge(row.lastCommitAt, now, messages.age)}</Fact>
           {row.lastCommitSubject ? (
             <div className="border-b border-rule py-1.5 break-words">{row.lastCommitSubject}</div>
           ) : null}
-          <Fact label="Dernier auteur">{row.lastCommitAuthor ?? "—"}</Fact>
-          <Fact label="Branche">{row.branch ?? "HEAD détachée"}</Fact>
-          <Fact label="Dépôt distant">
+          <Fact label={m.lastAuthor}>{row.lastCommitAuthor ?? "—"}</Fact>
+          <Fact label={m.branch}>{row.branch ?? m.detachedHead}</Fact>
+          <Fact label={m.remote}>
             {remote === null ? (
-              "aucun"
+              m.none
             ) : remote.url ? (
               <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="underline hover:text-ink">
                 {remote.label}
@@ -67,37 +70,37 @@ export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
               remote.label
             )}
           </Fact>
-          <Fact label="Écart">{row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : "pas de suivi distant"}</Fact>
-          <Fact label="Fichiers modifiés" alert={(row.dirtyCount ?? 0) > 0}>
+          <Fact label={m.gap}>{row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : m.noUpstream}</Fact>
+          <Fact label={m.changedFiles} alert={(row.dirtyCount ?? 0) > 0}>
             {String(row.dirtyCount ?? 0)}
           </Fact>
-          <Fact label="Commits">{String(row.commitCount ?? 0)}</Fact>
-          <Fact label="Branches locales">{count(row.branchCount)}</Fact>
-          <Fact label="Stashes" alert={(row.stashCount ?? 0) > 0}>
+          <Fact label={m.commits}>{String(row.commitCount ?? 0)}</Fact>
+          <Fact label={m.localBranches}>{count(row.branchCount)}</Fact>
+          <Fact label={m.stashes} alert={(row.stashCount ?? 0) > 0}>
             {count(row.stashCount)}
           </Fact>
-          <Fact label="Premier commit">{row.firstCommitAt === null ? "—" : `il y a ${formatAge(row.firstCommitAt, now)}`}</Fact>
+          <Fact label={m.firstCommit}>{row.firstCommitAt === null ? "—" : m.ago(formatAge(row.firstCommitAt, now, messages.age))}</Fact>
         </Section>
       ) : (
-        <Section title="Git">
-          <Fact label="Dépôt">aucun</Fact>
+        <Section title={m.git}>
+          <Fact label={m.repository}>{m.none}</Fact>
         </Section>
       )}
 
-      <Section title="Docker">
-        <Fact label="État">{dockerLabel(row)}</Fact>
-        <Fact label="Services lancés">{total === 0 ? "—" : `${runningCount(row)} sur ${total}`}</Fact>
-        <Fact label="Ports exposés">{list(ports)}</Fact>
+      <Section title={m.docker}>
+        <Fact label={m.state}>{dockerLabel(row, messages.docker)}</Fact>
+        <Fact label={m.runningServices}>{total === 0 ? "—" : m.runningOf(runningCount(row), total)}</Fact>
+        <Fact label={m.publishedPorts}>{list(ports)}</Fact>
       </Section>
 
-      <Section title="Disque">
-        <Fact label="Hors dépendances">{formatSize(row.sizeBytes)}</Fact>
-        <Fact label="Dépendances">{formatSize(row.depsBytes)}</Fact>
-        <Fact label="Dossier .git">{formatSize(row.gitBytes)}</Fact>
+      <Section title={m.disk}>
+        <Fact label={m.withoutDependencies}>{formatSize(row.sizeBytes, messages.size)}</Fact>
+        <Fact label={m.dependencies}>{formatSize(row.depsBytes, messages.size)}</Fact>
+        <Fact label={m.gitFolder}>{formatSize(row.gitBytes, messages.size)}</Fact>
       </Section>
 
-      <Section title="Configuration">
-        <Fact label="Fichiers .env">{list(row.envFiles)}</Fact>
+      <Section title={m.configuration}>
+        <Fact label={m.envFiles}>{list(row.envFiles)}</Fact>
       </Section>
     </div>
   );

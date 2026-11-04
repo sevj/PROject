@@ -9,6 +9,9 @@ import { mapLimit } from "./limit";
 
 const GIT_CONCURRENCY = 8;
 
+/** Stored as is, and put into words when shown. */
+export const REFRESH_INTERRUPTED = "interrupted";
+
 type Options = { docker?: () => Promise<DockerState> };
 type Scanned = { folder: DetectedFolder; git: GitFacts | null; error: string | null };
 type Target = typeof projects.$inferSelect;
@@ -143,7 +146,7 @@ export async function refreshAll(
 ): Promise<RefreshResult> {
   // A running row can only be a leftover here: the server stopped during that refresh.
   db.update(scans)
-    .set({ status: "failed", finishedAt: now, error: "Actualisation interrompue" })
+    .set({ status: "failed", finishedAt: now, error: REFRESH_INTERRUPTED })
     .where(eq(scans.status, "running"))
     .run();
   const { id: scanId } = db.insert(scans).values({ startedAt: now }).returning().get();
