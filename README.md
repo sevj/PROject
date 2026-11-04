@@ -19,7 +19,8 @@ L'interface est en anglais par défaut, et la langue se choisit dans Settings. P
 
 - **Base :** SQLite dans `~/.local/share/project-manager/pm.db`. `PM_DB_PATH` permet de pointer ailleurs.
 - **Projets abandonnés :** ils ne sont plus lus du tout et n'apparaissent que dans la vue « Abandonnés », d'où on peut les restaurer.
-- **Lecture seule :** l'actualisation n'écrit rien dans les projets, et retirer un projet de la liste ne touche pas au disque. Seules les actions Docker et les commandes configurées agissent sur la machine.
+- **Lecture seule :** l'actualisation n'écrit rien dans les projets, et retirer un projet de la liste ne touche pas au disque. Seules les actions Docker, les commandes configurées et les actions de l'onglet Git agissent sur la machine.
+- **Actions git :** changer de branche et récupérer une branche distante (refusés tant que le dossier a des modifications), créer d'un coup les branches locales de toutes les branches distantes (sans basculer), `fetch --prune`, `pull --ff-only`, créer une branche, et supprimer des branches locales déjà fusionnées (avec `git branch -d`, jamais `-D`, et jamais les branches principales). Rien d'autre : ni commit, ni merge, ni reset, ni push. Les stashes sont seulement listés.
 - **`.env` :** les valeurs sont lues à la demande, à la racine du projet, sans jamais être stockées ni journalisées.
 - **Accès local :** le serveur écoute sur `127.0.0.1`, et `src/proxy.ts` refuse les requêtes venant d'un autre site.
 

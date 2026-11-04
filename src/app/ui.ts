@@ -16,6 +16,8 @@ const CONTROL =
 export const BUTTON = `${CONTROL} min-h-10 justify-center border border-rule-strong px-3.5 font-medium text-mut hover:border-mut hover:text-ink disabled:hover:border-rule-strong disabled:hover:text-mut`;
 /** The one action a screen or a form is there for. */
 export const BUTTON_PRIMARY = `${CONTROL} min-h-10 justify-center border border-accent bg-accent px-3.5 font-medium text-bg hover:brightness-110 disabled:hover:brightness-100`;
+/** Same, for the confirmation of an action that loses data. */
+export const BUTTON_PRIMARY_DANGER = `${CONTROL} min-h-10 justify-center border border-alert bg-alert px-3.5 font-medium text-bg hover:brightness-110 disabled:hover:brightness-100`;
 /** A secondary action inside text or a list: no box until it is pointed at. */
 export const BUTTON_QUIET = `${CONTROL} -mx-2 min-h-9 px-2 text-mut hover:bg-sel hover:text-ink`;
 /** Same, for an action that loses data. */

@@ -28,6 +28,49 @@ function Section({ title, children, card = false }: { title: string; children: R
 const list = (items: string[]) => items.join(", ") || "—";
 const count = (value: number | null) => (value === null ? "—" : String(value));
 
+export function GitFacts({ row, now, card = false }: { row: RegistryRow; now: number; card?: boolean }) {
+  const messages = useMessages();
+  const m = messages.facts;
+  const remote = row.remoteUrl ? parseRemote(row.remoteUrl) : null;
+
+  return row.hasGit ? (
+    <Section title={m.git} card={card}>
+      <Fact label={m.lastCommit}>{row.lastCommitAt === null ? m.none : formatAge(row.lastCommitAt, now, messages.age)}</Fact>
+      {row.lastCommitSubject ? (
+        <div className="border-b border-rule py-1.5 break-words">{row.lastCommitSubject}</div>
+      ) : null}
+      <Fact label={m.lastAuthor}>{row.lastCommitAuthor ?? "—"}</Fact>
+      <Fact label={m.branch}>{row.branch ?? m.detachedHead}</Fact>
+      <Fact label={m.remote}>
+        {remote === null ? (
+          m.none
+        ) : remote.url ? (
+          <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="inline-flex max-w-full items-center gap-1 hover:text-accent">
+            <span className="truncate">{remote.label}</span>
+            <OpenIcon />
+          </a>
+        ) : (
+          remote.label
+        )}
+      </Fact>
+      <Fact label={m.gap}>{row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : m.noUpstream}</Fact>
+      <Fact label={m.changedFiles} alert={(row.dirtyCount ?? 0) > 0}>
+        {String(row.dirtyCount ?? 0)}
+      </Fact>
+      <Fact label={m.commits}>{String(row.commitCount ?? 0)}</Fact>
+      <Fact label={m.localBranches}>{count(row.branchCount)}</Fact>
+      <Fact label={m.stashes} alert={(row.stashCount ?? 0) > 0}>
+        {count(row.stashCount)}
+      </Fact>
+      <Fact label={m.firstCommit}>{row.firstCommitAt === null ? "—" : m.ago(formatAge(row.firstCommitAt, now, messages.age))}</Fact>
+    </Section>
+  ) : (
+    <Section title={m.git} card={card}>
+      <Fact label={m.repository}>{m.none}</Fact>
+    </Section>
+  );
+}
+
 export function ProjectFacts({
   row,
   now,
@@ -42,14 +85,13 @@ export function ProjectFacts({
 }) {
   const messages = useMessages();
   const m = messages.facts;
-  const remote = row.remoteUrl ? parseRemote(row.remoteUrl) : null;
   const ports = [...new Set(row.containers.flatMap((container) => publishedPorts(container.ports)))];
   const total = row.containers.length;
   const docCount = row.docs.length;
   const hasReadme = row.docs.some((doc) => /^readme/i.test(doc));
 
   return (
-    <div className={wide ? "grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid gap-5"}>
+    <div className={wide ? "grid items-start gap-4 md:grid-cols-2" : "grid gap-5"}>
       <Section title={m.project} card={wide}>
         <Fact label={m.stack}>{row.stacks.join(" + ") || "—"}</Fact>
         {row.versions.map(({ label, value }) => (
@@ -63,42 +105,7 @@ export function ProjectFacts({
         <Fact label={m.documentation}>{docCount === 0 ? m.noDocs : m.docCount(docCount, hasReadme)}</Fact>
       </Section>
 
-      {row.hasGit ? (
-        <Section title={m.git} card={wide}>
-          <Fact label={m.lastCommit}>{row.lastCommitAt === null ? m.none : formatAge(row.lastCommitAt, now, messages.age)}</Fact>
-          {row.lastCommitSubject ? (
-            <div className="border-b border-rule py-1.5 break-words">{row.lastCommitSubject}</div>
-          ) : null}
-          <Fact label={m.lastAuthor}>{row.lastCommitAuthor ?? "—"}</Fact>
-          <Fact label={m.branch}>{row.branch ?? m.detachedHead}</Fact>
-          <Fact label={m.remote}>
-            {remote === null ? (
-              m.none
-            ) : remote.url ? (
-              <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="inline-flex max-w-full items-center gap-1 hover:text-accent">
-                <span className="truncate">{remote.label}</span>
-                <OpenIcon />
-              </a>
-            ) : (
-              remote.label
-            )}
-          </Fact>
-          <Fact label={m.gap}>{row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : m.noUpstream}</Fact>
-          <Fact label={m.changedFiles} alert={(row.dirtyCount ?? 0) > 0}>
-            {String(row.dirtyCount ?? 0)}
-          </Fact>
-          <Fact label={m.commits}>{String(row.commitCount ?? 0)}</Fact>
-          <Fact label={m.localBranches}>{count(row.branchCount)}</Fact>
-          <Fact label={m.stashes} alert={(row.stashCount ?? 0) > 0}>
-            {count(row.stashCount)}
-          </Fact>
-          <Fact label={m.firstCommit}>{row.firstCommitAt === null ? "—" : m.ago(formatAge(row.firstCommitAt, now, messages.age))}</Fact>
-        </Section>
-      ) : (
-        <Section title={m.git} card={wide}>
-          <Fact label={m.repository}>{m.none}</Fact>
-        </Section>
-      )}
+      {wide ? null : <GitFacts row={row} now={now} />}
 
       {wide ? null : (
         <Section title={m.docker}>

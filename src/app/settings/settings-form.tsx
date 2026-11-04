@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { type Locale, LANGUAGES } from "@/i18n";
 import { useMessages } from "@/i18n/provider";
 import { deleteTagByName, renameTagByName, saveSettingsForm } from "../actions";
+import { useConfirm } from "../modal";
 import { BUTTON, BUTTON_PRIMARY, DATA, FIELD, LABEL } from "../ui";
 
 const SECTION = "border-b border-rule px-5 pt-5 pb-6";
@@ -23,6 +24,7 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
   const [saved, setSaved] = useState(false);
   const [tagMessage, setTagMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const { confirm, confirmation } = useConfirm();
 
   return (
     <main className="max-w-3xl flex-1 border-r border-rule">
@@ -113,17 +115,21 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
               type="button"
               disabled={pending}
               className={BUTTON}
-              onClick={() => {
-                if (window.confirm(m.confirmDeleteTag(name, count))) {
-                  start(() => deleteTagByName(name));
-                }
-              }}
+              onClick={() =>
+                confirm({
+                  ...m.confirmDeleteTag(name, count),
+                  action: m.deleteTag,
+                  danger: true,
+                  onConfirm: () => start(() => deleteTagByName(name)),
+                })
+              }
             >
               {m.deleteTag}
             </button>
           </div>
         ))}
       </section>
+      {confirmation}
     </main>
   );
 }

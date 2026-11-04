@@ -25,6 +25,7 @@ import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ClassificationEditor } from "./classification-editor";
 import { ProjectDescription } from "./project-description";
 import { ProjectDirectory } from "./project-directory";
+import { useConfirm } from "./modal";
 import { ProjectFacts } from "./project-facts";
 import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
@@ -177,17 +178,26 @@ function GroupHeader({
 function RemoveButton({ projectId, subject }: { projectId: number; subject: string }) {
   const m = useMessages().panel;
   const [pending, start] = useTransition();
+  const { confirm, confirmation } = useConfirm();
   return (
-    <button
-      type="button"
-      disabled={pending}
-      className={`${BUTTON_DANGER} mt-3`}
-      onClick={() => {
-        if (window.confirm(m.confirmRemoval(subject))) start(() => removeFromList([projectId]));
-      }}
-    >
-      {m.removeFromList}
-    </button>
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        className={`${BUTTON_DANGER} mt-3`}
+        onClick={() =>
+          confirm({
+            ...m.confirmRemoval(subject),
+            action: m.removeFromList,
+            danger: true,
+            onConfirm: () => start(() => removeFromList([projectId])),
+          })
+        }
+      >
+        {m.removeFromList}
+      </button>
+      {confirmation}
+    </>
   );
 }
 
@@ -284,6 +294,7 @@ function BulkBar({
     if (!selected.includes(row.id)) continue;
     for (const tag of row.tags) counts[tag] = (counts[tag] ?? 0) + 1;
   }
+  const { confirm, confirmation } = useConfirm();
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-rule-strong bg-panel px-4 py-2" role="group" aria-label={m.label}>
       <span className="font-semibold">
@@ -325,16 +336,22 @@ function BulkBar({
         type="button"
         disabled={pending}
         className={BUTTON}
-        onClick={() => {
-          if (!window.confirm(messages.panel.confirmRemoval(m.projects(selected.length)))) return;
-          start(async () => {
-            await removeFromList(selected);
-            onClear();
-          });
-        }}
+        onClick={() =>
+          confirm({
+            ...messages.panel.confirmRemoval(m.projects(selected.length)),
+            action: messages.panel.removeFromList,
+            danger: true,
+            onConfirm: () =>
+              start(async () => {
+                await removeFromList(selected);
+                onClear();
+              }),
+          })
+        }
       >
         {messages.panel.removeFromList}
       </button>
+      {confirmation}
       <button type="button" onClick={onClear} className={BUTTON}>
         {m.deselect}
       </button>

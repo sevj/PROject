@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import {
   addTag,
   deleteTag,
@@ -20,7 +21,22 @@ import { serverMessages } from "@/server/i18n";
 import type { ProjectStatus } from "@/server/db/schema";
 import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
-import { composeDirectories, launch, runCompose } from "@/server/project-actions";
+import { parseConsoleOptions } from "@/lib/console-options";
+import { ensureConsoleServer } from "@/server/console/server";
+import { issueGrant } from "@/server/console/grants";
+import { listProjectContainers } from "@/server/docker-containers";
+import {
+  checkOutAllRemoteBranches,
+  checkOutRemoteBranch,
+  createBranch,
+  type DeletedBranch,
+  deleteMergedBranches,
+  fetchRemotes,
+  pullFastForward,
+  switchBranch,
+} from "@/server/git-actions";
+import { type CommitPage, type CommitView, readCommits, readCommitView } from "@/server/scan/git";
+import { type ContainerAction, composeDirectories, launch, runCompose, runContainers } from "@/server/project-actions";
 import { type EnvEntry, listProjectFolder, readEnvFile, type TreeListing } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import {
@@ -191,18 +207,84 @@ export async function openTerminal(projectId: number): Promise<string | null> {
   return launch(getSettings(getDb()).terminalCommand, project.absolutePath, m);
 }
 
-export async function dockerAction(projectId: number, mode: "up" | "stop"): Promise<string | null> {
-  const m = serverMessages(getDb()).errors;
+const CONTAINER_ACTIONS: ContainerAction[] = ["start", "stop", "restart"];
+
+/**
+ * One container when `containerId` is given, else all of the project's. Ids are checked
+ * against what Docker reports for this project, so the browser cannot name another one.
+ */
+export async function controlContainers(
+  projectId: number,
+  action: ContainerAction,
+  containerId?: string,
+): Promise<string | null> {
+  const db = getDb();
+  const m = serverMessages(db).errors;
+  if (!CONTAINER_ACTIONS.includes(action)) return m.unknownAction;
   const project = launchable(projectId);
   if (!project) return m.projectGone;
-  if (mode !== "up" && mode !== "stop") return m.unknownAction;
   if (project.row.abandoned) return m.abandonedProject;
-  const { hasCompose, containers } = project.compose;
-  const error = await runCompose(mode, composeDirectories(mode, project.absolutePath, hasCompose, containers), m);
-  // Docker has no live view: without this, the button would show a stale state.
-  await rescanProject(getDb(), projectId);
+
+  const live = await listProjectContainers(db, projectId);
+  if (live.error) return m.dockerUnavailable(live.error);
+
+  let targets = live.containers;
+  if (containerId !== undefined) {
+    targets = targets.filter(({ id }) => id === containerId);
+    if (targets.length === 0) return m.containerGone;
+  } else if (action === "start") {
+    targets = targets.filter(({ running }) => !running);
+  } else if (action === "stop") {
+    targets = targets.filter(({ running }) => running);
+  }
+
+  let error: string | null;
+  if (live.containers.length === 0 && containerId === undefined && action === "start") {
+    // Nothing exists yet: Compose is what creates the containers.
+    const { hasCompose, containers } = project.compose;
+    error = await runCompose("up", composeDirectories("up", project.absolutePath, hasCompose, containers), m);
+  } else {
+    error = await runContainers(action, targets.map(({ id }) => id));
+  }
+  // The list shows how many containers run, and would otherwise keep the old number.
+  await rescanProject(db, projectId);
   refreshAll();
+  revalidatePath(`/projects/${projectId}`);
   return error;
+}
+
+/**
+ * A shell in a container is as powerful as it gets, so the browser is given nothing but a
+ * token that works once, for this container, and only from this page.
+ */
+export async function openConsole(
+  projectId: number,
+  containerId: string,
+  rawOptions: unknown,
+): Promise<{ port: number; token: string } | { error: string }> {
+  const db = getDb();
+  const m = serverMessages(db).errors;
+  const project = launchable(projectId);
+  if (!project) return { error: m.projectGone };
+  if (project.row.abandoned) return { error: m.abandonedProject };
+
+  const parsed = parseConsoleOptions(rawOptions);
+  if ("error" in parsed) return { error: m.consoleOption(parsed.error) };
+
+  const live = await listProjectContainers(db, projectId);
+  if (live.error) return { error: m.dockerUnavailable(live.error) };
+  const container = live.containers.find(({ id }) => id === String(containerId));
+  if (!container) return { error: m.containerGone };
+  if (!container.running || container.state === "paused") return { error: m.containerNotRunning };
+
+  const appHost = (await headers()).get("host");
+  if (!appHost) return { error: m.consoleUnavailable("no host") };
+  try {
+    const port = await ensureConsoleServer();
+    return { port, token: issueGrant({ containerId: container.id, options: parsed.options, appHost }) };
+  } catch (error) {
+    return { error: m.consoleUnavailable(error instanceof Error ? error.message : String(error)) };
+  }
 }
 
 export async function saveSettingsForm(form: Record<string, string>): Promise<string | null> {
@@ -219,4 +301,91 @@ export async function saveSettingsForm(form: Record<string, string>): Promise<st
   });
   refreshAll();
   return null;
+}
+
+/** After a git action, what the list and the sheet show must follow. */
+async function afterGitAction(projectId: number) {
+  await rescanProject(getDb(), projectId);
+  refreshAll();
+  revalidatePath(`/projects/${projectId}`);
+}
+
+function gitTarget(projectId: number): { path: string } | { error: string } {
+  const m = serverMessages(getDb()).errors;
+  const project = launchable(projectId);
+  if (!project) return { error: m.projectGone };
+  if (project.row.abandoned) return { error: m.abandonedProject };
+  return { path: project.absolutePath };
+}
+
+export async function switchProjectBranch(projectId: number, branch: string): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = await switchBranch(target.path, branch, serverMessages(getDb()).gitTab);
+  await afterGitAction(projectId);
+  return error;
+}
+
+export async function fetchProject(projectId: number): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = await fetchRemotes(target.path);
+  await afterGitAction(projectId);
+  return error;
+}
+
+export async function cleanUpBranches(
+  projectId: number,
+  branches: string[],
+): Promise<{ deleted: DeletedBranch[]; errors: string[] }> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return { deleted: [], errors: [target.error] };
+  const result = await deleteMergedBranches(target.path, branches, serverMessages(getDb()).gitTab);
+  await afterGitAction(projectId);
+  return result;
+}
+
+export async function pullProject(projectId: number): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = await pullFastForward(target.path);
+  await afterGitAction(projectId);
+  return error;
+}
+
+export async function createProjectBranch(projectId: number, name: string): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = await createBranch(target.path, name, serverMessages(getDb()).gitTab);
+  await afterGitAction(projectId);
+  return error;
+}
+
+export async function checkOutProjectRemoteBranch(projectId: number, remoteBranch: string): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = await checkOutRemoteBranch(target.path, remoteBranch, serverMessages(getDb()).gitTab);
+  await afterGitAction(projectId);
+  return error;
+}
+
+export async function checkOutAllProjectRemoteBranches(
+  projectId: number,
+): Promise<{ created: string[]; errors: string[] }> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return { created: [], errors: [target.error] };
+  const result = await checkOutAllRemoteBranches(target.path);
+  await afterGitAction(projectId);
+  return result;
+}
+
+export async function loadProjectCommits(projectId: number, from: string, skip: number): Promise<CommitPage> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return { commits: [], hasMore: false };
+  return readCommits(target.path, { from, skip });
+}
+
+export async function loadCommitView(projectId: number, hash: string): Promise<CommitView | null> {
+  const target = gitTarget(projectId);
+  return "error" in target ? null : readCommitView(target.path, hash);
 }

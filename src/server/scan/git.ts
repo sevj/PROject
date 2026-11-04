@@ -90,14 +90,18 @@ function countLines(output: string | undefined): number {
   return (output ?? "").split("\n").filter(Boolean).length;
 }
 
+/** Null when the moment is out of range. The last bucket is the current week. */
+function weekIndex(timestamp: number, nowSeconds: number, count: number): number | null {
+  const age = Math.floor((nowSeconds - timestamp) / WEEK_SECONDS);
+  return age >= 0 && age < count ? count - 1 - age : null;
+}
+
 /** Oldest week first; the last bucket is the current week. */
 export function bucketWeeks(timestamps: number[], nowSeconds: number): number[] {
   const weeks = Array<number>(ACTIVITY_WEEKS).fill(0);
   for (const timestamp of timestamps) {
-    const age = Math.floor((nowSeconds - timestamp) / WEEK_SECONDS);
-    if (age >= 0 && age < ACTIVITY_WEEKS) {
-      weeks[ACTIVITY_WEEKS - 1 - age] += 1;
-    }
+    const index = weekIndex(timestamp, nowSeconds, ACTIVITY_WEEKS);
+    if (index !== null) weeks[index] += 1;
   }
   return weeks;
 }
@@ -150,4 +154,504 @@ export async function readRecentCommits(path: string, limit = 8): Promise<Recent
       const [timestamp, subject] = line.split("\0");
       return { at: new Date(Number(timestamp) * 1000), subject };
     });
+}
+
+export const HISTORY_WEEKS = 52;
+/** One color each, in a fixed order. The others share a neutral one. */
+export const MAX_NAMED_AUTHORS = 7;
+const COMMIT_PAGE = 30;
+const CHANGE_LIMIT = 200;
+const MAX_PATCH_CHARS = 200_000;
+const TAG_LIMIT = 30;
+const BRANCH_LIMIT = 100;
+
+export type AuthorHistory = {
+  /** Null gathers the authors beyond MAX_NAMED_AUTHORS. */
+  name: string | null;
+  /** How many people this line stands for. */
+  people: number;
+  /** All three are oldest week first, over HISTORY_WEEKS. */
+  commits: number[];
+  insertions: number[];
+  deletions: number[];
+};
+
+export type CommitDetail = {
+  hash: string;
+  at: number;
+  author: string;
+  subject: string;
+  tags: string[];
+  insertions: number;
+  deletions: number;
+};
+
+export type BranchDetail = {
+  name: string;
+  current: boolean;
+  /** Whether its last commit is already part of HEAD. */
+  merged: boolean;
+  at: number | null;
+  subject: string;
+  upstream: string | null;
+  /** The upstream is configured, but it no longer exists on the remote. */
+  upstreamGone: boolean;
+  ahead: number;
+  behind: number;
+  /** Can be proposed for clean-up: see `parseBranches`. */
+  removable: boolean;
+  hash: string;
+  /** Commits it has and the main branch lacks, and the reverse. Null without a known main branch. */
+  baseAhead: number | null;
+  baseBehind: number | null;
+};
+
+export type ChangedFile = {
+  path: string;
+  /** Where a renamed file comes from. */
+  from: string | null;
+  state: "modified" | "added" | "deleted" | "renamed" | "untracked" | "conflict";
+};
+
+export type StashEntry = { ref: string; at: number | null; branch: string | null; message: string };
+
+export type RemoteBranch = { name: string; at: number | null; author: string; subject: string };
+
+export type CommitFile = {
+  path: string;
+  /** Null for a binary file. */
+  insertions: number | null;
+  deletions: number | null;
+};
+
+export type CommitView = {
+  hash: string;
+  at: number;
+  author: string;
+  subject: string;
+  body: string;
+  /** A merge is shown against the branch it was merged into. */
+  isMerge: boolean;
+  files: CommitFile[];
+  /** Null when it could not be read, which a very large commit may cause. */
+  patch: string | null;
+  truncated: boolean;
+};
+
+export type TagDetail = { name: string; hash: string; at: number | null; subject: string };
+
+/** What is known without comparing any file, so at once. */
+export type AuthorCommits = Pick<AuthorHistory, "name" | "people" | "commits">;
+
+export type GitDetails = {
+  authors: AuthorCommits[];
+  /** Comparing a year of commits takes seconds on some repositories: it must not hold the page. */
+  lines: Promise<AuthorHistory[]>;
+  commits: CommitDetail[];
+  hasMoreCommits: boolean;
+  branches: BranchDetail[];
+  branchCount: number;
+  /** What the branches are compared to. */
+  compareBase: string | null;
+  changes: ChangedFile[];
+  stashes: StashEntry[];
+  /** On a remote, without any local branch for them. */
+  remoteBranches: RemoteBranch[];
+  remoteBranchCount: number;
+  /** Not limited like `branches`: the clean-up must offer all of them. */
+  removable: BranchDetail[];
+  /** Read when the tab opens, since the last refresh may be old and this decides what can be done. */
+  dirtyCount: number;
+  tags: TagDetail[];
+  tagCount: number;
+};
+
+type LogRecord = { fields: string[]; insertions: number; deletions: number };
+
+/** For a `git log` whose format starts with %x01, with --shortstat. */
+export function parseLog(output: string): LogRecord[] {
+  return output
+    .split("\x01")
+    .slice(1)
+    .map((record) => {
+      const end = record.indexOf("\n");
+      const stat = end === -1 ? "" : record.slice(end);
+      return {
+        fields: (end === -1 ? record : record.slice(0, end)).split("\0"),
+        insertions: Number(/(\d+) insertions?\(\+\)/.exec(stat)?.[1] ?? 0),
+        deletions: Number(/(\d+) deletions?\(-\)/.exec(stat)?.[1] ?? 0),
+      };
+    });
+}
+
+/** The most active authors first, which is what keeps their color from one period to another. */
+export function buildAuthorHistory(records: LogRecord[], nowSeconds: number): AuthorHistory[] {
+  const byAuthor = new Map<string, AuthorHistory>();
+  for (const { fields, insertions, deletions } of records) {
+    const [timestamp, name] = fields;
+    const index = weekIndex(Number(timestamp), nowSeconds, HISTORY_WEEKS);
+    if (index === null) continue;
+    // The same person often commits as both "Sevj" and "sevj". The most recent spelling stays.
+    const key = name.toLowerCase();
+    let author = byAuthor.get(key);
+    if (!author) {
+      const empty = () => Array<number>(HISTORY_WEEKS).fill(0);
+      author = { name, people: 1, commits: empty(), insertions: empty(), deletions: empty() };
+      byAuthor.set(key, author);
+    }
+    author.commits[index] += 1;
+    author.insertions[index] += insertions;
+    author.deletions[index] += deletions;
+  }
+
+  const total = ({ commits }: AuthorHistory) => commits.reduce((sum, count) => sum + count, 0);
+  const sorted = [...byAuthor.values()].sort(
+    (a, b) => total(b) - total(a) || (a.name ?? "").localeCompare(b.name ?? ""),
+  );
+  const rest = sorted.slice(MAX_NAMED_AUTHORS);
+  if (rest.length === 0) return sorted;
+
+  const sumOf = (key: "commits" | "insertions" | "deletions") =>
+    Array.from({ length: HISTORY_WEEKS }, (_, week) => rest.reduce((sum, author) => sum + author[key][week], 0));
+  return [
+    ...sorted.slice(0, MAX_NAMED_AUTHORS),
+    {
+      name: null,
+      people: rest.length,
+      commits: sumOf("commits"),
+      insertions: sumOf("insertions"),
+      deletions: sumOf("deletions"),
+    },
+  ];
+}
+
+/** Long-lived by convention: being merged somewhere does not mean they are finished. */
+const PROTECTED_BRANCHES = new Set([
+  "main",
+  "master",
+  "trunk",
+  "develop",
+  "development",
+  "dev",
+  "staging",
+  "preprod",
+  "production",
+  "prod",
+  "stable",
+]);
+
+/**
+ * The current branch first, then the most recently active ones as given by git.
+ * A branch is removable once merged into HEAD, unless something else still relies on its
+ * name: it is checked out elsewhere, or it is a main branch. With a detached HEAD, nothing
+ * is: being part of a lone commit says nothing about what is finished.
+ */
+export function parseBranches(output: string, merged: string, defaultBranch: string | null = null): BranchDetail[] {
+  const mergedNames = new Set(merged.split("\n").filter(Boolean));
+  const lines = output.split("\n").filter(Boolean).map((line) => line.split("\0"));
+  const attached = lines.some(([, head]) => head === "*");
+  const branches = lines.map(([name, head, upstream, track, timestamp, worktree, subject, hash]) => {
+    const current = head === "*";
+    const isMerged = mergedNames.has(name);
+    return {
+      name,
+      current,
+      merged: isMerged,
+      at: timestamp ? Number(timestamp) * 1000 : null,
+      subject: subject ?? "",
+      upstream: upstream || null,
+      upstreamGone: track === "gone",
+      ahead: Number(/ahead (\d+)/.exec(track)?.[1] ?? 0),
+      behind: Number(/behind (\d+)/.exec(track)?.[1] ?? 0),
+      removable:
+        attached && isMerged && !current && !worktree && !PROTECTED_BRANCHES.has(name) && name !== defaultBranch,
+      hash: hash ?? "",
+      baseAhead: null,
+      baseBehind: null,
+    };
+  });
+  return branches.sort((x, y) => Number(y.current) - Number(x.current));
+}
+
+export async function readBranches(path: string): Promise<BranchDetail[]> {
+  const [branches, merged, remoteHead] = await Promise.all([
+    gitOptional(path, [
+      "for-each-ref",
+      "--sort=-committerdate",
+      "--format=%(refname:strip=2)%00%(HEAD)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(committerdate:unix)%00%(worktreepath)%00%(contents:subject)%00%(objectname:short)",
+      "refs/heads",
+    ]),
+    gitOptional(path, ["for-each-ref", "--merged=HEAD", "--format=%(refname:strip=2)", "refs/heads"]),
+    remoteHeadOf(path),
+  ]);
+  return parseBranches(branches ?? "", merged ?? "", remoteHead);
+}
+
+const remoteHeadOf = async (path: string) =>
+  (await gitOptional(path, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]))?.trim().replace(/^origin\//, "") || null;
+
+/** The branch others are compared to: the one the remote calls its default, or the usual names. */
+export function pickCompareBase(names: string[], remoteHead: string | null): string | null {
+  const known = new Set(names);
+  return [remoteHead, "main", "master", "trunk", "develop"].find((name) => name && known.has(name)) ?? null;
+}
+
+/** Git 2.41 at least: with an older one the branches are just shown without this. */
+async function readBranchesCompared(path: string): Promise<{ branches: BranchDetail[]; base: string | null }> {
+  const [branches, remoteHead] = await Promise.all([readBranches(path), remoteHeadOf(path)]);
+  const base = pickCompareBase(branches.map(({ name }) => name), remoteHead);
+  if (!base) return { branches, base };
+  const output = await gitOptional(path, [
+    "for-each-ref",
+    `--format=%(refname:strip=2)%00%(ahead-behind:refs/heads/${base})`,
+    "refs/heads",
+  ]);
+  if (output === undefined) return { branches, base: null };
+  const gaps = new Map(
+    output
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [name, gap] = line.split("\0");
+        return [name, gap.split(" ").map(Number)] as const;
+      }),
+  );
+  return {
+    base,
+    branches: branches.map((branch) => {
+      const gap = gaps.get(branch.name);
+      return gap && branch.name !== base ? { ...branch, baseAhead: gap[0], baseBehind: gap[1] } : branch;
+    }),
+  };
+}
+
+/** From `git status --porcelain=v1 -z`, where a rename is followed by the name it had. */
+export function parseChanges(output: string): ChangedFile[] {
+  const tokens = output.split("\0").filter(Boolean);
+  const files: ChangedFile[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const [x, y] = tokens[index];
+    const path = tokens[index].slice(3);
+    const code = `${x}${y}`;
+    const renamed = x === "R" || x === "C" || y === "R" || y === "C";
+    const from = renamed ? (tokens[(index += 1)] ?? null) : null;
+    let state: ChangedFile["state"] = "modified";
+    if (code === "??") state = "untracked";
+    else if (code.includes("U") || code === "AA" || code === "DD") state = "conflict";
+    else if (renamed) state = "renamed";
+    else if (code.includes("D")) state = "deleted";
+    else if (code.includes("A")) state = "added";
+    files.push({ path, from, state });
+  }
+  return files;
+}
+
+/** `On main: message`, or `WIP on main: abc123 subject` when no message was given. */
+export function parseStashes(output: string): StashEntry[] {
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [ref, timestamp, summary] = line.split("\0");
+      const match = /^(?:WIP on|On) ([^:]+): (.*)$/.exec(summary ?? "");
+      return {
+        ref,
+        at: timestamp ? Number(timestamp) * 1000 : null,
+        branch: match?.[1] ?? null,
+        message: match?.[2] ?? summary ?? "",
+      };
+    });
+}
+
+/** Leaves out what is already there locally, under the same name or as an upstream. */
+export function parseRemoteBranches(output: string, locals: BranchDetail[]): RemoteBranch[] {
+  const names = new Set(locals.map(({ name }) => name));
+  const upstreams = new Set(locals.flatMap(({ upstream }) => upstream ?? []));
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\0"))
+    .filter(([name, symref]) => !symref && !upstreams.has(name) && !names.has(name.slice(name.indexOf("/") + 1)))
+    .map(([name, , timestamp, author, subject]) => ({
+      name,
+      at: timestamp ? Number(timestamp) * 1000 : null,
+      author: author ?? "",
+      subject: subject ?? "",
+    }));
+}
+
+export async function readRemoteBranches(path: string, locals: BranchDetail[]): Promise<RemoteBranch[]> {
+  const output = await gitOptional(path, [
+    "for-each-ref",
+    "--sort=-committerdate",
+    "--format=%(refname:strip=2)%00%(symref)%00%(committerdate:unix)%00%(authorname)%00%(contents:subject)",
+    "refs/remotes",
+  ]);
+  return parseRemoteBranches(output ?? "", locals);
+}
+
+export type CommitPage = { commits: CommitDetail[]; hasMore: boolean };
+
+/**
+ * Starting from a given commit, so that a commit made in the meantime does not shift the
+ * pages. One more than a page is read to know whether anything is left.
+ */
+export async function readCommits(path: string, { from, skip = 0 }: { from?: string; skip?: number } = {}): Promise<CommitPage> {
+  if (from !== undefined && !COMMIT_HASH.test(from)) return { commits: [], hasMore: false };
+  const output = await gitOptional(path, [
+    "log",
+    `-${COMMIT_PAGE + 1}`,
+    `--skip=${Math.max(0, Math.floor(skip))}`,
+    "--format=%x01%h%x00%ct%x00%aN%x00%D%x00%s",
+    "--shortstat",
+    ...(from ? [from] : []),
+  ]);
+  const commits = parseLog(output ?? "").map(({ fields, insertions, deletions }) => {
+    const [hash, timestamp, author, refs, subject] = fields;
+    return {
+      hash,
+      at: Number(timestamp) * 1000,
+      author,
+      subject,
+      tags: refs
+        .split(", ")
+        .filter((ref) => ref.startsWith("tag: "))
+        .map((ref) => ref.slice("tag: ".length)),
+      insertions,
+      deletions,
+    };
+  });
+  return { commits: commits.slice(0, COMMIT_PAGE), hasMore: commits.length > COMMIT_PAGE };
+}
+
+/** A hash comes from the browser: it must not be able to read as an option or a range. */
+const COMMIT_HASH = /^[0-9a-f]{4,64}$/;
+
+export function parseNumstat(output: string): CommitFile[] {
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [added, removed, ...path] = line.split("\t");
+      return {
+        path: path.join("\t"),
+        insertions: added === "-" ? null : Number(added),
+        deletions: removed === "-" ? null : Number(removed),
+      };
+    });
+}
+
+/** Null when this is not a commit of this repository. */
+export async function readCommitView(path: string, hash: string): Promise<CommitView | null> {
+  if (!COMMIT_HASH.test(hash)) return null;
+  // What a repository configures to transform its files must not run because a page was opened.
+  const diff = ["--no-color", "--no-ext-diff", "--no-textconv", "--diff-merges=first-parent", "--format="];
+  const quoting = ["-c", "core.quotePath=false"];
+  const [meta, numstat, patch] = await Promise.all([
+    gitOptional(path, ["log", "-1", "--format=%h%x00%ct%x00%aN%x00%p%x00%s%x00%b", hash]),
+    gitOptional(path, [...quoting, "show", ...diff, "--numstat", hash]),
+    gitOptional(path, [...quoting, "show", ...diff, "--patch", hash]),
+  ]);
+  if (meta === undefined) return null;
+  const [short, timestamp, author, parents, subject, body] = meta.split("\0");
+  return {
+    hash: short,
+    at: Number(timestamp) * 1000,
+    author,
+    subject,
+    body: (body ?? "").trim(),
+    isMerge: parents.includes(" "),
+    files: parseNumstat(numstat ?? ""),
+    patch: patch === undefined ? null : patch.slice(0, MAX_PATCH_CHARS),
+    truncated: (patch?.length ?? 0) > MAX_PATCH_CHARS,
+  };
+}
+
+/** Null when it cannot be told, which must not read as a clean folder. */
+export async function readDirtyCount(path: string): Promise<number | null> {
+  const status = await gitOptional(path, ["status", "--porcelain"]);
+  return status === undefined ? null : countLines(status);
+}
+
+export function parseTags(output: string): TagDetail[] {
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [name, timestamp, object, target, subject] = line.split("\0");
+      // An annotated tag is an object of its own: what matters is the commit it points to.
+      return { name, hash: target || object, at: timestamp ? Number(timestamp) * 1000 : null, subject: subject ?? "" };
+    });
+}
+
+const historyArgs = (nowSeconds: number) => [
+  "log",
+  `--since=${nowSeconds - HISTORY_WEEKS * WEEK_SECONDS}`,
+  "--format=%x01%ct%x00%aN",
+];
+
+/** One entry per project. For a given HEAD the commits and their diffs cannot change. */
+const lineRecords = new Map<string, { head: string; records: Promise<LogRecord[] | null> }>();
+
+/** Never rejects: without these numbers, the rest of the tab is still right. */
+async function readAuthorLines(path: string, nowSeconds: number): Promise<AuthorHistory[]> {
+  const head = (await gitOptional(path, ["rev-parse", "HEAD"]))?.trim();
+  if (!head) return [];
+  let cached = lineRecords.get(path);
+  if (cached?.head !== head) {
+    const records = gitOptional(path, [...historyArgs(nowSeconds), "--shortstat"]).then((output) =>
+      output === undefined ? null : parseLog(output),
+    );
+    cached = { head, records };
+    lineRecords.set(path, cached);
+  }
+  const records = await cached.records;
+  if (records !== null) return buildAuthorHistory(records, nowSeconds);
+  // A timeout, for instance: the next visit tries again.
+  if (lineRecords.get(path) === cached) lineRecords.delete(path);
+  return [];
+}
+
+/** Read when the Git tab opens: this is too much to read for every project at each refresh. */
+export async function readGitDetails(path: string, now = new Date()): Promise<GitDetails> {
+  const nowSeconds = Math.floor(now.getTime() / 1000);
+  const lines = readAuthorLines(path, nowSeconds);
+  const [history, firstPage, tags, { branches: allBranches, base }, status, stashes] = await Promise.all([
+    gitOptional(path, historyArgs(nowSeconds)),
+    readCommits(path),
+    gitOptional(path, [
+      "for-each-ref",
+      "--sort=-creatordate",
+      "--format=%(refname:strip=2)%00%(creatordate:unix)%00%(objectname:short)%00%(*objectname:short)%00%(contents:subject)",
+      "refs/tags",
+    ]),
+    readBranchesCompared(path),
+    gitOptional(path, ["status", "--porcelain=v1", "-z"]),
+    gitOptional(path, ["stash", "list", "--format=%gd%x00%ct%x00%gs"]),
+  ]);
+  const allRemote = await readRemoteBranches(path, allBranches);
+
+  const allTags = parseTags(tags ?? "");
+  const changes = parseChanges(status ?? "");
+  return {
+    authors: buildAuthorHistory(parseLog(history ?? ""), nowSeconds).map(({ name, people, commits }) => ({
+      name,
+      people,
+      commits,
+    })),
+    lines,
+    commits: firstPage.commits,
+    hasMoreCommits: firstPage.hasMore,
+    branches: allBranches.slice(0, BRANCH_LIMIT),
+    branchCount: allBranches.length,
+    compareBase: base,
+    removable: allBranches.filter(({ removable }) => removable),
+    dirtyCount: changes.length,
+    changes: changes.slice(0, CHANGE_LIMIT),
+    stashes: parseStashes(stashes ?? ""),
+    remoteBranches: allRemote.slice(0, BRANCH_LIMIT),
+    remoteBranchCount: allRemote.length,
+    tags: allTags.slice(0, TAG_LIMIT),
+    tagCount: allTags.length,
+  };
 }

@@ -13,11 +13,21 @@
   --accent: #a594f9;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
   --alert: #ef8354;
+  --ok: #5fd38d;
   --sel: #1b1b21;
   --r0: #1b1b21;
   --r1: #3f3770;
   --r2: #6f5fc4;
   --r3: #a594f9;
+  /* One color per author, in this order. Checked for color blindness against --bg: keep the order. */
+  --series-1: #9085e9;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #3987e5;
+  --series-7: #e66767;
+  --series-other: #5c5c68;
 }
 
 :root[data-theme="light"] {
@@ -31,11 +41,20 @@
   --rule-strong: #c4c4cf;
   --accent: #5b45c4;
   --alert: #b8431a;
+  --ok: #1f7a4a;
   --sel: #ebebf1;
   --r0: #e3e3ea;
   --r1: #b9b0ea;
   --r2: #8574d9;
   --r3: #5b45c4;
+  --series-1: #5b45c4;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #2a78d6;
+  --series-7: #e34948;
+  --series-other: #9a9aa2;
 }
 
 @theme inline {
@@ -49,6 +68,7 @@
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-alert: var(--alert);
+  --color-ok: var(--ok);
   --color-sel: var(--sel);
   --font-sans: var(--font-schibsted);
   --font-mono: var(--font-dm-mono);
@@ -78,6 +98,32 @@ body {
 
 ::selection {
   background: var(--accent-soft);
+}
+
+/* Square and discreet like the rules, in the accent color once pointed at.
+   The transparent border keeps the bar thin and leaves it a wider area to grab. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  background: var(--rule-strong) padding-box;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: var(--accent) padding-box;
+}
+/* Setting these in Chrome would turn off the rules above, which allow more. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule-strong) transparent;
+  }
 }
 
 /* The header fades out instead of ending on a hard line. */

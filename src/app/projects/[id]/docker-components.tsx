@@ -1,7 +1,9 @@
 import type { Messages } from "@/i18n";
 import type { ContainerFact } from "@/server/db/schema";
 import type { DockerStack } from "@/server/docker-stack";
+import { classifyStatus, TONE } from "@/lib/docker-state";
 import { DATA, LABEL } from "../../ui";
+import { StateGlyph, TONE_TEXT } from "./state-badge";
 
 const CELL = "border-b border-rule py-2 pr-4 align-top";
 
@@ -10,18 +12,30 @@ export function DockerComponents({
   stack,
   containers,
   m,
+  states,
 }: {
   stack: DockerStack | null;
   containers: ContainerFact[];
   m: Messages["sheet"]["dockerComponents"];
+  states: Messages["sheet"]["dockerTab"]["states"];
 }) {
   const components = stack?.components ?? [];
   const declared = new Set(components.map(({ service }) => service));
   const undeclared = containers.filter((container) => !declared.has(container.service));
   const stateOf = (service: string) => containers.find((container) => container.service === service);
-  const State = ({ container }: { container?: ContainerFact }) => (
-    <span className={container?.state === "running" ? "" : "text-mut"}>{container?.status ?? "—"}</span>
-  );
+  const State = ({ container }: { container?: ContainerFact }) => {
+    if (!container) return <span className="text-mut">—</span>;
+    const kind = classifyStatus(container.state, container.status);
+    return (
+      <span className="inline-flex items-center gap-2">
+        <StateGlyph kind={kind} />
+        <span className={TONE_TEXT[TONE[kind] === "ok" ? "off" : TONE[kind]]}>
+          <span className="sr-only">{states[kind]}: </span>
+          {container.status}
+        </span>
+      </span>
+    );
+  };
 
   return (
     <>

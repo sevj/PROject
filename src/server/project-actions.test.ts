@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeDirectories, launch, runCompose } from "./project-actions";
+import { composeDirectories, launch, runCompose, runContainers } from "./project-actions";
 
 const container = (workingDir: string, state = "running") => ({
   name: workingDir,
@@ -49,5 +49,11 @@ describe("launch", () => {
   it("reports a missing program and an empty command", async () => {
     expect(await launch("no-such-program-xyz {path}", "/tmp")).toContain("Could not start");
     expect(await launch("  ", "/tmp")).toContain("No command");
+  });
+});
+
+describe("runContainers", () => {
+  it("does nothing, and asks nothing of Docker, without a container", async () => {
+    expect(await runContainers("restart", [])).toBeNull();
   });
 });

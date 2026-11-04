@@ -57,3 +57,20 @@ export async function runCompose(
   }
   return null;
 }
+
+export type ContainerAction = "start" | "stop" | "restart";
+
+/** Ids come from `listProjectContainers`, never from the browser as they are. */
+export async function runContainers(
+  action: ContainerAction,
+  ids: string[],
+): Promise<string | null> {
+  if (ids.length === 0) return null;
+  try {
+    await run("docker", [action, ...ids], { timeout: COMPOSE_TIMEOUT, maxBuffer: 16 * 1024 * 1024 });
+    return null;
+  } catch (error) {
+    const stderr = (error as { stderr?: string }).stderr?.trim();
+    return stderr || String(error);
+  }
+}

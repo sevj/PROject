@@ -6,11 +6,12 @@ import { isMarkdown } from "@/lib/docs";
 import { formatAge } from "@/lib/registry";
 import type { Messages } from "@/i18n";
 import { getDb } from "@/server/db/client";
+import { listProjectContainers } from "@/server/docker-containers";
 import { readDockerStack } from "@/server/docker-stack";
 import { serverMessages } from "@/server/i18n";
 import { listProjectFolder, readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
-import { readRecentCommits } from "@/server/scan/git";
+import { readGitDetails, readRecentCommits } from "@/server/scan/git";
 import { LoadingFallback } from "../../loading-fallback";
 import { ProjectDescription } from "../../project-description";
 import { ProjectDirectory } from "../../project-directory";
@@ -20,11 +21,13 @@ import { ProjectOrganizer } from "../../project-organizer";
 import { BackIcon } from "../../icons";
 import { BUTTON_QUIET, CARD, DATA, SECTION_TITLE } from "../../ui";
 import { DockerComponents } from "./docker-components";
+import { DockerTab } from "./docker-tab";
 import { EnvFiles } from "./env-files";
+import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
 import { ProjectTree } from "./project-tree";
 
-const TABS = ["general", "structure", "documentation"] as const;
+const TABS = ["general", "docker", "git", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 const TAB =
   "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";
@@ -82,7 +85,11 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   // An abandoned project is not read anymore, except for what is explicitly opened.
   const commits =
     tab === "general" && row.hasGit && !row.missing && !row.abandoned ? await readRecentCommits(absolutePath) : [];
-  const dockerStack = tab === "general" && !row.missing && !row.abandoned ? await readDockerStack(absolutePath) : null;
+  const gitDetails =
+    tab === "git" && row.hasGit && !row.missing && !row.abandoned ? await readGitDetails(absolutePath) : null;
+  const readsDocker = (tab === "general" || tab === "docker") && !row.missing && !row.abandoned;
+  const dockerStack = readsDocker ? await readDockerStack(absolutePath) : null;
+  const dockerLive = tab === "docker" && !row.missing && !row.abandoned ? await listProjectContainers(getDb(), projectId) : null;
   const tree = tab === "structure" && !row.missing ? await listProjectFolder(absolutePath, ".") : null;
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
   // Only a path found on disk beforehand can be opened: `doc` comes from the URL.
@@ -181,7 +188,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
               <section className={`${CARD} my-4`}>
                 <h2 className={`${SECTION_TITLE} mb-3`}>{m.dockerComponents.title}</h2>
-                <DockerComponents stack={dockerStack} containers={row.containers} m={m.dockerComponents} />
+                <DockerComponents stack={dockerStack} containers={row.containers} m={m.dockerComponents} states={m.dockerTab.states} />
               </section>
 
               <ProjectFacts row={row} now={now} wide>
@@ -195,6 +202,19 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                   </section>
                 </ProjectFacts>
             </>
+          ) : null}
+
+          {tab === "git" ? <GitTab row={row} now={now} details={gitDetails} messages={messages} /> : null}
+
+          {tab === "docker" ? (
+            <DockerTab
+              row={row}
+              projectPath={absolutePath}
+              now={now}
+              live={dockerLive}
+              stack={dockerStack}
+              messages={messages}
+            />
           ) : null}
 
           {tab === "structure" ? (

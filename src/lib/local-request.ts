@@ -1,4 +1,4 @@
-const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
+export const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 export type RequestHeaders = {
   host: string | null;
@@ -6,7 +6,7 @@ export type RequestHeaders = {
   secFetchSite: string | null;
 };
 
-function hostnameOf(host: string): string | null {
+export function hostnameOf(host: string): string | null {
   try {
     return new URL(`http://${host}`).hostname;
   } catch {
