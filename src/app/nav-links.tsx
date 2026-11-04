@@ -14,6 +14,7 @@ export function NavLinks() {
   const links = [
     { href: "/", label: m.projects },
     { href: "/dumps", label: m.dumps },
+    { href: "/resources", label: m.resources },
     { href: "/settings", label: m.settings },
   ];
   return (
