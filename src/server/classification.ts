@@ -80,7 +80,7 @@ export function addTag(db: Db, projectIds: number[], name: string) {
   });
 }
 
-/** A tag used by nobody disappears from the filters and the suggestions. */
+/** An unused tag stays available: it only goes away when deleted from the settings. */
 export function removeTag(db: Db, projectIds: number[], name: string) {
   if (projectIds.length === 0) return;
   db.transaction((tx) => {
@@ -89,8 +89,6 @@ export function removeTag(db: Db, projectIds: number[], name: string) {
     tx.delete(projectTags)
       .where(and(inArray(projectTags.projectId, projectIds), eq(projectTags.tagId, tag.id)))
       .run();
-    const left = tx.select().from(projectTags).where(eq(projectTags.tagId, tag.id)).limit(1).get();
-    if (!left) tx.delete(tags).where(eq(tags.id, tag.id)).run();
   });
 }
 

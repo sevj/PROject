@@ -3,11 +3,11 @@
 import { useTransition } from "react";
 import { STATUS_LABELS, type RegistryRow } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
-import { addTagTo, removeTagFrom, saveNote, toggleFavorite, updateStatus } from "./actions";
-import { DATA, FIELD, LABEL } from "./ui";
+import { saveNote, toggleFavorite, updateStatus } from "./actions";
+import { FIELD, LABEL } from "./ui";
 
 /** Mount with `key={row.id}`: the note field keeps its own text while typing. */
-export function ClassificationEditor({ row, knownTags }: { row: RegistryRow; knownTags: string[] }) {
+export function ClassificationEditor({ row }: { row: RegistryRow }) {
   const [, start] = useTransition();
   const run = (action: () => Promise<void>) => start(action);
 
@@ -42,47 +42,6 @@ export function ClassificationEditor({ row, knownTags }: { row: RegistryRow; kno
             {row.favorite ? "★ Favori" : "☆ Ajouter"}
           </button>
         </div>
-      </div>
-
-      <div>
-        <span className={`${LABEL} block pb-1`}>Tags</span>
-        {row.tags.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 pb-2">
-            {row.tags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                aria-label={`Retirer le tag ${tag}`}
-                onClick={() => run(() => removeTagFrom([row.id], tag))}
-                className={`${DATA} min-h-7 cursor-pointer border border-rule px-2 hover:border-alert hover:text-alert`}
-              >
-                {tag} ×
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <form
-          action={(data) => {
-            const name = String(data.get("tag") ?? "");
-            run(() => addTagTo([row.id], name));
-          }}
-        >
-          <label>
-            <span className="sr-only">Ajouter un tag</span>
-            <input
-              name="tag"
-              list={`known-tags-${row.id}`}
-              placeholder="Ajouter un tag, puis Entrée"
-              className={`${FIELD} placeholder:text-mut`}
-              maxLength={80}
-            />
-          </label>
-          <datalist id={`known-tags-${row.id}`}>
-            {knownTags.map((tag) => (
-              <option key={tag} value={tag} />
-            ))}
-          </datalist>
-        </form>
       </div>
 
       <label>

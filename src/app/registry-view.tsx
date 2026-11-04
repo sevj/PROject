@@ -17,10 +17,11 @@ import {
   STATUS_LABELS,
 } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
-import { addTagTo, markAbandoned, removeTagFrom, scanNow, updateStatus } from "./actions";
+import { markAbandoned, scanNow, updateStatus } from "./actions";
 import { ClassificationEditor } from "./classification-editor";
 import { ProjectButtons } from "./project-buttons";
 import { TagList } from "./tag-list";
+import { TagPicker } from "./tag-picker";
 import { BUTTON, CHECKBOX, DATA, LABEL } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
@@ -103,60 +104,28 @@ function dockerLabel(row: RegistryRow): string {
 
 function BulkBar({
   selected,
+  rows,
   view,
   knownTags,
   onClear,
 }: {
   selected: number[];
+  rows: RegistryRow[];
   view: View;
   knownTags: string[];
   onClear: () => void;
 }) {
   const [pending, start] = useTransition();
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (!selected.includes(row.id)) continue;
+    for (const tag of row.tags) counts[tag] = (counts[tag] ?? 0) + 1;
+  }
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-ink bg-panel px-4 py-2" role="group" aria-label="Actions groupées">
       <span className="font-semibold">
         {selected.length} sélectionné{selected.length > 1 ? "s" : ""}
       </span>
-      <form
-        action={(data) => {
-          const name = String(data.get("tag") ?? "");
-          start(() => addTagTo(selected, name));
-        }}
-      >
-        <label>
-          <span className="sr-only">Ajouter un tag à la sélection</span>
-          <input
-            name="tag"
-            list="bulk-known-tags"
-            placeholder="Ajouter un tag, puis Entrée"
-            maxLength={80}
-            className={`${BULK_FIELD} w-56 placeholder:text-mut`}
-          />
-        </label>
-        <datalist id="bulk-known-tags">
-          {knownTags.map((tag) => (
-            <option key={tag} value={tag} />
-          ))}
-        </datalist>
-      </form>
-      <select
-        aria-label="Retirer un tag de la sélection"
-        disabled={pending || knownTags.length === 0}
-        value=""
-        onChange={(event) => {
-          const { value } = event.target;
-          if (value) start(() => removeTagFrom(selected, value));
-        }}
-        className={BULK_FIELD}
-      >
-        <option value="">Retirer un tag…</option>
-        {knownTags.map((tag) => (
-          <option key={tag} value={tag}>
-            {tag}
-          </option>
-        ))}
-      </select>
       <select
         aria-label="Changer le statut"
         disabled={pending}
@@ -192,6 +161,9 @@ function BulkBar({
       <button type="button" onClick={onClear} className={BUTTON}>
         Désélectionner
       </button>
+      <div className="w-full max-w-3xl pt-1">
+        <TagPicker projectIds={selected} knownTags={knownTags} counts={counts} />
+      </div>
     </div>
   );
 }
@@ -205,6 +177,14 @@ function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; kno
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
       <div className="mb-5">
         <ProjectButtons key={row.id} row={row} />
+      </div>
+      <div className="mb-5">
+        <TagPicker
+          key={row.id}
+          projectIds={[row.id]}
+          knownTags={knownTags}
+          counts={Object.fromEntries(row.tags.map((tag) => [tag, 1]))}
+        />
       </div>
       {row.hasGit ? (
         <>
@@ -231,7 +211,7 @@ function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; kno
         <Fact label="Taille hors dépendances" value={formatSize(row.sizeBytes)} />
       </dl>
       <div className="mt-5">
-        <ClassificationEditor key={row.id} row={row} knownTags={knownTags} />
+        <ClassificationEditor key={row.id} row={row} />
       </div>
       <Link href={`/projects/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-medium underline">
         Ouvrir la fiche complète
@@ -384,7 +364,7 @@ export function RegistryView({
       ) : null}
 
       {checked.size > 0 ? (
-        <BulkBar selected={[...checked]} view={view} knownTags={knownTags} onClear={() => setChecked(new Set())} />
+        <BulkBar selected={[...checked]} rows={rows} view={view} knownTags={knownTags} onClear={() => setChecked(new Set())} />
       ) : null}
 
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] border-b border-ink">

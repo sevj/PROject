@@ -69,14 +69,14 @@ describe("tags", () => {
     expect(db.select().from(projectTags).all()).toHaveLength(2);
   });
 
-  it("adds twice without error and removes from several projects", () => {
+  it("adds twice without error, removes from several projects and keeps the unused tag", () => {
     addTag(db, [a, b], "php");
     addTag(db, [a], "php");
-    addTag(db, [a], "web");
     removeTag(db, [a], "php");
-    expect(tagNames()).toEqual(["php", "web"]);
-    removeTag(db, [a, b], "php");
-    expect(tagNames()).toEqual(["web"]);
+    expect(db.select().from(projectTags).all().map((item) => item.projectId)).toEqual([b]);
+    removeTag(db, [b], "php");
+    expect(db.select().from(projectTags).all()).toEqual([]);
+    expect(tagNames()).toEqual(["php"]);
   });
 
   it("renames, allows a case change and refuses a taken name", () => {

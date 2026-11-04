@@ -10,6 +10,7 @@ import { readRecentCommits } from "@/server/scan/git";
 import { isSizing } from "@/server/scan/jobs";
 import { ClassificationEditor } from "../../classification-editor";
 import { ProjectButtons } from "../../project-buttons";
+import { TagPicker } from "../../tag-picker";
 import { DATA, LABEL } from "../../ui";
 import { EnvFiles } from "./env-files";
 import { RefreshButton } from "./refresh-button";
@@ -187,7 +188,14 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
         <aside className="min-w-0 flex-[1_1_400px] bg-panel">
           <section className={SECTION}>
             <h2 className={`${LABEL} mb-3.5`}>Organisation</h2>
-            <ClassificationEditor key={row.id} row={row} knownTags={knownTags} />
+            <div className="grid gap-4">
+              <TagPicker
+                projectIds={[row.id]}
+                knownTags={knownTags}
+                counts={Object.fromEntries(row.tags.map((tag) => [tag, 1]))}
+              />
+              <ClassificationEditor key={row.id} row={row} />
+            </div>
           </section>
           <section className={SECTION}>
             <h2 className={`${LABEL} mb-3.5`}>
