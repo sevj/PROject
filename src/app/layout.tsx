@@ -3,6 +3,7 @@ import { DM_Mono, Schibsted_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
 import { NavLinks } from "./nav-links";
+import { RootLabel } from "./root-label";
 import "./globals.css";
 
 const schibsted = Schibsted_Grotesk({
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-[15px] font-bold tracking-tight">
               Project Manager
             </Link>
-            <span className="font-mono text-[12.5px] text-mut">~/Projects</span>
+            <Suspense>
+              <RootLabel />
+            </Suspense>
           </div>
           <Suspense>
             <NavLinks />

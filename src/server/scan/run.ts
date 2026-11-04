@@ -1,7 +1,5 @@
 import { and, eq, isNull, like, notInArray, or } from "drizzle-orm";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { Db } from "../db/client";
 import { projectFacts, projects, scans } from "../db/schema";
 import { type DetectedFolder, detectFolder, detectFolders } from "./detect";
@@ -10,10 +8,6 @@ import { type GitFacts, readGitFacts } from "./git";
 import { mapLimit } from "./limit";
 
 const GIT_CONCURRENCY = 8;
-
-export function defaultRoot(): string {
-  return process.env.PM_ROOT || join(homedir(), "Projects");
-}
 
 type Scanned = { folder: DetectedFolder; git: GitFacts | null; error: string | null };
 

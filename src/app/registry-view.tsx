@@ -18,6 +18,7 @@ import {
 import type { ProjectStatus } from "@/server/db/schema";
 import { addCollection, addTagTo, scanNow, toggleCollection, updateStatus } from "./actions";
 import { ClassificationEditor, type CollectionOption } from "./classification-editor";
+import { ProjectButtons } from "./project-buttons";
 import { BUTTON, CHECKBOX, DATA, FIELD, LABEL } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
@@ -205,6 +206,9 @@ function Inspector({
       <div className={`${DATA} break-all text-mut`}>{row.path}</div>
       <h1 className="mt-1 mb-4 text-[32px] leading-[1.05] font-bold tracking-tight break-words">{row.name}</h1>
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
+      <div className="mb-5">
+        <ProjectButtons key={row.id} row={row} canHide />
+      </div>
       {row.hasGit ? (
         <>
           <div className={`${LABEL} pb-1.5`}>Dernier commit</div>

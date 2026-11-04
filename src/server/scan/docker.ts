@@ -32,7 +32,8 @@ export function assignContainers(
   containers: DockerContainer[],
 ): Map<string, ContainerFact[]> {
   const assigned = new Map<string, ContainerFact[]>();
-  for (const { workingDir, ...container } of containers) {
+  for (const container of containers) {
+    const { workingDir } = container;
     if (!workingDir) continue;
     const owner = projectPaths
       .filter((path) => workingDir === path || workingDir.startsWith(`${path}/`))

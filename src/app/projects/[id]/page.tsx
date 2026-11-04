@@ -9,6 +9,7 @@ import { getProject } from "@/server/registry";
 import { readRecentCommits } from "@/server/scan/git";
 import { isSizing } from "@/server/scan/jobs";
 import { ClassificationEditor } from "../../classification-editor";
+import { ProjectButtons } from "../../project-buttons";
 import { DATA, LABEL } from "../../ui";
 import { EnvFiles } from "./env-files";
 import { RefreshButton } from "./refresh-button";
@@ -93,7 +94,10 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             {row.name}
           </h1>
         </div>
-        <RefreshButton projectId={row.id} sizing={isSizing()} />
+        <div className="flex flex-wrap items-start gap-2">
+          <ProjectButtons row={row} />
+          <RefreshButton projectId={row.id} sizing={isSizing()} />
+        </div>
       </div>
 
       {row.missing ? (

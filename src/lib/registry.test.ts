@@ -28,6 +28,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     containers: [],
     sizeBytes: null,
     scanError: null,
+    ideLabel: "VS Code",
     status: null,
     favorite: false,
     note: null,

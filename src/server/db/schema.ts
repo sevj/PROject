@@ -20,6 +20,7 @@ export type ContainerFact = {
   state: string;
   status: string;
   ports: string;
+  workingDir?: string;
 };
 
 /** Identity of a folder. Rows survive when the folder disappears. */
@@ -121,4 +122,12 @@ export const scans = sqliteTable("scans", {
   errorCount: integer("error_count"),
   error: text("error"),
   warning: text("warning"),
+});
+
+/** A single row: settings are read together and written together. */
+export const settings = sqliteTable("settings", {
+  id: integer("id").primaryKey(),
+  value: text("value", { mode: "json" })
+    .$type<{ root: string; ideCommands: Record<string, string>; terminalCommand: string }>()
+    .notNull(),
 });

@@ -30,6 +30,7 @@ export type RegistryRow = {
   containers: ContainerFact[];
   sizeBytes: number | null;
   scanError: string | null;
+  ideLabel: string;
   status: ProjectStatus | null;
   favorite: boolean;
   note: string | null;

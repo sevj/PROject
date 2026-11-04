@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   addTag,
   createCollection,
+  deleteCollection,
   exportClassification,
   importClassification,
   removeTag,
+  renameCollection,
   setCollectionMembership,
   setFavorite,
   setNote,
@@ -56,6 +58,28 @@ describe("collections", () => {
     expect(db.select().from(projectCollections).all()).toHaveLength(2);
     setCollectionMembership(db, [a], id, false);
     expect(db.select().from(projectCollections).all().map((m) => m.projectId)).toEqual([b]);
+  });
+});
+
+describe("rename and delete", () => {
+  it("renames, refusing an empty name or one already taken", () => {
+    const perso = createCollection(db, "Perso")?.id ?? 0;
+    createCollection(db, "Clients");
+    expect(renameCollection(db, perso, "Personnel")).toBeNull();
+    expect(renameCollection(db, perso, "Personnel")).toBeNull();
+    expect(renameCollection(db, perso, "Clients")).toContain("existe déjà");
+    expect(renameCollection(db, perso, "  ")).toContain("pas valide");
+    expect(db.select().from(collections).all().map((c) => c.name).sort()).toEqual(["Clients", "Personnel"]);
+  });
+
+  it("deletes a collection and keeps its projects and their meta", () => {
+    const id = createCollection(db, "Perso")?.id ?? 0;
+    setCollectionMembership(db, [a], id, true);
+    setStatus(db, [a], "active");
+    deleteCollection(db, id);
+    expect(db.select().from(projectCollections).all()).toEqual([]);
+    expect(db.select().from(projects).all()).toHaveLength(2);
+    expect(db.select().from(projectMeta).get()?.status).toBe("active");
   });
 });
 

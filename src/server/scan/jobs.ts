@@ -1,5 +1,6 @@
 import { getDb } from "../db/client";
-import { defaultRoot, runScan, type ScanResult } from "./run";
+import { getSettings } from "../settings";
+import { runScan, type ScanResult } from "./run";
 import { runSizeScan } from "./size";
 
 // Kept on globalThis so that a hot reload in dev does not lose a running job.
@@ -24,7 +25,7 @@ export function startSizing(projectIds?: number[]) {
 
 /** A double click or a second tab joins the running scan instead of starting another. */
 export function startScan(): Promise<ScanResult> {
-  jobs.__pmScan ??= runScan(getDb(), defaultRoot())
+  jobs.__pmScan ??= runScan(getDb(), getSettings(getDb()).root)
     .then((result) => {
       // Sizes take far longer than the rest, so the scan does not wait for them.
       startSizing();

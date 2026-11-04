@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "../db/client";
 import { projectFacts, projectMeta, projects, scans } from "../db/schema";
+import { getSettings, saveSettings } from "../settings";
 import { rescanProject, runScan as realRunScan } from "./run";
 
 let root: string;
@@ -147,13 +148,15 @@ describe("runScan", () => {
   it("attaches containers to their project and clears them once gone", async () => {
     make("app/docker-compose.yml", "");
     make("other/package.json");
-    const container = { name: "app-db", service: "db", state: "running", status: "Up", ports: "" };
-    await realRunScan(db, root, {
-      docker: async () => ({
-        containers: [{ ...container, workingDir: join(root, "app", "deploy") }],
-        error: null,
-      }),
-    });
+    const container = {
+      name: "app-db",
+      service: "db",
+      state: "running",
+      status: "Up",
+      ports: "",
+      workingDir: join(root, "app", "deploy"),
+    };
+    await realRunScan(db, root, { docker: async () => ({ containers: [container], error: null }) });
     expect(row("app").facts?.containers).toEqual([container]);
     expect(row("other").facts?.containers).toEqual([]);
 
@@ -183,6 +186,16 @@ describe("runScan", () => {
     expect(row("app").facts?.stacks.sort()).toEqual(["Node", "PHP"]);
     expect(row("other").facts?.stacks).toEqual(["Node"]);
     expect(db.select().from(projectMeta).get()?.note).toBe("garder");
+  });
+
+  it("uses the settings root by default and keeps a hidden project hidden", async () => {
+    make("app/package.json");
+    saveSettings(db, { root });
+    await realRunScan(db, getSettings(db).root, { docker: noDocker });
+    const { id } = row("app").project;
+    db.update(projects).set({ hidden: true }).where(eq(projects.id, id)).run();
+    await realRunScan(db, getSettings(db).root, { docker: noDocker });
+    expect(row("app").project.hidden).toBe(true);
   });
 
   it("marks a project as missing when refreshing a deleted folder", async () => {

@@ -1,5 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { homedir } from "node:os";
+import { ideCommandFor, ideLabel } from "@/lib/commands";
 import type { RegistryRow } from "@/lib/registry";
 import type { Db } from "./db/client";
 import {
@@ -12,8 +13,9 @@ import {
   scans,
   tags,
 } from "./db/schema";
+import { getSettings } from "./settings";
 
-function displayPath(path: string): string {
+export function displayPath(path: string): string {
   const home = homedir();
   return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
 }
@@ -72,6 +74,7 @@ function toRow(
   { project, facts }: Joined,
   parentName: string | null,
   { meta, collectionIds, tags: rowTags }: Classification,
+  ideCommands: Record<string, string>,
 ): RegistryRow {
   return {
     id: project.id,
@@ -96,6 +99,7 @@ function toRow(
     containers: facts.containers,
     sizeBytes: facts.sizeBytes,
     scanError: facts.scanError,
+    ideLabel: ideLabel(ideCommandFor(facts.stacks, ideCommands)),
     status: meta?.status ?? null,
     favorite: meta?.favorite ?? false,
     note: meta?.note ?? null,
@@ -116,7 +120,9 @@ export function getProject(db: Db, id: number) {
     ? db.select().from(projects).where(eq(projects.id, joined.project.parentId)).get()
     : undefined;
   return {
-    row: toRow(joined, parent?.name ?? null, loadClassification(db, id)(id)),
+    row: toRow(joined, parent?.name ?? null, loadClassification(db, id)(id), getSettings(db).ideCommands),
+    hidden: joined.project.hidden,
+    compose: { hasCompose: joined.facts.hasCompose, containers: joined.facts.containers },
     ...loadLists(db),
     absolutePath: joined.project.path,
     docs: joined.facts.docs,
@@ -134,13 +140,17 @@ export function getRegistry(db: Db) {
   const names = new Map(all.map(({ project }) => [project.id, project.name]));
 
   const classificationOf = loadClassification(db);
+  const { root, ideCommands } = getSettings(db);
 
   const rows: RegistryRow[] = [];
   for (const joined of all) {
     const { project } = joined;
     // A group is only a heading for its children, and hidden folders are the user's call.
     if (project.kind === "group" || project.hidden) continue;
-    rows.push(toRow(joined, project.parentId ? (names.get(project.parentId) ?? null) : null, classificationOf(project.id)));
+    // Rows from a previous root stay in the database, ready if it is restored.
+    if (!project.path.startsWith(`${root}/`)) continue;
+    const parentName = project.parentId ? (names.get(project.parentId) ?? null) : null;
+    rows.push(toRow(joined, parentName, classificationOf(project.id), ideCommands));
   }
 
   const lastScan = db.select().from(scans).orderBy(desc(scans.id)).limit(1).get();
@@ -157,4 +167,14 @@ export function getRegistry(db: Db) {
         }
       : null,
   };
+}
+
+export function getHiddenProjects(db: Db) {
+  return db
+    .select({ id: projects.id, path: projects.path })
+    .from(projects)
+    .where(and(eq(projects.hidden, true)))
+    .orderBy(projects.path)
+    .all()
+    .map(({ id, path }) => ({ id, path: displayPath(path) }));
 }

@@ -64,6 +64,24 @@ export function createCollection(db: Db, name: string) {
     .get();
 }
 
+export function renameCollection(db: Db, id: number, name: string): string | null {
+  const clean = cleanName(name);
+  if (!clean) return "Ce nom de collection n'est pas valide.";
+  const taken = db.select().from(collections).where(eq(collections.name, clean)).get();
+  if (taken && taken.id !== id) return `La collection « ${clean} » existe déjà.`;
+  db.update(collections).set({ name: clean }).where(eq(collections.id, id)).run();
+  return null;
+}
+
+/** Only removes the grouping: its projects and their other classification stay. */
+export function deleteCollection(db: Db, id: number) {
+  db.delete(collections).where(eq(collections.id, id)).run();
+}
+
+export function setHidden(db: Db, projectId: number, hidden: boolean) {
+  db.update(projects).set({ hidden }).where(eq(projects.id, projectId)).run();
+}
+
 export function setCollectionMembership(db: Db, projectIds: number[], collectionId: number, member: boolean) {
   db.transaction((tx) => {
     if (!member) {
