@@ -1,0 +1,47 @@
+# Behind the Adimeo proxy, like the other projects: https://project.dev.local
+# Add `127.0.0.1 project.dev.local` to /etc/hosts.
+#
+# The app lists the projects of this machine, so they are mounted at the same path as on the
+# host (the database keeps absolute paths) and it talks to the host's Docker.
+# Consoles opened from a project cannot work from a container.
+services:
+  app:
+    container_name: project-manager
+    build: .
+    user: node
+    working_dir: /srv/app
+    command: sh -c "corepack pnpm install --frozen-lockfile && corepack pnpm exec next dev -H 0.0.0.0 -p 4300"
+    environment:
+      PM_ALLOWED_HOSTS: project.dev.local
+    labels:
+      - 'traefik.http.routers.project_manager.entrypoints=http'
+      - 'traefik.http.routers.project_manager.rule=Host(`project.dev.local`)'
+      - 'traefik.http.middlewares.project_manager-https-redirect.redirectscheme.scheme=https'
+      - 'traefik.http.routers.project_manager.middlewares=project_manager-https-redirect'
+      - 'traefik.http.routers.project_manager-secure.entrypoints=https'
+      - 'traefik.http.routers.project_manager-secure.rule=Host(`project.dev.local`)'
+      - 'traefik.http.routers.project_manager-secure.tls=true'
+      - 'traefik.http.services.project_manager.loadbalancer.server.port=4300'
+      - 'traefik.docker.network=adimeo_local_proxy'
+    volumes:
+      - .:/srv/app
+      # Built for this container's system, not the host's.
+      - project_manager_node_modules:/srv/app/node_modules
+      - project_manager_next:/srv/app/.next
+      - ${HOME}/Projects:${HOME}/Projects
+      - ${HOME}/.local/share/project-manager:/data/project-manager
+      - ${HOME}/.claude:/home/node/.claude:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Group of /var/run/docker.sock on this machine: stat -c %g /var/run/docker.sock
+    group_add:
+      - '${DOCKER_GID:-124}'
+    networks:
+      - adimeo_local_proxy
+
+networks:
+  adimeo_local_proxy:
+    external: true
+
+volumes:
+  project_manager_node_modules:
+  project_manager_next:
