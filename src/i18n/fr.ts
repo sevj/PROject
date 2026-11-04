@@ -728,6 +728,7 @@ export const fr: Messages = {
     },
   },
   settings: {
+    general: "Général",
     title: "Réglages",
     language: "Langue",
     terminal: "Commande du terminal",

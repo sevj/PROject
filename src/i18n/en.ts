@@ -733,6 +733,7 @@ export const en = {
     },
   },
   settings: {
+    general: "General",
     title: "Settings",
     language: "Language",
     terminal: "Terminal command",

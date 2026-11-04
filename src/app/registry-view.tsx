@@ -23,6 +23,8 @@ import type { ProjectStatus } from "@/server/db/schema";
 import { markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
 import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ClassificationEditor } from "./classification-editor";
+import { useStoredSort } from "./use-stored-sort";
+import { ClaudeConsoleButton } from "./claude-console-button";
 import { ProjectDescription } from "./project-description";
 import { ProjectDirectory } from "./project-directory";
 import { useFlash } from "./flash";
@@ -474,7 +476,7 @@ export function RegistryView({
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<RegistrySort>("commit");
+  const [sort, setSort] = useStoredSort();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const flash = useFlash();

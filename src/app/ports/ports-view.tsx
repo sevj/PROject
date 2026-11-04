@@ -60,8 +60,8 @@ export function PortsView({ report }: { report: PortReport }) {
   return (
     <div className="grid gap-5">
       <header>
-        <h1 className="text-[28px] leading-tight font-bold tracking-tight">{m.title}</h1>
-        <p className="pt-1 text-mut">{m.intro}</p>
+        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
+        <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
       </header>
       {report.dockerError ? <p className="text-alert">{m.dockerUnavailable(report.dockerError)}</p> : null}
       {report.hostError ? <p className="text-alert">{m.hostUnavailable(report.hostError)}</p> : null}
