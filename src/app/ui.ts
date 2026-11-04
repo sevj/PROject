@@ -4,6 +4,8 @@ export const FIELD =
   "min-h-10 w-full border border-rule-strong bg-field px-2.5 focus:border-accent focus:outline-none";
 /** A line under a section's title, with the start of it in the accent color. */
 export const SECTION_TITLE = `${LABEL} relative border-b border-rule-strong pb-1 after:absolute after:-bottom-px after:left-0 after:h-px after:w-8 after:bg-accent`;
+/** A group of information that stands on its own. */
+export const CARD = "min-w-0 border border-rule bg-panel p-4";
 export const CHECKBOX =
   "size-4 cursor-pointer appearance-none border border-mut checked:border-accent checked:bg-accent indeterminate:bg-mut";
 

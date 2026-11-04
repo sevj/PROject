@@ -5,7 +5,7 @@ import { useMessages } from "@/i18n/provider";
 import { dockerLabel, formatAge, formatSize, type RegistryRow, runningCount } from "@/lib/registry";
 import { parseRemote, publishedPorts } from "@/lib/remote";
 import { OpenIcon } from "./icons";
-import { DATA, SECTION_TITLE } from "./ui";
+import { CARD, DATA, SECTION_TITLE } from "./ui";
 
 function Fact({ label, children, alert }: { label: string; children: ReactNode; alert?: boolean }) {
   return (
@@ -16,9 +16,9 @@ function Fact({ label, children, alert }: { label: string; children: ReactNode; 
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children, card = false }: { title: string; children: ReactNode; card?: boolean }) {
   return (
-    <section>
+    <section className={card ? CARD : undefined}>
       <h2 className={SECTION_TITLE}>{title}</h2>
       <dl>{children}</dl>
     </section>
@@ -28,7 +28,18 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 const list = (items: string[]) => items.join(", ") || "—";
 const count = (value: number | null) => (value === null ? "—" : String(value));
 
-export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
+export function ProjectFacts({
+  row,
+  now,
+  wide = false,
+  children,
+}: {
+  row: RegistryRow;
+  now: number;
+  /** On a full page: side by side, and without what that page shows in more detail. */
+  wide?: boolean;
+  children?: ReactNode;
+}) {
   const messages = useMessages();
   const m = messages.facts;
   const remote = row.remoteUrl ? parseRemote(row.remoteUrl) : null;
@@ -38,8 +49,8 @@ export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
   const hasReadme = row.docs.some((doc) => /^readme/i.test(doc));
 
   return (
-    <div className="grid gap-5">
-      <Section title={m.project}>
+    <div className={wide ? "grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid gap-5"}>
+      <Section title={m.project} card={wide}>
         <Fact label={m.stack}>{row.stacks.join(" + ") || "—"}</Fact>
         {row.versions.map(({ label, value }) => (
           <Fact key={label} label={label}>
@@ -53,7 +64,7 @@ export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
       </Section>
 
       {row.hasGit ? (
-        <Section title={m.git}>
+        <Section title={m.git} card={wide}>
           <Fact label={m.lastCommit}>{row.lastCommitAt === null ? m.none : formatAge(row.lastCommitAt, now, messages.age)}</Fact>
           {row.lastCommitSubject ? (
             <div className="border-b border-rule py-1.5 break-words">{row.lastCommitSubject}</div>
@@ -84,26 +95,34 @@ export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
           <Fact label={m.firstCommit}>{row.firstCommitAt === null ? "—" : m.ago(formatAge(row.firstCommitAt, now, messages.age))}</Fact>
         </Section>
       ) : (
-        <Section title={m.git}>
+        <Section title={m.git} card={wide}>
           <Fact label={m.repository}>{m.none}</Fact>
         </Section>
       )}
 
-      <Section title={m.docker}>
-        <Fact label={m.state}>{dockerLabel(row, messages.docker)}</Fact>
-        <Fact label={m.runningServices}>{total === 0 ? "—" : m.runningOf(runningCount(row), total)}</Fact>
-        <Fact label={m.publishedPorts}>{list(ports)}</Fact>
-      </Section>
+      {wide ? null : (
+        <Section title={m.docker}>
+          <Fact label={m.state}>{dockerLabel(row, messages.docker)}</Fact>
+          <Fact label={m.runningServices}>{total === 0 ? "—" : m.runningOf(runningCount(row), total)}</Fact>
+          <Fact label={m.publishedPorts}>{list(ports)}</Fact>
+        </Section>
+      )}
 
-      <Section title={m.disk}>
-        <Fact label={m.withoutDependencies}>{formatSize(row.sizeBytes, messages.size)}</Fact>
-        <Fact label={m.dependencies}>{formatSize(row.depsBytes, messages.size)}</Fact>
-        <Fact label={m.gitFolder}>{formatSize(row.gitBytes, messages.size)}</Fact>
-      </Section>
+      {/* The two short blocks share a column next to the long ones. */}
+      <div className={wide ? "grid gap-4" : "contents"}>
+        <Section title={m.disk} card={wide}>
+          <Fact label={m.withoutDependencies}>{formatSize(row.sizeBytes, messages.size)}</Fact>
+          <Fact label={m.dependencies}>{formatSize(row.depsBytes, messages.size)}</Fact>
+          <Fact label={m.gitFolder}>{formatSize(row.gitBytes, messages.size)}</Fact>
+        </Section>
+        {children}
+      </div>
 
-      <Section title={m.configuration}>
-        <Fact label={m.envFiles}>{list(row.envFiles)}</Fact>
-      </Section>
+      {wide ? null : (
+        <Section title={m.configuration}>
+          <Fact label={m.envFiles}>{list(row.envFiles)}</Fact>
+        </Section>
+      )}
     </div>
   );
 }

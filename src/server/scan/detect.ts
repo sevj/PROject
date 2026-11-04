@@ -28,7 +28,7 @@ const MANIFESTS: Record<string, string> = {
   "project.godot": "Godot",
 };
 
-const COMPOSE_FILE = /^(docker-)?compose(\.[\w-]+)?\.ya?ml$/;
+export const COMPOSE_FILE = /^(docker-)?compose(\.[\w-]+)?\.ya?ml$/;
 const ROOT_DOC = /^(readme|changelog|agents|claude|todo|roadmap)(\.[\w-]+)?\.(md|txt|rst)$/i;
 const DOC_FILE = /\.(md|txt|rst)$/i;
 const IGNORED_DIRS = new Set(["node_modules", "vendor", "target", "dist", "build", "var", ".git"]);
