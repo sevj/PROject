@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { isMarkdown } from "@/lib/docs";
 import { formatAge } from "@/lib/registry";
 import type { Messages } from "@/i18n";
+import { readClaudeUsage } from "@/server/claude-usage/report";
 import { getDb } from "@/server/db/client";
 import { readEnvView } from "@/server/env-vars";
 import { listProjectContainers } from "@/server/docker-containers";
@@ -23,6 +24,8 @@ import { ProjectName } from "../../project-name";
 import { ProjectOrganizer } from "../../project-organizer";
 import { BackIcon } from "../../icons";
 import { BUTTON_SMALL, CARD, DATA, SECTION_TITLE } from "../../ui";
+import { ClaudeTab } from "./claude-tab";
+import { ClaudeUsageBlock } from "./claude-usage";
 import { DockerComponents } from "./docker-components";
 import { DockerTab } from "./docker-tab";
 import { EnvTab } from "./env-tab";
@@ -30,7 +33,7 @@ import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
 import { ProjectTree } from "./project-tree";
 
-const TABS = ["general", "docker", "git", "env", "structure", "documentation"] as const;
+const TABS = ["general", "docker", "git", "env", "claude", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 const TAB =
   "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";
@@ -88,6 +91,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   // An abandoned project is not read anymore, except for what is explicitly opened.
   const commits =
     tab === "general" && row.hasGit && !row.missing && !row.abandoned ? await readRecentCommits(absolutePath) : [];
+  const claudeUsage = tab === "general" || tab === "claude" ? readClaudeUsage(getDb(), projectId, now) : null;
   const gitDetails =
     tab === "git" && row.hasGit && !row.missing && !row.abandoned ? await readGitDetails(absolutePath) : null;
   const readsDocker = (tab === "general" || tab === "docker") && !row.missing && !row.abandoned;
@@ -195,8 +199,28 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                 <DockerComponents stack={dockerStack} containers={row.containers} m={m.dockerComponents} states={m.dockerTab.states} />
               </section>
 
+              <ClaudeUsageBlock
+                usage={claudeUsage}
+                projectId={row.id}
+                now={now}
+                m={m.claudeUsage}
+                age={messages.age}
+                locale={messages.gitTab.dateLocale}
+              />
+
               <ProjectFacts row={row} now={now} wide />
             </>
+          ) : null}
+
+          {tab === "claude" ? (
+            <ClaudeTab
+              usage={claudeUsage}
+              projectPath={absolutePath}
+              now={now}
+              m={m.claudeUsage}
+              age={messages.age}
+              locale={messages.gitTab.dateLocale}
+            />
           ) : null}
 
           {tab === "git" ? <GitTab row={row} now={now} details={gitDetails} messages={messages} /> : null}
