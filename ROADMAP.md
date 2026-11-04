@@ -31,9 +31,9 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - Hors périmètre pour l'instant : écritures, comparaison de dumps.
 
 ## 5. Journal de travail automatique
-- [ ] Sessions déduites des commits git (écart ≤ 30 min, marge 15 min, configurable).
-- [ ] Échantillonneur d'activité fichiers optionnel, actif seulement quand l'app tourne.
-- [ ] Vue hebdomadaire projet × jour, estimations présentées comme telles (skill `dataviz` pour les graphiques).
+- [x] Sessions déduites des commits git (écart ≤ 30 min, marge 15 min, configurable) et de l'activité de Claude Code.
+- [x] Échantillonneur d'activité fichiers optionnel (désactivé par défaut), actif seulement quand l'app tourne.
+- [x] Vue hebdomadaire projet × jour, estimations présentées comme telles.
 
 ## 6. Carte visuelle
 - [ ] React Flow, disposition en couches : projets / conteneurs / bases. Version simple d'abord, pour juger.

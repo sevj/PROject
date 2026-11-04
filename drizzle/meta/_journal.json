@@ -99,6 +99,13 @@
       "when": 1793835504687,
       "tag": "0013_query_history",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793835940358,
+      "tag": "0014_activity_samples",
+      "breakpoints": true
     }
   ]
 }

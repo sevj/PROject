@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { ENGINES } from "../../lib/db-engines";
+import type { JournalConfig } from "../../lib/journal";
 import {
   type AnySQLiteColumn,
   index,
@@ -221,7 +222,7 @@ export const claudeTranscripts = sqliteTable("claude_transcripts", {
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   value: text("value", { mode: "json" })
-    .$type<{ locale?: string; ideCommands: Record<string, string>; terminalCommand: string }>()
+    .$type<{ locale?: string; ideCommands: Record<string, string>; terminalCommand: string; journal?: JournalConfig }>()
     .notNull(),
 });
 
@@ -258,4 +259,17 @@ export const queryHistory = sqliteTable(
     elapsedMs: integer("elapsed_ms").notNull(),
   },
   (table) => [index("query_history_project").on(table.projectId, table.ranAt)],
+);
+
+/** Moments at which files of a project were seen to change, for the work journal. Only kept when the sampler is on. */
+export const activitySamples = sqliteTable(
+  "activity_samples",
+  {
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Milliseconds, to the minute. */
+    at: integer("at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.at] })],
 );
