@@ -3,6 +3,7 @@ import { DM_Mono, Schibsted_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DEFAULT_LOCALE } from "@/i18n";
+import { ClaudeConsolesProvider } from "./claude-consoles";
 import { DumpActivityProvider } from "./dump-activity";
 import { FlashProvider } from "./flash";
 import { LocaleBoundary } from "./locale-boundary";
@@ -42,7 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                   <NavLinks />
                 </Suspense>
               </header>
-              {children}
+              <ClaudeConsolesProvider>{children}</ClaudeConsolesProvider>
               </DumpActivityProvider>
             </FlashProvider>
           </LocaleBoundary>

@@ -26,6 +26,7 @@ import { isSessionId } from "@/lib/claude-console";
 import { parseConsoleOptions } from "@/lib/console-options";
 import { findSessionStart, readClaudeUsage } from "@/server/claude-usage/report";
 import { syncClaudeUsageNow } from "@/server/claude-usage/scheduler";
+import { isSessionOpen, sessionsOfConsole } from "@/server/console/claude-sessions";
 import { ensureConsoleServer } from "@/server/console/server";
 import { issueGrant } from "@/server/console/grants";
 import { listProjectContainers } from "@/server/docker-containers";
@@ -312,6 +313,7 @@ export async function openClaudeConsole(
 
   let resumeFrom: string | null = null;
   if (isSessionId(resumeId)) {
+    if (isSessionOpen(resumeId)) return { error: m.claudeSessionOpen };
     // What was said a moment ago in this console may not have been read yet.
     await syncClaudeUsageNow();
     resumeFrom = findSessionStart(db, projectId, resumeId);
@@ -327,14 +329,17 @@ export async function openClaudeConsole(
   }
 }
 
-/** What has been consumed in this project since a console was opened. */
+/** What one console has consumed since it was opened, and the session it is on by now. */
 export async function readClaudeConsoleUsage(
   projectId: number,
+  sessionId: unknown,
   since: number,
-): Promise<{ costInDollars: number; calls: number }> {
+): Promise<{ costInDollars: number; calls: number; sessionId: string | null }> {
+  if (!isSessionId(sessionId)) return { costInDollars: 0, calls: 0, sessionId: null };
   await syncClaudeUsageNow();
-  const usage = readClaudeUsage(getDb(), projectId, Date.now(), since);
-  return { costInDollars: usage?.costInDollars ?? 0, calls: usage?.calls ?? 0 };
+  const sessionIds = sessionsOfConsole(sessionId);
+  const usage = readClaudeUsage(getDb(), projectId, Date.now(), { since, sessionIds });
+  return { costInDollars: usage?.costInDollars ?? 0, calls: usage?.calls ?? 0, sessionId: sessionIds.at(-1) ?? null };
 }
 
 export async function saveSettingsForm(form: Record<string, string>): Promise<string | null> {

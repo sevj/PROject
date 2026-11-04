@@ -1,5 +1,6 @@
-import { spawn } from "node-pty";
+import { type IPty, spawn } from "node-pty";
 import { claudeArguments, claudeEnvironment } from "@/lib/claude-console";
+import { endConsole, isSessionOpen, trackConsole } from "./claude-sessions";
 import type { Terminal } from "./terminal";
 
 const STOP_GRACE_MS = 2000;
@@ -13,17 +14,27 @@ export type ClaudeTarget = {
 
 /** Claude itself, with no shell around it, and with the rights of whoever runs the app. */
 export async function openClaudeTerminal({ cwd, sessionId, resume }: ClaudeTarget): Promise<Terminal> {
-  const program = spawn("claude", claudeArguments({ id: sessionId, resume }), {
-    name: "xterm-256color",
-    cols: 80,
-    rows: 24,
-    cwd,
-    env: claudeEnvironment(process.env),
-  });
+  // Checked when the right to connect was given, but two could have been given at once.
+  if (isSessionOpen(sessionId)) throw new Error("This conversation is already open in another console.");
+  const tracked = trackConsole(sessionId);
+  let program: IPty;
+  try {
+    program = spawn("claude", claudeArguments({ id: sessionId, resume, hookFile: tracked.file }), {
+      name: "xterm-256color",
+      cols: 80,
+      rows: 24,
+      cwd,
+      env: claudeEnvironment(process.env),
+    });
+  } catch (error) {
+    endConsole(tracked);
+    throw error;
+  }
   let exited = false;
   let stopped = false;
   program.onExit(() => {
     exited = true;
+    endConsole(tracked);
   });
 
   return {

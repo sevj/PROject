@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claudeArguments, claudeEnvironment, isSessionId } from "./claude-console";
+import { claudeArguments, claudeEnvironment, isSessionId, sessionHookSettings } from "./claude-console";
 
 const ID = "24e58f29-84d6-4eed-930f-68d02b4aae30";
 
@@ -14,8 +14,26 @@ describe("isSessionId", () => {
 
 describe("claudeArguments", () => {
   it("names the session of a new conversation, or the one to resume", () => {
-    expect(claudeArguments({ id: ID, resume: false })).toEqual(["--session-id", ID]);
-    expect(claudeArguments({ id: ID, resume: true })).toEqual(["--resume", ID]);
+    expect(claudeArguments({ id: ID, resume: false, hookFile: "/f" }).slice(0, 2)).toEqual(["--session-id", ID]);
+    expect(claudeArguments({ id: ID, resume: true, hookFile: "/f" }).slice(0, 2)).toEqual(["--resume", ID]);
+  });
+
+  it("relaxes no permission", () => {
+    const args = claudeArguments({ id: ID, resume: false, hookFile: "/f" });
+    expect(args).toEqual(["--session-id", ID, "--settings", expect.any(String)]);
+    expect(Object.keys(JSON.parse(args[3]))).toEqual(["hooks"]);
+  });
+});
+
+describe("sessionHookSettings", () => {
+  const commandOf = (file: string) => JSON.parse(sessionHookSettings(file)).hooks.SessionStart[0].hooks[0].command;
+
+  it("appends what the hook receives to the file, one line each time", () => {
+    expect(commandOf("/tmp/a/sessions.jsonl")).toBe("{ cat; echo; } >> '/tmp/a/sessions.jsonl'");
+  });
+
+  it("keeps a path with a quote in one word for the shell", () => {
+    expect(commandOf("/tmp/it's")).toBe("{ cat; echo; } >> '/tmp/it'\\''s'");
   });
 });
 

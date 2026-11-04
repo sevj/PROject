@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_CONSOLE_OPTIONS } from "@/lib/console-options";
 import { issueGrant } from "./grants";
 import { ensureConsoleServer } from "./server";
@@ -242,7 +243,11 @@ done
       rmSync(bin, { recursive: true, force: true });
     });
 
-    const SESSION = "24e58f29-84d6-4eed-930f-68d02b4aae30";
+    // Each its own: a console still closing keeps hold of its session for a moment.
+    let SESSION: string;
+    beforeEach(() => {
+      SESSION = randomUUID();
+    });
     const claudeGrant = (resume = false) =>
       issueGrant({ kind: "claude", cwd: dir, sessionId: SESSION, resume, appHost: "127.0.0.1:4300" });
     const output = (frames: Frame[]) =>
@@ -296,6 +301,52 @@ done
       };
       for (let attempt = 0; attempt < 100 && !isGone(); attempt += 1) await new Promise((r) => setTimeout(r, 30));
       expect(isGone()).toBe(true);
+    });
+
+    it("runs several at once, each with its own session", async () => {
+      const other = "11111111-2222-4333-8444-555555555555";
+      const first = connect(claudeGrant());
+      const second = connect(issueGrant({ kind: "claude", cwd: dir, sessionId: other, resume: false, appHost: "127.0.0.1:4300" }));
+      const one = collect(first);
+      const two = collect(second);
+      await one.until((all) => output(all).includes("pid="));
+      await two.until((all) => output(all).includes("pid="));
+      expect(output(one.frames)).toContain(`--session-id ${SESSION}`);
+      expect(output(two.frames)).toContain(`--session-id ${other}`);
+
+      second.send(Buffer.from("only-here\n"), { binary: true });
+      await two.until((all) => output(all).includes("got=only-here"));
+      expect(output(one.frames)).not.toContain("only-here");
+      first.close();
+      second.close();
+      await Promise.all([one.closed, two.closed]);
+    });
+
+    it("refuses a second program on a conversation already open", async () => {
+      const shared = "aaaaaaaa-2222-4333-8444-555555555555";
+      const grantFor = () => issueGrant({ kind: "claude", cwd: dir, sessionId: shared, resume: true, appHost: "127.0.0.1:4300" });
+      const first = connect(grantFor());
+      const one = collect(first);
+      await one.until((all) => output(all).includes("pid="));
+
+      const second = connect(grantFor());
+      const two = collect(second);
+      expect(await two.closed).toBe(1011);
+      expect(JSON.parse(two.frames[0].text)).toEqual({
+        type: "error",
+        message: "This conversation is already open in another console.",
+      });
+      expect(output(one.frames)).toContain("pid=");
+      first.close();
+    });
+
+    it("gives Claude a way to tell when the session changes, for this console only", async () => {
+      const ws = connect(claudeGrant());
+      const { frames, until } = collect(ws);
+      await until((all) => output(all).includes("pid="));
+      expect(output(frames)).toContain("--settings");
+      expect(output(frames)).toContain("SessionStart");
+      ws.close();
     });
 
     it("is refused to another site like any console", async () => {

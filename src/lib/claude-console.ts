@@ -6,9 +6,24 @@ export const isSessionId = (value: unknown): value is string => typeof value ===
  * Only ever these: permissions are not relaxed, and nothing from the browser is passed on
  * but a session id, checked beforehand against the sessions of the project.
  */
-export function claudeArguments(session: { id: string; resume: boolean }): string[] {
-  return session.resume ? ["--resume", session.id] : ["--session-id", session.id];
+export function claudeArguments(session: { id: string; resume: boolean; hookFile: string }): string[] {
+  return [
+    ...(session.resume ? ["--resume", session.id] : ["--session-id", session.id]),
+    "--settings",
+    sessionHookSettings(session.hookFile),
+  ];
 }
+
+/** Adds to the user's settings for this program only: each start of a session leaves a line. */
+export function sessionHookSettings(file: string): string {
+  const quoted = `'${file.replaceAll("'", `'\\''`)}'`;
+  return JSON.stringify({
+    hooks: { SessionStart: [{ hooks: [{ type: "command", command: `{ cat; echo; } >> ${quoted}` }] }] },
+  });
+}
+
+/** A browser tab holds no more than the console server takes. */
+export const MAX_CLAUDE_CONSOLES = 8;
 
 /**
  * What the app's own server runs with would otherwise reach Claude and every command it

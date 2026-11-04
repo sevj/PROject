@@ -69,11 +69,16 @@ describe("findSessionStart", () => {
 });
 
 describe("readClaudeUsage", () => {
-  it("can be limited to what came after a moment", () => {
-    addCall({ outputTokens: MILLION, calledAt: new Date(NOW - DAY) });
-    addCall({ outputTokens: MILLION, calledAt: new Date(NOW - 1000) });
-    expect(readClaudeUsage(db, projectId, NOW, NOW - 60_000)).toMatchObject({ calls: 1, costInDollars: 20 });
-    expect(readClaudeUsage(db, projectId, NOW, NOW + 60_000)).toBeNull();
+  it("can be limited to what one console did", () => {
+    addCall({ sessionId: "mine", outputTokens: MILLION, calledAt: new Date(NOW - DAY) });
+    addCall({ sessionId: "mine", outputTokens: MILLION, calledAt: new Date(NOW - 1000) });
+    addCall({ sessionId: "after-clear", outputTokens: MILLION, calledAt: new Date(NOW - 500) });
+    addCall({ sessionId: "another-console", outputTokens: MILLION, calledAt: new Date(NOW - 500) });
+
+    const only = { since: NOW - 60_000, sessionIds: ["mine", "after-clear"] };
+    expect(readClaudeUsage(db, projectId, NOW, only)).toMatchObject({ calls: 2, costInDollars: 40 });
+    expect(readClaudeUsage(db, projectId, NOW, { ...only, since: NOW + 60_000 })).toBeNull();
+    expect(readClaudeUsage(db, projectId, NOW, { ...only, sessionIds: [] })).toBeNull();
   });
 
   it("has nothing to say about a project without calls", () => {

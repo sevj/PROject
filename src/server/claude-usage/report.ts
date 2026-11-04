@@ -92,8 +92,13 @@ export function findSessionStart(db: Db, projectId: number, sessionId: string): 
   return first?.cwd ?? null;
 }
 
-/** `since` limits it to the calls made from then on, for a console that has just been opened. */
-export function readClaudeUsage(db: Db, projectId: number, now = Date.now(), since?: number): ClaudeUsage | null {
+/** `only` limits it to what one console did: its sessions, from when it was opened. */
+export function readClaudeUsage(
+  db: Db,
+  projectId: number,
+  now = Date.now(),
+  only?: { since: number; sessionIds: string[] },
+): ClaudeUsage | null {
   const nowSeconds = Math.floor(now / 1000);
   const promptTokens = sql`${claudeApiCalls.inputTokens} + ${claudeApiCalls.cacheReadTokens} + ${claudeApiCalls.cacheWrite5mTokens} + ${claudeApiCalls.cacheWrite1hTokens}`;
   // Numbers are bound as floats, which would make this a fraction of a day without the cast.
@@ -126,7 +131,8 @@ export function readClaudeUsage(db: Db, projectId: number, now = Date.now(), sin
     .where(
       and(
         inArray(claudeApiCalls.projectId, withSubProjects(db, projectId)),
-        since === undefined ? undefined : gte(claudeApiCalls.calledAt, new Date(since)),
+        only && gte(claudeApiCalls.calledAt, new Date(only.since)),
+        only && inArray(claudeApiCalls.sessionId, only.sessionIds),
       ),
     )
     .groupBy(

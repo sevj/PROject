@@ -3,7 +3,7 @@
 import "@xterm/xterm/css/xterm.css";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
 import { useMessages } from "@/i18n/provider";
 import type { StateKind } from "@/lib/docker-state";
@@ -54,28 +54,40 @@ const encoder = new TextEncoder();
 /**
  * A terminal in the browser, whatever runs behind it: `open` asks the server for the right
  * to connect, each time it connects. Changing `connectKey` connects again.
+ *
+ * With `embedded`, it is one of several in a frame that owns the screen: it may be hidden
+ * while its program goes on, and gets the focus back when it is shown.
  */
 export function TerminalPanel({
   title,
   open,
   connectKey = 0,
   reconnectLabel,
+  closeLabel,
   controls,
   below,
   info,
+  embedded,
+  onStatusChange,
   onClose,
 }: {
   title: string;
   open: () => Promise<TerminalGrant>;
   connectKey?: number;
   reconnectLabel: string;
+  closeLabel?: string;
   controls?: ReactNode;
   below?: ReactNode;
   info?: ReactNode;
+  embedded?: { shown: boolean; frame: RefObject<HTMLElement | null> };
+  onStatusChange?: (kind: StateKind) => void;
   onClose: () => void;
 }) {
   const m = useMessages().sheet.console;
-  const panel = useRef<HTMLElement>(null);
+  const own = useRef<HTMLElement>(null);
+  const panel = embedded?.frame ?? own;
+  const shown = embedded?.shown ?? true;
+  const standalone = !embedded;
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const fitter = useRef<FitAddon | null>(null);
@@ -90,6 +102,21 @@ export function TerminalPanel({
   useEffect(() => {
     opener.current = open;
   }, [open]);
+
+  useEffect(() => {
+    onStatusChange?.(GLYPH[status]);
+  }, [status, onStatusChange]);
+
+  // Hidden, it has no size to fit, and it may have missed a change of the window's.
+  useEffect(() => {
+    if (!shown) return;
+    try {
+      fitter.current?.fit();
+    } catch {
+      // Not laid out yet: the observer below fits it as soon as it is.
+    }
+    terminal.current?.focus();
+  }, [shown]);
 
   const connect = useCallback(async () => {
     const term = terminal.current;
@@ -177,6 +204,8 @@ export function TerminalPanel({
       term.unicode.activeVersion = "11";
       term.open(host.current);
       const refit = () => {
+        // Kept running behind another tab: the size it had is still the right one.
+        if (!host.current?.offsetWidth) return;
         try {
           fit.fit();
         } catch {
@@ -244,6 +273,7 @@ export function TerminalPanel({
 
   // The page behind stays where it is: only the terminal scrolls while the console is open.
   useEffect(() => {
+    if (!standalone) return;
     const root = document.documentElement;
     const previous = { overflow: root.style.overflow, paddingRight: root.style.paddingRight };
     // Without its scrollbar the page would grow wider and the content behind would jump.
@@ -254,7 +284,7 @@ export function TerminalPanel({
       root.style.overflow = previous.overflow;
       root.style.paddingRight = previous.paddingRight;
     };
-  }, []);
+  }, [standalone]);
 
   useEffect(() => {
     const onChange = () => {
@@ -267,7 +297,7 @@ export function TerminalPanel({
       document.removeEventListener("fullscreenchange", onChange);
       keyboard()?.unlock?.();
     };
-  }, []);
+  }, [panel]);
 
   const toggleFullscreen = async () => {
     if (document.fullscreenElement) {
@@ -293,10 +323,14 @@ export function TerminalPanel({
 
   return (
     <section
-      ref={panel}
-      role="dialog"
+      ref={standalone ? own : undefined}
+      role={standalone ? "dialog" : undefined}
       aria-label={title}
-      className="fixed inset-3 z-50 flex flex-col overscroll-contain border border-rule-strong bg-bg max-sm:inset-0"
+      className={
+        standalone
+          ? "fixed inset-3 z-50 flex flex-col overscroll-contain border border-rule-strong bg-bg max-sm:inset-0"
+          : "flex min-h-0 flex-1 flex-col"
+      }
     >
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule-strong px-3 py-2">
         <h2 className="min-w-0 flex-1 font-semibold break-all">{title}</h2>
@@ -316,7 +350,7 @@ export function TerminalPanel({
             {fullscreen ? m.exitFullscreen : m.fullscreen}
           </button>
           <button type="button" onClick={onClose} className={BUTTON}>
-            {m.close}
+            {closeLabel ?? m.close}
           </button>
         </div>
       </header>
