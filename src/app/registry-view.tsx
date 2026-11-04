@@ -24,6 +24,7 @@ import { markAbandoned, refreshEverything, removeFromList, updateStatus } from "
 import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ClassificationEditor } from "./classification-editor";
 import { DependencyMark } from "./dependency-mark";
+import { useStoredCollapsedGroups } from "./use-stored-collapsed-groups";
 import { useStoredSort } from "./use-stored-sort";
 import { ClaudeConsoleButton } from "./claude-console-button";
 import { ProjectDescription } from "./project-description";
@@ -478,7 +479,7 @@ export function RegistryView({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [untagged, setUntagged] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
+  const [collapsedGroups, toggleGroup] = useStoredCollapsedGroups();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useStoredSort();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -543,14 +544,6 @@ export function RegistryView({
   };
   // In the abandoned view, the folder's size would describe what was left behind, not these projects.
   const items = useMemo(() => groupRows(visible, { useFolderSize: view !== "abandoned" }), [visible, view]);
-  const toggleGroup = (parentId: number) => {
-    setCollapsedGroups((current) => {
-      const next = new Set(current);
-      if (next.has(parentId)) next.delete(parentId);
-      else next.add(parentId);
-      return next;
-    });
-  };
 
   const select = (id: number) => {
     setAdding(false);
