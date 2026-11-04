@@ -120,3 +120,17 @@ export async function readGitFacts(path: string, now = new Date()): Promise<GitF
     ),
   };
 }
+
+export type RecentCommit = { at: Date; subject: string };
+
+/** Read when a project sheet opens, since only that page needs it. */
+export async function readRecentCommits(path: string, limit = 8): Promise<RecentCommit[]> {
+  const output = await gitOptional(path, ["log", `-${limit}`, "--format=%ct%x00%s"]);
+  return (output ?? "")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [timestamp, subject] = line.split("\0");
+      return { at: new Date(Number(timestamp) * 1000), subject };
+    });
+}

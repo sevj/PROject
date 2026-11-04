@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "../db/client";
 import { projectFacts, projectMeta, projects, scans } from "../db/schema";
-import { runScan as realRunScan } from "./run";
+import { rescanProject, runScan as realRunScan } from "./run";
 
 let root: string;
 let db: Db;
@@ -167,6 +167,33 @@ describe("runScan", () => {
     const scan = db.select().from(scans).get();
     expect(scan?.status).toBe("done");
     expect(scan?.warning).toBe("daemon down");
+  });
+
+  it("refreshes one project without touching the others or the user's data", async () => {
+    make("app/package.json");
+    make("other/package.json");
+    await runScan(db, root);
+    const { id } = row("app").project;
+    db.insert(projectMeta).values({ projectId: id, note: "garder" }).run();
+
+    make("app/composer.json");
+    make("other/composer.json");
+    expect(await rescanProject(db, id, { docker: noDocker })).toBe(true);
+
+    expect(row("app").facts?.stacks.sort()).toEqual(["Node", "PHP"]);
+    expect(row("other").facts?.stacks).toEqual(["Node"]);
+    expect(db.select().from(projectMeta).get()?.note).toBe("garder");
+  });
+
+  it("marks a project as missing when refreshing a deleted folder", async () => {
+    make("app/package.json");
+    await runScan(db, root);
+    const { id } = row("app").project;
+    rmSync(join(root, "app"), { recursive: true });
+
+    expect(await rescanProject(db, id, { docker: noDocker })).toBe(false);
+    expect(row("app").project.missingAt).not.toBeNull();
+    expect(await rescanProject(db, 9999, { docker: noDocker })).toBe(false);
   });
 
   it("marks the scan as failed when the root does not exist, and clears stale runs", async () => {

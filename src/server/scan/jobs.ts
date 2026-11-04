@@ -12,10 +12,10 @@ export function isSizing(): boolean {
   return jobs.__pmSizing === true;
 }
 
-function startSizing() {
+export function startSizing(projectIds?: number[]) {
   if (jobs.__pmSizing) return;
   jobs.__pmSizing = true;
-  runSizeScan(getDb())
+  runSizeScan(getDb(), projectIds)
     .catch((error) => console.error("Calcul des tailles interrompu", error))
     .finally(() => {
       jobs.__pmSizing = false;

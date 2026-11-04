@@ -1,9 +1,10 @@
 import { and, eq, isNull, like, notInArray, or } from "drizzle-orm";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Db } from "../db/client";
 import { projectFacts, projects, scans } from "../db/schema";
-import { type DetectedFolder, detectFolders } from "./detect";
+import { type DetectedFolder, detectFolder, detectFolders } from "./detect";
 import { assignContainers, type DockerState, readDocker } from "./docker";
 import { type GitFacts, readGitFacts } from "./git";
 import { mapLimit } from "./limit";
@@ -63,6 +64,43 @@ function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | 
     .onConflictDoUpdate({ target: projectFacts.projectId, set: facts })
     .run();
   return id;
+}
+
+/** Refreshes one project. False when its folder no longer exists. */
+export async function rescanProject(
+  db: Db,
+  projectId: number,
+  { docker = readDocker }: { docker?: () => Promise<DockerState> } = {},
+): Promise<boolean> {
+  const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
+  if (!project) return false;
+  const now = new Date();
+
+  if (!existsSync(project.path)) {
+    db.update(projects).set({ missingAt: now }).where(eq(projects.id, projectId)).run();
+    return false;
+  }
+
+  const detected = await detectFolder(project.path, project.name);
+  const folder = detected.find((item) => item.path === project.path);
+  if (!folder) return false;
+
+  const [scanned, dockerState] = await Promise.all([scanFolder(folder), docker()]);
+  const known = db
+    .select({ path: projects.path })
+    .from(projects)
+    .where(eq(projects.kind, "project"))
+    .all()
+    .map(({ path }) => path);
+
+  db.transaction((tx) => {
+    saveFolder(tx as unknown as Db, scanned, project.parentId, now);
+    tx.update(projectFacts)
+      .set({ containers: assignContainers(known, dockerState.containers).get(project.path) ?? [] })
+      .where(eq(projectFacts.projectId, projectId))
+      .run();
+  });
+  return true;
 }
 
 export type ScanResult = { scanId: number; projectCount: number; errorCount: number };

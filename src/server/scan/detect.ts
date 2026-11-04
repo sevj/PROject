@@ -1,6 +1,7 @@
 import { type Dirent, existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { ENV_FILE } from "../project-files";
 
 export type DetectedKind = "project" | "group" | "folder";
 
@@ -30,7 +31,6 @@ const MANIFESTS: Record<string, string> = {
 // A project without git or a root manifest, like rust/ + godot/ driven by a Makefile.
 const PROJECT_FILES = new Set(["Makefile", "justfile", "AGENTS.md", "CLAUDE.md"]);
 const COMPOSE_FILE =/^(docker-)?compose(\.[\w-]+)?\.ya?ml$/;
-const ENV_FILE = /^\.env(\.[\w-]+)*$/;
 const ROOT_DOC = /^(readme|changelog|agents|claude|todo|roadmap)(\.[\w-]+)?\.(md|txt|rst)$/i;
 const DOC_FILE = /\.(md|txt|rst)$/i;
 const IGNORED_DIRS = new Set(["node_modules", "vendor", "target", "dist", "build", "var", ".git"]);
@@ -132,7 +132,7 @@ function emptyFolder(path: string, name: string, kind: DetectedKind, error: stri
   };
 }
 
-async function detectFolder(path: string, name: string): Promise<DetectedFolder[]> {
+export async function detectFolder(path: string, name: string): Promise<DetectedFolder[]> {
   let listing: Listing;
   try {
     listing = await list(path);

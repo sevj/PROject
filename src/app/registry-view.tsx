@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
@@ -127,6 +128,9 @@ function Inspector({ row, now }: { row: RegistryRow; now: number }) {
         <Fact label="Docker" value={dockerLabel(row)} />
         <Fact label="Taille hors dépendances" value={formatSize(row.sizeBytes)} />
       </dl>
+      <Link href={`/projects/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-medium underline">
+        Ouvrir la fiche complète
+      </Link>
     </section>
   );
 }

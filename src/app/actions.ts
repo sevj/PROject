@@ -1,7 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { startScan } from "@/server/scan/jobs";
+import { getDb } from "@/server/db/client";
+import { type EnvEntry, readEnvFile } from "@/server/project-files";
+import { getProject } from "@/server/registry";
+import { startScan, startSizing } from "@/server/scan/jobs";
+import { rescanProject } from "@/server/scan/run";
 
 export async function scanNow(): Promise<{ error: string | null }> {
   try {
@@ -12,4 +16,16 @@ export async function scanNow(): Promise<{ error: string | null }> {
   } finally {
     revalidatePath("/");
   }
+}
+
+export async function refreshProject(projectId: number): Promise<void> {
+  const exists = await rescanProject(getDb(), projectId);
+  if (exists) startSizing([projectId]);
+  revalidatePath("/");
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function revealEnvFile(projectId: number, fileName: string): Promise<EnvEntry[] | null> {
+  const project = getProject(getDb(), projectId);
+  return project ? readEnvFile(project.absolutePath, fileName) : null;
 }

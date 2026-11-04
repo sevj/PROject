@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Mono, Schibsted_Grotesk } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 
 const schibsted = Schibsted_Grotesk({
@@ -23,7 +24,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="fr" className={`${schibsted.variable} ${dmMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <header className="flex h-14 items-baseline gap-2.5 border-b border-ink px-4 pt-4">
-          <strong className="text-[15px] font-bold tracking-tight">Project Manager</strong>
+          <Link href="/" className="text-[15px] font-bold tracking-tight">
+            Project Manager
+          </Link>
           <span className="font-mono text-[12.5px] text-mut">~/Projects</span>
         </header>
         {children}
