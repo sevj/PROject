@@ -9,6 +9,7 @@ export function NavLinks() {
   const m = useMessages().nav;
   const links = [
     { href: "/", label: m.projects },
+    { href: "/dumps", label: m.dumps },
     { href: "/settings", label: m.settings },
   ];
   return (

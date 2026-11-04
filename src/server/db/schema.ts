@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
+import { ENGINES } from "../../lib/db-engines";
 import {
   type AnySQLiteColumn,
+  index,
   integer,
   primaryKey,
   sqliteTable,
@@ -122,6 +124,56 @@ export const scans = sqliteTable("scans", {
   error: text("error"),
   warning: text("warning"),
 });
+
+export const DUMP_STATUSES = ["running", "done", "failed", "cancelled"] as const;
+
+/**
+ * What was dumped from a database container, and where the file is. The names are copied
+ * because the dump must stay readable after its project or container is gone.
+ */
+export const dumps = sqliteTable("dumps", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  projectName: text("project_name").notNull(),
+  containerName: text("container_name").notNull(),
+  engine: text("engine", { enum: ENGINES }).notNull(),
+  /** Null when every database of the server was dumped. */
+  database: text("database"),
+  /** Relative to the stash folder. */
+  fileName: text("file_name").notNull(),
+  /** What the file weighs, compressed. */
+  sizeBytes: integer("size_bytes"),
+  /** What the dump weighed before it was compressed. */
+  rawBytes: integer("raw_bytes"),
+  status: text("status", { enum: DUMP_STATUSES }).notNull().default("running"),
+  error: text("error"),
+  note: text("note"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+  finishedAt: integer("finished_at", { mode: "timestamp" }),
+});
+
+export const ENV_HISTORY_ORIGINS = ["edit", "restore", "file"] as const;
+
+/**
+ * Every value a variable of a project's `.env.local` has had, secrets included, in clear:
+ * going back to one is the point. It disappears with its project.
+ */
+export const envValueHistory = sqliteTable(
+  "env_value_history",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    /** Null when the variable was removed from the file. */
+    value: text("value"),
+    /** `file`: found in the file just before being overwritten, so not saved from here. */
+    origin: text("origin", { enum: ENV_HISTORY_ORIGINS }).notNull(),
+    savedAt: integer("saved_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (table) => [index("env_value_history_project_key").on(table.projectId, table.key)],
+);
 
 /** A single row: settings are read together and written together. */
 export const settings = sqliteTable("settings", {

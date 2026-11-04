@@ -37,6 +37,7 @@ import {
 } from "@/server/git-actions";
 import { type CommitPage, type CommitView, readCommits, readCommitView } from "@/server/scan/git";
 import { type ContainerAction, composeDirectories, launch, runCompose, runContainers } from "@/server/project-actions";
+import { restoreEnvValue, saveEnvValue } from "@/server/env-vars";
 import { type EnvEntry, listProjectFolder, readEnvFile, type TreeListing } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import {
@@ -316,6 +317,36 @@ function gitTarget(projectId: number): { path: string } | { error: string } {
   if (!project) return { error: m.projectGone };
   if (project.row.abandoned) return { error: m.abandonedProject };
   return { path: project.absolutePath };
+}
+
+/** The list of `.env` files shown on the General tab comes from the last refresh. */
+async function afterEnvChange(projectId: number) {
+  await rescanProject(getDb(), projectId);
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function saveEnvVariable(projectId: number, key: string, value: string): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = saveEnvValue(getDb(), projectId, target.path, String(key), String(value), serverMessages(getDb()).envTab);
+  if (!error) await afterEnvChange(projectId);
+  return error;
+}
+
+export async function removeEnvVariable(projectId: number, key: string): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = saveEnvValue(getDb(), projectId, target.path, String(key), null, serverMessages(getDb()).envTab);
+  if (!error) await afterEnvChange(projectId);
+  return error;
+}
+
+export async function restoreEnvVariable(projectId: number, entryId: number): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const error = restoreEnvValue(getDb(), projectId, target.path, Number(entryId), serverMessages(getDb()).envTab);
+  if (!error) await afterEnvChange(projectId);
+  return error;
 }
 
 export async function switchProjectBranch(projectId: number, branch: string): Promise<string | null> {

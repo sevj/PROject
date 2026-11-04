@@ -6,7 +6,10 @@ import { isMarkdown } from "@/lib/docs";
 import { formatAge } from "@/lib/registry";
 import type { Messages } from "@/i18n";
 import { getDb } from "@/server/db/client";
+import { readEnvView } from "@/server/env-vars";
 import { listProjectContainers } from "@/server/docker-containers";
+import { listJobs } from "@/server/dumps/jobs";
+import { listDumps, toDumpRow } from "@/server/dumps/store";
 import { readDockerStack } from "@/server/docker-stack";
 import { serverMessages } from "@/server/i18n";
 import { listProjectFolder, readProjectDoc } from "@/server/project-files";
@@ -23,11 +26,12 @@ import { BUTTON_QUIET, CARD, DATA, SECTION_TITLE } from "../../ui";
 import { DockerComponents } from "./docker-components";
 import { DockerTab } from "./docker-tab";
 import { EnvFiles } from "./env-files";
+import { EnvTab } from "./env-tab";
 import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
 import { ProjectTree } from "./project-tree";
 
-const TABS = ["general", "docker", "git", "structure", "documentation"] as const;
+const TABS = ["general", "docker", "git", "env", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 const TAB =
   "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";
@@ -90,6 +94,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const readsDocker = (tab === "general" || tab === "docker") && !row.missing && !row.abandoned;
   const dockerStack = readsDocker ? await readDockerStack(absolutePath) : null;
   const dockerLive = tab === "docker" && !row.missing && !row.abandoned ? await listProjectContainers(getDb(), projectId) : null;
+  const envView = tab === "env" && !row.missing ? await readEnvView(getDb(), projectId, absolutePath, row.hasGit) : null;
   const tree = tab === "structure" && !row.missing ? await listProjectFolder(absolutePath, ".") : null;
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
   // Only a path found on disk beforehand can be opened: `doc` comes from the URL.
@@ -213,8 +218,20 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               now={now}
               live={dockerLive}
               stack={dockerStack}
+              dumps={tab === "docker" ? listDumps(getDb()).map(toDumpRow) : []}
+              jobs={tab === "docker" ? listJobs() : []}
               messages={messages}
             />
+          ) : null}
+
+          {tab === "env" ? (
+            envView ? (
+              <EnvTab projectId={row.id} view={envView} readOnly={row.abandoned} />
+            ) : (
+              <section className={CARD}>
+                <p className="text-mut">{m.unreadableFolder}</p>
+              </section>
+            )
           ) : null}
 
           {tab === "structure" ? (

@@ -88,6 +88,15 @@ describe("toContainerDetail", () => {
     ]);
   });
 
+  it("recognizes a database by its image, or by a variable name on a container called like one", () => {
+    expect(toContainerDetail(raw).engine).toBe("postgres");
+    const built = { Config: { Image: "shop-db:latest", Env: ["POSTGRES_PASSWORD=secret"], Labels: { "com.docker.compose.service": "db" } } };
+    expect(toContainerDetail(built).engine).toBe("postgres");
+    const app = { Config: { Image: "shop-app:latest", Env: ["POSTGRES_PASSWORD=secret"], Labels: { "com.docker.compose.service": "app" } } };
+    expect(toContainerDetail(app).engine).toBeNull();
+    expect(JSON.stringify(toContainerDetail(built))).not.toContain("secret");
+  });
+
   it("never carries environment variables, even by accident", () => {
     expect(JSON.stringify(toContainerDetail(raw))).not.toContain("SECRET");
   });

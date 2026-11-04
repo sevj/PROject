@@ -5,6 +5,9 @@ import { formatAge, type RegistryRow } from "@/lib/registry";
 import type { ContainerDetail, ProjectContainers } from "@/server/docker-containers";
 import type { DockerStack } from "@/server/docker-stack";
 import { CARD, DATA, SECTION_TITLE } from "../../ui";
+import { DumpJobs } from "@/app/dump-jobs";
+import type { DumpRow } from "@/lib/dumps";
+import type { JobView } from "@/server/dumps/jobs";
 import { ContainerControls, ProjectControls } from "./docker-controls";
 import { StateBadge, StateGlyph, TONE_BG, TONE_EDGE, TONE_TEXT } from "./state-badge";
 
@@ -94,12 +97,16 @@ function ContainerCard({
   container,
   projectPath,
   projectId,
+  projectName,
+  dumps,
   now,
   messages,
 }: {
   container: ContainerDetail;
   projectPath: string;
   projectId: number;
+  projectName: string;
+  dumps: DumpRow[];
   now: number;
   messages: Messages;
 }) {
@@ -131,6 +138,22 @@ function ContainerCard({
           containerName={container.name}
           running={container.running}
           canOpenConsole={container.running && container.state !== "paused"}
+          database={
+            container.engine
+              ? {
+                  target: {
+                    id: container.id,
+                    name: container.name,
+                    service: container.service,
+                    image: container.image,
+                    engine: container.engine,
+                    projectId,
+                    projectName,
+                  },
+                  dumps,
+                }
+              : undefined
+          }
         />
       </div>
       <p className={`${DATA} mt-3 ${TONE[kind] === "warn" ? "font-medium text-alert" : container.running ? "" : "text-mut"}`}>
@@ -200,6 +223,8 @@ export function DockerTab({
   now,
   live,
   stack,
+  dumps,
+  jobs,
   messages,
 }: {
   row: RegistryRow;
@@ -207,6 +232,8 @@ export function DockerTab({
   now: number;
   live: ProjectContainers | null;
   stack: DockerStack | null;
+  dumps: DumpRow[];
+  jobs: JobView[];
   messages: Messages;
 }) {
   const m = messages.sheet.dockerTab;
@@ -221,6 +248,7 @@ export function DockerTab({
 
   return (
     <div className="grid gap-4">
+      <DumpJobs initial={jobs} initialNow={now} />
       <div className={CARD}>
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <p className="text-[17px] font-bold">{error === null ? m.summary(running, containers.length) : ""}</p>
@@ -252,6 +280,8 @@ export function DockerTab({
             container={container}
             projectPath={projectPath}
             projectId={row.id}
+            projectName={row.name}
+            dumps={dumps}
             now={now}
             messages={messages}
           />

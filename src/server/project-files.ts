@@ -1,11 +1,13 @@
 import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
+import { type EnvEntry, parseEnv } from "@/lib/env-file";
+
+export type { EnvEntry };
+export { parseEnv };
 
 export const ENV_FILE = /^\.env(\.[\w-]+)*$/;
 const MAX_DOC_BYTES = 512 * 1024;
-const MAX_ENV_BYTES = 256 * 1024;
-
-export type EnvEntry = { key: string; value: string };
+export const MAX_ENV_BYTES = 256 * 1024;
 
 function isInside(relative: string): boolean {
   const clean = normalize(relative);
@@ -26,19 +28,6 @@ async function readRegularFile(path: string, maxBytes: number): Promise<string |
 export function readProjectDoc(projectPath: string, relative: string): Promise<string | null> {
   if (!isInside(relative)) return Promise.resolve(null);
   return readRegularFile(join(projectPath, relative), MAX_DOC_BYTES);
-}
-
-export function parseEnv(content: string): EnvEntry[] {
-  const entries: EnvEntry[] = [];
-  for (const rawLine of content.split(/\r\n|\r|\n/)) {
-    const match = /^\s*(?:export\s+)?([A-Za-z_][\w.-]*)\s*=\s*(.*)$/.exec(rawLine);
-    if (!match) continue;
-    const [, key, rawValue] = match;
-    const value = rawValue.trim();
-    const quoted = /^(["'])(.*?)\1/.exec(value);
-    entries.push({ key, value: quoted ? quoted[2] : value.replace(/\s+#.*$/, "") });
-  }
-  return entries;
 }
 
 /** Null when the name is not a `.env` file at the project root. Never cached or logged. */

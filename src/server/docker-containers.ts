@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { and, eq } from "drizzle-orm";
+import { detectEngine, type Engine } from "@/lib/db-engines";
 import type { Db } from "./db/client";
 import { projects } from "./db/schema";
 import { assignContainers, type DockerContainer, type DockerState, readDocker } from "./scan/docker";
@@ -36,9 +37,11 @@ export type ContainerDetail = {
   composeProject: string | null;
   composeFiles: string[];
   workingDir: string | null;
+  /** Which database this is, when it is one: the base for dumping and loading. */
+  engine: Engine | null;
 };
 
-type Raw = {
+export type Raw = {
   Id?: string;
   Name?: string;
   Created?: string;
@@ -56,7 +59,7 @@ type Raw = {
     Health?: { Status?: string };
   };
   HostConfig?: { RestartPolicy?: { Name?: string; MaximumRetryCount?: number } };
-  Config?: { Image?: string; Labels?: Record<string, string> | null };
+  Config?: { Image?: string; Labels?: Record<string, string> | null; Env?: string[] | null };
   NetworkSettings?: {
     Ports?: Record<string, { HostIp?: string; HostPort?: string }[] | null> | null;
     Networks?: Record<string, { IPAddress?: string }> | null;
@@ -90,7 +93,7 @@ function toPorts(ports: NonNullable<Raw["NetworkSettings"]>["Ports"]): Container
   return result;
 }
 
-/** Environment variables are not read: they can hold secrets that nobody asked for. */
+/** Environment variables are not kept: only their names, to recognize a database. */
 export function toContainerDetail(raw: Raw, status = ""): ContainerDetail {
   const labels = raw.Config?.Labels ?? {};
   const state = raw.State ?? {};
@@ -133,6 +136,11 @@ export function toContainerDetail(raw: Raw, status = ""): ContainerDetail {
     composeProject: labels["com.docker.compose.project"] ?? null,
     composeFiles: (labels["com.docker.compose.project.config_files"] ?? "").split(",").filter(Boolean),
     workingDir: labels["com.docker.compose.project.working_dir"] ?? null,
+    engine: detectEngine({
+      image: raw.Config?.Image ?? "",
+      service: labels["com.docker.compose.service"] ?? "",
+      envKeys: (raw.Config?.Env ?? []).map((entry) => entry.split("=")[0]),
+    }),
   };
 }
 

@@ -384,3 +384,24 @@ body {
   color: var(--mut);
   font-size: 0.88em;
 }
+
+/* Progress that does not know its total: a bar that only says something is going on. */
+@keyframes pm-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+.progress-indeterminate {
+  width: 30%;
+  animation: pm-indeterminate 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-indeterminate {
+    width: 100%;
+    opacity: 0.4;
+    animation: none;
+  }
+}

@@ -22,6 +22,7 @@ L'interface est en anglais par défaut, et la langue se choisit dans Settings. P
 - **Lecture seule :** l'actualisation n'écrit rien dans les projets, et retirer un projet de la liste ne touche pas au disque. Seules les actions Docker, les commandes configurées et les actions de l'onglet Git agissent sur la machine.
 - **Actions git :** changer de branche et récupérer une branche distante (refusés tant que le dossier a des modifications), créer d'un coup les branches locales de toutes les branches distantes (sans basculer), `fetch --prune`, `pull --ff-only`, créer une branche, et supprimer des branches locales déjà fusionnées (avec `git branch -d`, jamais `-D`, et jamais les branches principales). Rien d'autre : ni commit, ni merge, ni reset, ni push. Les stashes sont seulement listés.
 - **`.env` :** les valeurs sont lues à la demande, à la racine du projet, sans jamais être stockées ni journalisées.
+- **Dump stash :** les dumps de bases de données (PostgreSQL, MySQL, MariaDB, MongoDB) sont lus dans les conteneurs Docker des projets et gardés dans `~/.local/share/project-manager/dumps/<projet>/`, à côté de la base (`PM_DUMPS_DIR` pour les mettre ailleurs). Jamais dans les projets. Ce sont de vraies données : fichiers et dossiers créés ne sont lisibles que par toi.
 - **Accès local :** le serveur écoute sur `127.0.0.1`, et `src/proxy.ts` refuse les requêtes venant d'un autre site.
 
 ## Développement

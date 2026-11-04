@@ -3,6 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { controlContainers } from "@/app/actions";
+import { DumpModal, LoadModal } from "@/app/dump-modals";
+import type { DumpRow } from "@/lib/dumps";
+import type { DatabaseTarget } from "@/server/dumps/containers";
 import { ConsolePanel } from "./console-panel";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
 import { useFlash } from "@/app/flash";
@@ -38,6 +41,7 @@ export function ContainerControls({
   containerName,
   running,
   canOpenConsole,
+  database,
 }: {
   projectId: number;
   containerId: string;
@@ -45,17 +49,34 @@ export function ContainerControls({
   running: boolean;
   /** Running, and not paused: a paused container cannot start a shell. */
   canOpenConsole: boolean;
+  /** Set when this container is a database: it can be dumped, and loaded into. */
+  database?: { target: DatabaseTarget; dumps: DumpRow[] };
 }) {
   const messages = useMessages().sheet;
   const m = messages.dockerTab;
   const { pending, run } = useControl(projectId);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [dialog, setDialog] = useState<"dump" | "load" | null>(null);
   return (
     <div className="flex flex-wrap items-center gap-2">
       {canOpenConsole ? (
         <button type="button" onClick={() => setConsoleOpen(true)} className={BUTTON}>
           {messages.console.open}
         </button>
+      ) : null}
+      {database && running ? (
+        <>
+          <button type="button" onClick={() => setDialog("dump")} className={BUTTON}>
+            {m.dump}
+          </button>
+          <button type="button" onClick={() => setDialog("load")} className={BUTTON}>
+            {m.loadDump}
+          </button>
+        </>
+      ) : null}
+      {database && dialog === "dump" ? <DumpModal target={database.target} onClose={() => setDialog(null)} /> : null}
+      {database && dialog === "load" ? (
+        <LoadModal dumps={database.dumps} targets={[database.target]} targetId={database.target.id} onClose={() => setDialog(null)} />
       ) : null}
       {consoleOpen ? (
         <ConsolePanel
