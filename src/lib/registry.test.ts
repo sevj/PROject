@@ -5,6 +5,7 @@ import {
   countView,
   formatAge,
   formatSize,
+  groupRows,
   type RegistryRow,
   selectRows,
 } from "./registry";
@@ -17,6 +18,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     id: 1,
     name,
     path: `~/Projects/${name}`,
+    parentId: null,
     parentName: null,
     kind: "project",
     missing: false,
@@ -127,6 +129,44 @@ describe("tag filters", () => {
     expect(all.counts.get("Client")).toBe(2);
     expect(all.untagged).toBe(1);
     expect(countTags(tagged, "abandoned").counts.get("Client")).toBe(1);
+  });
+});
+
+describe("groupRows", () => {
+  const child = (name: string, patch: Partial<RegistryRow> = {}) =>
+    row(name, { parentId: 7, parentName: "platform", ...patch });
+  const week = (commits: number) => Array<number>(26).fill(0).with(25, commits);
+  const summary = (list: ReturnType<typeof groupRows>) =>
+    list.map((item) => (item.kind === "project" ? item.row.name : `[${item.group.rows.map((r) => r.name).join(",")}]`));
+
+  it("places a block at its first project and keeps the order inside", () => {
+    const list = [row("a"), child("core"), row("b"), child("form"), row("c", { parentId: 9, parentName: "other" })];
+    expect(summary(groupRows(list))).toEqual(["a", "[core,form]", "b", "[c]"]);
+  });
+
+  it("adds up what the block contains", () => {
+    const running = { name: "c", service: "c", state: "running", status: "Up", ports: "" };
+    const [item] = groupRows([
+      child("core", { dirtyCount: 2, sizeBytes: 100, lastCommitAt: NOW - DAY, weeklyCommits: week(3), containers: [running] }),
+      child("form", { dirtyCount: 5, sizeBytes: 50, lastCommitAt: NOW - 9 * DAY, weeklyCommits: week(4), containers: [running, running] }),
+      child("nogit", { hasGit: false, dirtyCount: null, lastCommitAt: null }),
+    ]);
+    if (item.kind !== "group") throw new Error("expected a group");
+    expect(item.group).toMatchObject({
+      parentId: 7,
+      name: "platform",
+      dirtyCount: 7,
+      running: 3,
+      sizeBytes: 150,
+      lastCommitAt: NOW - DAY,
+    });
+    expect(item.group.weeklyCommits?.at(-1)).toBe(7);
+  });
+
+  it("has no total when nothing was measured", () => {
+    const [item] = groupRows([child("nogit", { hasGit: false, lastCommitAt: null })]);
+    if (item.kind !== "group") throw new Error("expected a group");
+    expect(item.group).toMatchObject({ sizeBytes: null, lastCommitAt: null, weeklyCommits: null });
   });
 });
 

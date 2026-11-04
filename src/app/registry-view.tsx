@@ -9,6 +9,8 @@ import {
   countView,
   formatAge,
   formatSize,
+  groupRows,
+  type ProjectGroup,
   type RegistryRow,
   type RegistrySort,
   type RegistryView as View,
@@ -92,6 +94,63 @@ function Fact({ label, value, alert }: { label: string; value: string; alert?: b
     <div className="flex justify-between gap-4 border-b border-rule py-2">
       <dt className="text-mut">{label}</dt>
       <dd className={`${DATA} truncate ${alert ? "font-medium text-alert" : ""}`}>{value}</dd>
+    </div>
+  );
+}
+
+function GroupHeader({
+  group,
+  collapsed,
+  checkedCount,
+  now,
+  onToggle,
+  onCheck,
+}: {
+  group: ProjectGroup;
+  collapsed: boolean;
+  checkedCount: number;
+  now: number;
+  onToggle: () => void;
+  onCheck: (value: boolean) => void;
+}) {
+  const total = group.rows.length;
+  return (
+    <div className="flex min-h-11 bg-panel hover:bg-sel">
+      <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
+        <span className="sr-only">Sélectionner les projets de {group.name}</span>
+        <input
+          type="checkbox"
+          className={CHECKBOX}
+          ref={(input) => {
+            if (input) input.indeterminate = checkedCount > 0 && checkedCount < total;
+          }}
+          checked={checkedCount === total}
+          onChange={(event) => onCheck(event.target.checked)}
+        />
+      </label>
+      <button
+        type="button"
+        aria-expanded={!collapsed}
+        onClick={onToggle}
+        className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}
+      >
+        <span className="flex min-w-0 items-baseline gap-2 font-bold">
+          <span aria-hidden="true" className="font-mono text-mut">
+            {collapsed ? "▸" : "▾"}
+          </span>
+          <span className="truncate">{group.name}</span>
+        </span>
+        <span className={`${DATA} col-span-2 text-mut`}>
+          {total} sous-projet{total > 1 ? "s" : ""}
+        </span>
+        <span className={`${DATA} text-right ${group.dirtyCount > 0 ? "font-medium text-alert" : "text-mut"}`}>
+          {group.dirtyCount || "—"}
+        </span>
+        <span className={DATA}>{group.lastCommitAt === null ? "—" : formatAge(group.lastCommitAt, now)}</span>
+        <ActivityStrip weeks={group.weeklyCommits} />
+        <span className={`${DATA} ${group.running > 0 ? "" : "text-mut"}`}>{group.running > 0 ? `${group.running} up` : "—"}</span>
+        <span className={`${DATA} text-right text-mut`}>{formatSize(group.sizeBytes)}</span>
+      </button>
     </div>
   );
 }
@@ -238,6 +297,7 @@ export function RegistryView({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [untagged, setUntagged] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<RegistrySort>("commit");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -295,16 +355,67 @@ export function RegistryView({
       return next;
     });
   };
-  const toggleAll = (value: boolean) => {
+  const setCheckedRows = (list: RegistryRow[], value: boolean) => {
     setChecked((current) => {
       const next = new Set(current);
-      for (const row of visible) {
+      for (const row of list) {
         if (value) next.add(row.id);
         else next.delete(row.id);
       }
       return next;
     });
   };
+  const items = useMemo(() => groupRows(visible), [visible]);
+  const toggleGroup = (parentId: number) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(parentId)) next.delete(parentId);
+      else next.add(parentId);
+      return next;
+    });
+  };
+
+  const renderRow = (row: RegistryRow, nested: boolean) => (
+    <div
+      key={row.id}
+      className={`flex min-h-11 hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_3px_0_0_var(--ink)] ${nested ? "border-t border-rule" : "border-b border-rule"}`}
+    >
+      <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
+        <span className="sr-only">Sélectionner {row.name}</span>
+        <input
+          type="checkbox"
+          className={CHECKBOX}
+          checked={checked.has(row.id)}
+          onChange={(event) => toggleChecked(row.id, event.target.checked)}
+        />
+      </label>
+      <button
+        type="button"
+        aria-pressed={row.id === selected?.id}
+        onClick={() => setSelectedId(row.id)}
+        className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}
+      >
+        <span className={`min-w-0 ${nested ? "border-l-2 border-rule pl-3" : ""}`}>
+          <span className="block truncate font-semibold">
+            {row.favorite ? <span aria-label="Favori">★ </span> : null}
+            {row.name}
+          </span>
+          <TagList tags={row.tags} />
+        </span>
+        <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
+        <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
+          {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
+        </span>
+        <span className={`${DATA} text-right ${(row.dirtyCount ?? 0) > 0 ? "font-medium text-alert" : "text-mut"}`}>
+          {row.dirtyCount || "—"}
+        </span>
+        <span className={DATA}>{row.hasGit ? formatAge(row.lastCommitAt, now) : "—"}</span>
+        <ActivityStrip weeks={row.weeklyCommits} />
+        <span className={`${DATA} ${runningCount(row) > 0 ? "" : "text-mut"}`}>{dockerLabel(row)}</span>
+        <span className={`${DATA} text-right text-mut`}>{formatSize(row.sizeBytes)}</span>
+      </button>
+    </div>
+  );
   const selected = visible.find((row) => row.id === selectedId) ?? visible[0] ?? null;
   const error = scanError ?? lastScan?.error ?? null;
 
@@ -422,7 +533,7 @@ export function RegistryView({
                   type="checkbox"
                   className={CHECKBOX}
                   checked={allChecked}
-                  onChange={(event) => toggleAll(event.target.checked)}
+                  onChange={(event) => setCheckedRows(visible, event.target.checked)}
                 />
               </label>
               <div className={COLUMNS}>
@@ -436,50 +547,28 @@ export function RegistryView({
               <SortButton id="size" sort={sort} onSort={setSort} right>Taille</SortButton>
               </div>
             </div>
-            {visible.map((row) => (
-              <div
-                key={row.id}
-                className="flex min-h-11 border-b border-rule hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_3px_0_0_var(--ink)]"
-              >
-                <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
-                  <span className="sr-only">Sélectionner {row.name}</span>
-                  <input
-                    type="checkbox"
-                    className={CHECKBOX}
-                    checked={checked.has(row.id)}
-                    onChange={(event) => toggleChecked(row.id, event.target.checked)}
+            {items.map((item) =>
+              item.kind === "project" ? (
+                renderRow(item.row, false)
+              ) : (
+                <div
+                  key={`group-${item.group.parentId}`}
+                  role="group"
+                  aria-label={item.group.name}
+                  className="border-y border-ink"
+                >
+                  <GroupHeader
+                    group={item.group}
+                    collapsed={collapsedGroups.has(item.group.parentId)}
+                    checkedCount={item.group.rows.filter((row) => checked.has(row.id)).length}
+                    now={now}
+                    onToggle={() => toggleGroup(item.group.parentId)}
+                    onCheck={(value) => setCheckedRows(item.group.rows, value)}
                   />
-                </label>
-                <button
-                  type="button"
-                  aria-pressed={row.id === selected?.id}
-                  onClick={() => setSelectedId(row.id)}
-                  className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}
-                >
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">
-                    {row.favorite ? <span aria-label="Favori">★ </span> : null}
-                    {row.parentName ? <span className="font-normal text-mut">{row.parentName} / </span> : null}
-                    {row.name}
-                  </span>
-                  <TagList tags={row.tags} />
-                </span>
-                <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
-                <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
-                  {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
-                </span>
-                <span
-                  className={`${DATA} text-right ${(row.dirtyCount ?? 0) > 0 ? "font-medium text-alert" : "text-mut"}`}
-                >
-                  {row.dirtyCount || "—"}
-                </span>
-                <span className={DATA}>{row.hasGit ? formatAge(row.lastCommitAt, now) : "—"}</span>
-                <ActivityStrip weeks={row.weeklyCommits} />
-                <span className={`${DATA} ${runningCount(row) > 0 ? "" : "text-mut"}`}>{dockerLabel(row)}</span>
-                <span className={`${DATA} text-right text-mut`}>{formatSize(row.sizeBytes)}</span>
-                </button>
-              </div>
-            ))}
+                  {collapsedGroups.has(item.group.parentId) ? null : item.group.rows.map((row) => renderRow(row, true))}
+                </div>
+              ),
+            )}
           </div>
           {visible.length === 0 ? (
             <p className="px-4 py-8 text-mut">

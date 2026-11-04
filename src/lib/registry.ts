@@ -11,6 +11,7 @@ export type RegistryRow = {
   id: number;
   name: string;
   path: string;
+  parentId: number | null;
   parentName: string | null;
   kind: "project" | "folder";
   missing: boolean;
@@ -87,6 +88,66 @@ export function selectRows(
         row.tags.some((tag) => tag.toLowerCase().includes(needle)),
     )
     .sort((a, b) => SORTERS[sort](a, b) || a.name.localeCompare(b.name, "fr"));
+}
+
+export type ProjectGroup = {
+  parentId: number;
+  name: string;
+  rows: RegistryRow[];
+  dirtyCount: number;
+  running: number;
+  sizeBytes: number | null;
+  lastCommitAt: number | null;
+  weeklyCommits: number[] | null;
+};
+
+export type RegistryItem = { kind: "project"; row: RegistryRow } | { kind: "group"; group: ProjectGroup };
+
+function sumWeeks(rows: RegistryRow[]): number[] | null {
+  const series = rows.flatMap((row) => (row.weeklyCommits ? [row.weeklyCommits] : []));
+  if (series.length === 0) return null;
+  return series[0].map((_, week) => series.reduce((sum, weeks) => sum + (weeks[week] ?? 0), 0));
+}
+
+function toGroup(parentId: number, name: string, rows: RegistryRow[]): ProjectGroup {
+  const sizes = rows.flatMap((row) => row.sizeBytes ?? []);
+  const commits = rows.flatMap((row) => row.lastCommitAt ?? []);
+  return {
+    parentId,
+    name,
+    rows,
+    dirtyCount: rows.reduce((sum, row) => sum + (row.dirtyCount ?? 0), 0),
+    running: rows.reduce((sum, row) => sum + runningCount(row), 0),
+    sizeBytes: sizes.length > 0 ? sizes.reduce((sum, size) => sum + size, 0) : null,
+    lastCommitAt: commits.length > 0 ? Math.max(...commits) : null,
+    weeklyCommits: sumWeeks(rows),
+  };
+}
+
+/**
+ * Gathers the projects of a parent folder into one block, placed where its first
+ * project would be: the order of `rows` decides, including inside the block.
+ */
+export function groupRows(rows: RegistryRow[]): RegistryItem[] {
+  const children = new Map<number, RegistryRow[]>();
+  for (const row of rows) {
+    if (row.parentId !== null) children.set(row.parentId, [...(children.get(row.parentId) ?? []), row]);
+  }
+  const items: RegistryItem[] = [];
+  const placed = new Set<number>();
+  for (const row of rows) {
+    const { parentId } = row;
+    if (parentId === null) {
+      items.push({ kind: "project", row });
+    } else if (!placed.has(parentId)) {
+      placed.add(parentId);
+      items.push({
+        kind: "group",
+        group: toGroup(parentId, row.parentName ?? "Dossier parent", children.get(parentId) ?? []),
+      });
+    }
+  }
+  return items;
 }
 
 export function countTags(rows: RegistryRow[], view: RegistryView) {

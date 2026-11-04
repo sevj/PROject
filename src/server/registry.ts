@@ -58,6 +58,7 @@ function toRow(
     id: project.id,
     name: project.name,
     path: displayPath(project.path),
+    parentId: project.parentId,
     parentName,
     kind: project.kind === "folder" ? "folder" : "project",
     missing: project.missingAt !== null,
