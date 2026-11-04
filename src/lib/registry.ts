@@ -43,8 +43,6 @@ export type RegistryRow = {
 export type RegistryView = "all" | "abandoned";
 export type RegistrySort = "commit" | "name" | "dirty" | "size";
 
-const DAY = 24 * 3600 * 1000;
-
 export function runningCount(row: RegistryRow): number {
   return row.containers.filter((container) => container.state === "running").length;
 }
@@ -159,19 +157,6 @@ export function countTags(rows: RegistryRow[], view: RegistryView) {
     for (const tag of row.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
   }
   return { counts, untagged: inView.filter((row) => row.tags.length === 0).length };
-}
-
-export function computeStats(rows: RegistryRow[], now: number) {
-  const projects = rows.filter(VIEW_TESTS.all);
-  const age = (row: RegistryRow) => (row.lastCommitAt === null ? Infinity : now - row.lastCommitAt);
-  return {
-    projects: projects.length,
-    git: projects.filter((row) => row.hasGit).length,
-    dirty: projects.filter((row) => (row.dirtyCount ?? 0) > 0).length,
-    active30: projects.filter((row) => age(row) <= 30 * DAY).length,
-    dormant: projects.filter((row) => row.lastCommitAt !== null && age(row) > 365 * DAY).length,
-    running: projects.reduce((sum, row) => sum + runningCount(row), 0),
-  };
 }
 
 /** `now` is passed in so that the server and the client render the same text. */

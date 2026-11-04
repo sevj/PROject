@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
-  computeStats,
   countTags,
   countView,
   formatAge,
@@ -35,8 +34,10 @@ const VIEWS: { id: View; label: string }[] = [
   { id: "abandoned", label: "Abandonnés" },
 ];
 
-const PICK =
-  "group flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 px-4 text-left hover:bg-sel aria-pressed:bg-ink aria-pressed:text-bg aria-pressed:hover:bg-ink";
+const FILTER =
+  "group inline-flex min-h-9 max-w-full cursor-pointer items-center gap-2 border border-rule px-2.5 hover:border-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-bg";
+const VIEW_TAB =
+  "group -ml-px inline-flex min-h-10 cursor-pointer items-center gap-2 border border-ink px-3 font-medium first:ml-0 aria-pressed:bg-ink aria-pressed:text-bg";
 
 function cellColor(commits: number): string {
   if (commits === 0) return "var(--r0)";
@@ -323,7 +324,6 @@ export function RegistryView({
     return () => clearInterval(timer);
   }, [sizing, router]);
 
-  const stats = useMemo(() => computeStats(rows, now), [rows, now]);
   const visible = useMemo(
     () => selectRows(rows, { view, query, sort, tags: selectedTags, untagged }),
     [rows, view, query, sort, selectedTags, untagged],
@@ -420,19 +420,10 @@ export function RegistryView({
   const selected = visible.find((row) => row.id === selectedId) ?? visible[0] ?? null;
   const error = scanError ?? lastScan?.error ?? null;
 
-  const statCells = [
-    { label: "Projets", value: stats.projects },
-    { label: "Sous git", value: stats.git },
-    { label: "Modifs non commitées", value: stats.dirty, alert: true },
-    { label: "Actifs sur 30 jours", value: stats.active30 },
-    { label: "Sans commit depuis 1 an", value: stats.dormant },
-    { label: "Conteneurs lancés", value: stats.running },
-  ];
-
   return (
     <main className="flex-1">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-4 py-2">
-        <label className="min-w-[200px] flex-[0_1_320px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-ink px-4 py-2.5">
+        <label className="min-w-[200px] flex-[0_1_260px]">
           <span className="sr-only">Rechercher un projet</span>
           <input
             type="search"
@@ -442,6 +433,43 @@ export function RegistryView({
             className={`${DATA} h-10 w-full border border-rule bg-panel px-2.5 placeholder:text-mut`}
           />
         </label>
+
+        <div role="group" aria-label="Filtrer par tag" className="flex min-w-0 flex-[1_1_320px] flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            aria-pressed={untagged}
+            onClick={() => {
+              setSelectedTags([]);
+              setUntagged((current) => !current);
+            }}
+            className={FILTER}
+          >
+            <span>Sans tag</span>
+            <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.untagged}</span>
+          </button>
+          {knownTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              aria-pressed={selectedTags.includes(tag)}
+              onClick={() => toggleTag(tag)}
+              className={FILTER}
+            >
+              <span className="truncate">{tag}</span>
+              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.counts.get(tag) ?? 0}</span>
+            </button>
+          ))}
+        </div>
+
+        <div role="group" aria-label="Vue" className="flex">
+          {VIEWS.map(({ id, label }) => (
+            <button key={id} type="button" aria-pressed={view === id} onClick={() => switchView(id)} className={VIEW_TAB}>
+              <span>{label}</span>
+              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{countView(rows, id)}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center gap-3">
           <span className={`${DATA} text-mut`} role="status">
             {scanning
@@ -479,52 +507,7 @@ export function RegistryView({
         <BulkBar selected={[...checked]} rows={rows} view={view} knownTags={knownTags} onClear={() => setChecked(new Set())} />
       ) : null}
 
-      <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] border-b border-ink">
-        {statCells.map(({ label, value, alert }) => (
-          <div key={label} className="flex flex-col-reverse border-r border-rule px-4 py-3.5 last:border-r-0">
-            <dt className={LABEL}>{label}</dt>
-            <dd className={`text-[30px] leading-[1.1] font-semibold tracking-tight tabular-nums ${alert ? "text-alert" : ""}`}>
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
       <div className="flex flex-wrap items-stretch">
-        <aside className="max-w-full flex-[1_1_208px] border-r border-rule py-3.5">
-          {VIEWS.map(({ id, label }) => (
-            <button key={id} type="button" aria-pressed={view === id} onClick={() => switchView(id)} className={PICK}>
-              <span>{label}</span>
-              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{countView(rows, id)}</span>
-            </button>
-          ))}
-          <div className={`${LABEL} px-4 pt-5 pb-2`}>Tags</div>
-          <button
-            type="button"
-            aria-pressed={untagged}
-            onClick={() => {
-              setSelectedTags([]);
-              setUntagged((current) => !current);
-            }}
-            className={PICK}
-          >
-            <span>Sans tag</span>
-            <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.untagged}</span>
-          </button>
-          {knownTags.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              aria-pressed={selectedTags.includes(tag)}
-              onClick={() => toggleTag(tag)}
-              className={PICK}
-            >
-              <span className="truncate">{tag}</span>
-              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.counts.get(tag) ?? 0}</span>
-            </button>
-          ))}
-        </aside>
-
         <div className="min-w-0 flex-[999_1_620px] border-r border-rule">
           <div className="overflow-x-auto">
             <div className="flex h-[38px] border-b border-ink">

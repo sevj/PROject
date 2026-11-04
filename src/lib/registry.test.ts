@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  computeStats,
   countTags,
   countView,
   formatAge,
@@ -82,6 +81,8 @@ describe("selectRows", () => {
   });
 
   it("shows abandoned projects only in their own view, even once deleted", () => {
+    expect(countView(rows, "abandoned")).toBe(1);
+    expect(countView(rows, "all")).toBe(5);
     expect(names(selectRows(rows, { view: "abandoned", query: "", sort: "name" }))).toEqual(["dropped"]);
     const deleted = [row("deleted", { abandoned: true, missing: true })];
     expect(names(selectRows(deleted, { view: "abandoned", query: "", sort: "name" }))).toEqual(["deleted"]);
@@ -177,13 +178,6 @@ describe("groupRows", () => {
     const [item] = groupRows([child("nogit", { hasGit: false, lastCommitAt: null })]);
     if (item.kind !== "group") throw new Error("expected a group");
     expect(item.group).toMatchObject({ sizeBytes: null, lastCommitAt: null, weeklyCommits: null });
-  });
-});
-
-describe("computeStats", () => {
-  it("counts projects only, without missing or abandoned ones", () => {
-    expect(computeStats(rows, NOW)).toEqual({ projects: 5, git: 4, dirty: 1, active30: 1, dormant: 1, running: 1 });
-    expect(countView(rows, "abandoned")).toBe(1);
   });
 });
 
