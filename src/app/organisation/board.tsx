@@ -13,7 +13,6 @@ const COLUMNS: { status: ProjectStatus | null; label: string }[] = [
   { status: "active", label: STATUS_LABELS.active },
   { status: "paused", label: STATUS_LABELS.paused },
   { status: "resume", label: STATUS_LABELS.resume },
-  { status: "archived", label: STATUS_LABELS.archived },
 ];
 
 const MOVE =

@@ -147,6 +147,15 @@ describe("export and import", () => {
     ]);
   });
 
+  it("imports the former archived status as no status", () => {
+    const old = {
+      version: 2,
+      projects: [{ path: "/p/a", status: "archived", favorite: false, note: "garder", abandoned: false, tags: [] }],
+    };
+    expect(importClassification(db, JSON.stringify(old))).toEqual({ imported: 1, unknownPaths: [] });
+    expect(db.select().from(projectMeta).get()).toMatchObject({ status: null, note: "garder" });
+  });
+
   it("replaces listed projects and leaves the others alone", () => {
     classify();
     const result = importClassification(

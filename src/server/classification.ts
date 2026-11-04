@@ -150,7 +150,9 @@ const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 
 function parseProject(input: unknown, version: number): ExportedProject | null {
-  const item = input as Record<string, unknown> | null;
+  const raw = input as Record<string, unknown> | null;
+  // "archived" no longer exists: an older export must stay importable.
+  const item = raw?.status === "archived" ? { ...raw, status: null } : raw;
   if (
     typeof item?.path !== "string" ||
     !(item.status === null || isStatus(item.status)) ||

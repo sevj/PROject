@@ -36,6 +36,13 @@
       "when": 1793804050798,
       "tag": "0004_short_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793805250403,
+      "tag": "0005_remove_archived_status",
+      "breakpoints": true
     }
   ]
 }

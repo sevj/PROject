@@ -10,7 +10,7 @@ import {
 const now = sql`(unixepoch())`;
 
 export const PROJECT_KINDS = ["project", "group", "folder"] as const;
-export const PROJECT_STATUSES = ["active", "paused", "resume", "archived"] as const;
+export const PROJECT_STATUSES = ["active", "paused", "resume"] as const;
 
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 

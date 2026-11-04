@@ -4,7 +4,6 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
   active: "Actif",
   paused: "En pause",
   resume: "À reprendre",
-  archived: "Archivé",
 };
 
 export type RegistryRow = {
