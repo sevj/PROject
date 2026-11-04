@@ -6,7 +6,7 @@ import { addTagTo, removeTagFrom } from "./actions";
 import { BUTTON, FIELD, LABEL } from "./ui";
 
 const TAG =
-  "min-h-8 max-w-full cursor-pointer truncate border px-2.5 text-[13px] border-rule hover:border-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:font-medium aria-pressed:text-bg aria-[pressed=mixed]:border-dashed aria-[pressed=mixed]:bg-transparent aria-[pressed=mixed]:text-ink";
+  "min-h-8 max-w-full cursor-pointer truncate border px-2.5 text-[13px] border-rule hover:border-ink aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:font-medium aria-pressed:text-ink aria-[pressed=mixed]:border-dashed aria-[pressed=mixed]:bg-transparent aria-[pressed=mixed]:text-ink";
 
 type Change = { name: string; on: boolean };
 

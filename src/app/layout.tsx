@@ -29,9 +29,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <Suspense>
           <LocaleBoundary>
-            <header className="flex min-h-14 flex-wrap items-center gap-x-6 border-b border-ink px-4">
-              <Link href="/" className="text-[15px] font-bold tracking-tight">
+            <header className="site-header flex min-h-12 flex-wrap items-center gap-x-5 px-4">
+              <Link href="/" className="inline-flex items-center gap-2 text-[14px] font-bold tracking-tight text-accent">
                 Project Manager
+                <span aria-hidden="true" className="size-1.5 bg-ink" />
               </Link>
               <Suspense>
                 <NavLinks />

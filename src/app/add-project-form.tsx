@@ -43,7 +43,7 @@ function TagsField({ name, knownTags }: { name: string; knownTags: string[] }) {
         {knownTags.map((tag) => (
           <label key={tag} className="max-w-full cursor-pointer">
             <input type="checkbox" name={name} value={tag} className="peer sr-only" />
-            <span className="block max-w-full truncate border border-rule px-2.5 py-1 text-[13px] peer-checked:border-ink peer-checked:bg-ink peer-checked:font-medium peer-checked:text-bg peer-focus-visible:outline hover:border-ink">
+            <span className="block max-w-full truncate border border-rule px-2.5 py-1 text-[13px] peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-medium peer-checked:text-ink peer-focus-visible:outline hover:border-ink">
               {tag}
             </span>
           </label>
@@ -162,7 +162,7 @@ export function AddProjectForm({
         submit(new FormData(event.currentTarget));
       }}
     >
-      <h2 className="text-[32px] leading-[1.05] font-bold tracking-tight">{m.title}</h2>
+      <h2 className="text-[26px] leading-[1.1] font-bold tracking-tight">{m.title}</h2>
 
       <div role="group" aria-label={m.type} className="flex">
         <button type="button" aria-pressed={!multi} onClick={() => setMulti(false)} className={`${SEGMENT} flex-1`}>
@@ -187,7 +187,7 @@ export function AddProjectForm({
       {multi ? (
         <>
           {repoKeys.map((key, index) => (
-            <fieldset key={key} className="grid gap-3 border-t border-ink pt-3">
+            <fieldset key={key} className="grid gap-3 border-t border-rule-strong pt-3">
               <div className="flex items-center justify-between gap-3">
                 <legend className="contents font-semibold">{m.repository(index + 1)}</legend>
                 {repoKeys.length > 1 ? (

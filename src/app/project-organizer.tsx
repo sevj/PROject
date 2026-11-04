@@ -19,7 +19,7 @@ export function ProjectOrganizer({ row, knownTags }: { row: RegistryRow; knownTa
   const [favorite, showFavorite] = useOptimistic(row.favorite);
 
   return (
-    <section aria-label={messages.sheet.organization} className="w-full max-w-[480px] divide-y divide-rule border border-rule bg-panel">
+    <section aria-label={messages.sheet.organization} className="w-full max-w-[480px] divide-y divide-rule border border-rule-strong bg-panel">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] divide-x divide-rule">
         <label className={`${CELL} block hover:bg-sel`}>
           <span className={`${LABEL} block pb-1`}>{m.status}</span>
@@ -52,7 +52,9 @@ export function ProjectOrganizer({ row, knownTags }: { row: RegistryRow; knownTa
           }
           className={`flex cursor-pointer items-center gap-2 px-4 font-medium hover:bg-sel hover:text-ink ${favorite ? "" : "text-mut"}`}
         >
-          <StarIcon filled={favorite} />
+          <span className={favorite ? "text-accent" : ""}>
+            <StarIcon filled={favorite} />
+          </span>
           {favorite ? m.isFavorite : m.addToFavorites}
         </button>
       </div>

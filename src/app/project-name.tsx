@@ -64,7 +64,7 @@ export function ProjectName({
                 setEditing(false);
               }
             }}
-            className={`${className} w-full border border-ink bg-transparent px-1 placeholder:text-mut`}
+            className={`${className} w-full border border-accent bg-transparent px-1 placeholder:text-mut`}
           />
         </label>
       </form>

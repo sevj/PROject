@@ -5,7 +5,7 @@ import { useMessages } from "@/i18n/provider";
 import { dockerLabel, formatAge, formatSize, type RegistryRow, runningCount } from "@/lib/registry";
 import { parseRemote, publishedPorts } from "@/lib/remote";
 import { OpenIcon } from "./icons";
-import { DATA, LABEL } from "./ui";
+import { DATA, SECTION_TITLE } from "./ui";
 
 function Fact({ label, children, alert }: { label: string; children: ReactNode; alert?: boolean }) {
   return (
@@ -19,7 +19,7 @@ function Fact({ label, children, alert }: { label: string; children: ReactNode; 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className={`${LABEL} border-b border-ink pb-1`}>{title}</h2>
+      <h2 className={SECTION_TITLE}>{title}</h2>
       <dl>{children}</dl>
     </section>
   );
@@ -64,7 +64,7 @@ export function ProjectFacts({ row, now }: { row: RegistryRow; now: number }) {
             {remote === null ? (
               m.none
             ) : remote.url ? (
-              <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="inline-flex max-w-full items-center gap-1 hover:text-alert">
+              <a href={remote.url} target="_blank" rel="noreferrer" title={row.remoteUrl ?? undefined} className="inline-flex max-w-full items-center gap-1 hover:text-accent">
                 <span className="truncate">{remote.label}</span>
                 <OpenIcon />
               </a>

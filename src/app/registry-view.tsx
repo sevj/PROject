@@ -30,7 +30,7 @@ import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
 import { BackIcon, OpenIcon, PlusIcon } from "./icons";
-import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_QUIET, CHECKBOX, DATA, LABEL, SEGMENT } from "./ui";
+import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_QUIET, CHECKBOX, DATA, LABEL, SECTION_TITLE, SEGMENT } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
 const COLUMNS =
@@ -40,9 +40,9 @@ const VIEWS: View[] = ["all", "abandoned"];
 
 const PANEL =
   "min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto";
-const PANEL_TITLE = "text-[32px] leading-[1.05] font-bold tracking-tight";
+const PANEL_TITLE = "text-[26px] leading-[1.1] font-bold tracking-tight";
 const FILTER =
-  "group inline-flex min-h-9 max-w-full cursor-pointer items-center gap-2 border border-rule px-2.5 hover:border-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-bg";
+  "group inline-flex min-h-9 max-w-full cursor-pointer items-center gap-2 border border-rule px-2.5 hover:border-ink aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-ink";
 
 function cellColor(commits: number): string {
   if (commits === 0) return "var(--r0)";
@@ -119,7 +119,7 @@ function GroupHeader({
   const m = messages.registry;
   const total = group.rows.length;
   return (
-    <div className={`flex min-h-11 hover:bg-sel ${selected ? "bg-sel shadow-[inset_3px_0_0_var(--ink)]" : "bg-panel"}`}>
+    <div className={`flex min-h-11 hover:bg-sel ${selected ? "bg-sel shadow-[inset_2px_0_0_var(--accent)]" : "bg-panel"}`}>
       <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
         <span className="sr-only">{m.selectGroup(group.name)}</span>
         <input
@@ -226,7 +226,7 @@ function GroupInspector({
       <div className="mb-5">
         <ProjectDescription key={group.parentId} projectId={group.parentId} description={group.description} detected={null} />
       </div>
-      <h2 className={`${LABEL} border-b border-ink pb-1`}>{m.repositories}</h2>
+      <h2 className={SECTION_TITLE}>{m.repositories}</h2>
       <ul className="mb-4">
         {group.rows.map((row) => (
           <li key={row.id} className="border-b border-rule">
@@ -285,7 +285,7 @@ function BulkBar({
     for (const tag of row.tags) counts[tag] = (counts[tag] ?? 0) + 1;
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-ink bg-panel px-4 py-2" role="group" aria-label={m.label}>
+    <div className="flex flex-wrap items-center gap-2 border-b border-rule-strong bg-panel px-4 py-2" role="group" aria-label={m.label}>
       <span className="font-semibold">
         {m.selected(selected.length)}
       </span>
@@ -542,7 +542,7 @@ export function RegistryView({
   const renderRow = (row: RegistryRow, nested: boolean) => (
     <div
       key={row.id}
-      className={`flex min-h-11 hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_3px_0_0_var(--ink)] ${nested ? "border-t border-rule" : "border-b border-rule"}`}
+      className={`flex min-h-11 hover:bg-sel has-[button[aria-pressed=true]]:bg-sel has-[button[aria-pressed=true]]:shadow-[inset_2px_0_0_var(--accent)] ${nested ? "border-t border-rule" : "border-b border-rule"}`}
     >
       <label className="flex w-9 shrink-0 cursor-pointer items-center justify-center">
         <span className="sr-only">{m.select(row.name)}</span>
@@ -561,7 +561,7 @@ export function RegistryView({
       >
         <span className={`min-w-0 ${nested ? "border-l-2 border-rule pl-3" : ""}`}>
           <span className="block truncate font-semibold">
-            {row.favorite ? <span aria-label={m.favorite}>★ </span> : null}
+            {row.favorite ? <span aria-label={m.favorite} className="text-accent">★ </span> : null}
             {row.name}
           </span>
           <TagList tags={row.tags} />
@@ -593,7 +593,7 @@ export function RegistryView({
 
   return (
     <main className="flex-1">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-ink px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule-strong px-4 py-2.5">
         <label className="min-w-[200px] flex-[0_1_260px]">
           <span className="sr-only">{m.search}</span>
           <input
@@ -616,7 +616,7 @@ export function RegistryView({
             className={FILTER}
           >
             <span>{m.untagged}</span>
-            <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.untagged}</span>
+            <span className={`${DATA} text-mut group-aria-pressed:text-ink`}>{tagCounts.untagged}</span>
           </button>
           {knownTags.map((tag) => (
             <button
@@ -627,7 +627,7 @@ export function RegistryView({
               className={FILTER}
             >
               <span className="truncate">{tag}</span>
-              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.counts.get(tag) ?? 0}</span>
+              <span className={`${DATA} text-mut group-aria-pressed:text-ink`}>{tagCounts.counts.get(tag) ?? 0}</span>
             </button>
           ))}
         </div>
@@ -685,7 +685,7 @@ export function RegistryView({
       <div className="flex flex-wrap items-stretch">
         <div className="min-w-0 flex-[999_1_620px] border-r border-rule">
           <div className="overflow-x-auto">
-            <div className="flex h-[38px] border-b border-ink">
+            <div className="flex h-[38px] border-b border-rule-strong">
               <label className="flex w-9 shrink-0 items-center justify-center">
                 <span className="sr-only">{m.selectAll}</span>
                 <input
@@ -714,7 +714,7 @@ export function RegistryView({
                   key={`group-${item.group.parentId}`}
                   role="group"
                   aria-label={item.group.name}
-                  className="border-y border-ink"
+                  className="border-y border-rule-strong"
                 >
                   <GroupHeader
                     group={item.group}

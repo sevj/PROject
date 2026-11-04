@@ -26,7 +26,7 @@ const SECTION = "border-b border-rule px-5 pt-[18px] pb-[22px]";
 const TABS = ["general", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 const TAB =
-  "-mb-px inline-flex min-h-11 items-center border-b-[3px] border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-ink aria-[current=page]:text-ink";
+  "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";
 
 function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) {
   const peak = Math.max(...weeks, 1);
@@ -40,7 +40,7 @@ function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) 
         </span>
       </div>
       <div
-        className="grid h-[150px] grid-cols-[repeat(26,minmax(0,1fr))] items-end gap-x-0.5 border-b border-ink"
+        className="grid h-[150px] grid-cols-[repeat(26,minmax(0,1fr))] items-end gap-x-0.5 border-b border-rule-strong"
         role="img"
         aria-label={m.weeklyLabel(total, Math.max(...weeks))}
       >
@@ -51,7 +51,7 @@ function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) 
             title={m.weekTitle(weeks.length - 1 - index, commits)}
           >
             <span
-              className="block w-full bg-ink group-hover:bg-alert"
+              className="block w-full bg-accent group-hover:bg-ink"
               style={{ height: commits === 0 ? 0 : `${Math.max(3, Math.round((commits / peak) * 100))}%` }}
             />
           </div>
@@ -92,7 +92,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
   return (
     <main className="flex-1">
-      <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5 border-b border-ink px-5 pt-7 pb-6">
+      <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5 border-b border-rule-strong px-5 pt-7 pb-6">
         <div className="min-w-0">
           <Link href="/" className={BUTTON_QUIET}>
             <BackIcon />
@@ -110,7 +110,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               projectId={row.id}
               name={row.name}
               folderName={row.folderName}
-              className="text-[72px] leading-none font-bold tracking-[-.04em] max-sm:text-[44px]"
+              className="text-[44px] leading-[1.05] font-bold tracking-[-.02em] max-sm:text-[34px]"
             />
           </div>
           <div className="mt-2 max-w-3xl">
@@ -138,7 +138,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
       <div className="flex flex-wrap items-stretch">
         <div className="min-w-0 flex-[999_1_620px] border-r border-rule">
-          <nav aria-label={m.tabs} className="flex flex-wrap border-b border-ink px-1.5">
+          <nav aria-label={m.tabs} className="flex flex-wrap border-b border-rule-strong px-1.5">
             {TABS.map((item) => (
               <Link
                 key={item}

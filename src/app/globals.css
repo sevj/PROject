@@ -3,32 +3,39 @@
 /* Dark is the default theme. Light is opt-in through data-theme on <html>. */
 :root {
   color-scheme: dark;
-  --bg: #111315;
-  --panel: #171a1c;
-  --ink: #eceeea;
-  --mut: #a2a9a6;
-  --rule: #30353a;
-  --alert: #ff7a45;
-  --sel: #23272b;
-  --r0: #24282b;
-  --r1: #596064;
-  --r2: #a2a9a6;
-  --r3: #eceeea;
+  --bg: #0c0c0f;
+  --panel: #151519;
+  --field: #101013;
+  --ink: #e9e9ec;
+  --mut: #9a9aa2;
+  --rule: #232329;
+  --rule-strong: #33333c;
+  --accent: #a594f9;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --alert: #ef8354;
+  --sel: #1b1b21;
+  --r0: #1b1b21;
+  --r1: #3f3770;
+  --r2: #6f5fc4;
+  --r3: #a594f9;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f4f5f2;
-  --panel: #fbfbf9;
-  --ink: #121416;
-  --mut: #565c5a;
-  --rule: #c9cdc8;
-  --alert: #bf3108;
-  --sel: #e4e6e1;
-  --r0: #dfe2dd;
-  --r1: #a7ada8;
-  --r2: #5f6663;
-  --r3: #121416;
+  --bg: #f4f4f7;
+  --panel: #fbfbfd;
+  --field: #f0f0f4;
+  --ink: #1d1d24;
+  --mut: #5c5c68;
+  --rule: #dcdce3;
+  --rule-strong: #c4c4cf;
+  --accent: #5b45c4;
+  --alert: #b8431a;
+  --sel: #ebebf1;
+  --r0: #e3e3ea;
+  --r1: #b9b0ea;
+  --r2: #8574d9;
+  --r3: #5b45c4;
 }
 
 @theme inline {
@@ -36,7 +43,11 @@
   --color-panel: var(--panel);
   --color-ink: var(--ink);
   --color-mut: var(--mut);
+  --color-field: var(--field);
   --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
   --color-alert: var(--alert);
   --color-sel: var(--sel);
   --font-sans: var(--font-schibsted);
@@ -61,8 +72,18 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* The header fades out instead of ending on a hard line. */
+.site-header {
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, var(--accent) 0%, var(--rule-strong) 30%, var(--rule) 100%) 1;
 }
 
 /* Documents from a project, in the same language as the rest of the app. */
@@ -137,15 +158,13 @@ body {
 }
 .markdown .task-list-item input {
   margin-right: 0.5em;
-  accent-color: var(--ink);
+  accent-color: var(--accent);
 }
 .markdown a {
-  color: var(--ink);
-  border-bottom: 1px solid var(--mut);
+  color: var(--accent);
 }
 .markdown a:hover {
-  color: var(--alert);
-  border-color: var(--alert);
+  color: var(--ink);
 }
 .markdown strong {
   font-weight: 700;
@@ -176,7 +195,7 @@ body {
   padding: 1em;
   overflow-x: auto;
   border: 1px solid var(--rule);
-  background: var(--panel);
+  background: var(--field);
   overflow-wrap: normal;
   line-height: 1.5;
 }

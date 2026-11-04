@@ -26,7 +26,7 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
 
   return (
     <main className="max-w-3xl flex-1 border-r border-rule">
-      <h1 className="px-5 pt-7 pb-6 text-[44px] leading-none font-bold tracking-[-.03em]">{m.title}</h1>
+      <h1 className="px-5 pt-7 pb-6 text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
 
       <form
         className={`${SECTION} grid gap-4 border-t border-t-ink`}

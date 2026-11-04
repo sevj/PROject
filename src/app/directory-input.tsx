@@ -46,7 +46,7 @@ function DirectoryPicker({
       ref={dialog}
       onClose={onClose}
       aria-label={m.picker.title}
-      className="m-auto w-[min(600px,calc(100vw-32px))] border border-ink bg-panel text-ink backdrop:bg-black/60"
+      className="m-auto w-[min(600px,calc(100vw-32px))] border border-rule-strong bg-panel text-ink backdrop:bg-black/60"
     >
       <div className="grid gap-3 p-5">
         <h2 className="text-[22px] font-bold tracking-tight">{m.picker.title}</h2>

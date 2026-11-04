@@ -40,7 +40,7 @@ export function ClassificationEditor({ row }: { row: RegistryRow }) {
             type="button"
             aria-pressed={row.favorite}
             onClick={() => run(() => toggleFavorite(row.id, !row.favorite))}
-            className={`${FIELD} cursor-pointer text-left hover:border-ink aria-pressed:border-ink`}
+            className={`${FIELD} cursor-pointer text-left hover:border-ink aria-pressed:border-accent`}
           >
             {row.favorite ? `★ ${m.isFavorite}` : `☆ ${m.addFavorite}`}
           </button>
