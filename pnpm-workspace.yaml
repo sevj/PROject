@@ -11,3 +11,7 @@ minimumReleaseAgeExclude:
   - '@next/swc-win32-x64-msvc@16.4.5'
   - eslint-config-next@16.4.5
   - next@16.4.5
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: false
