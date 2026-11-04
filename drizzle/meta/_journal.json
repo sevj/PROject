@@ -22,6 +22,20 @@
       "when": 1793803257994,
       "tag": "0002_goofy_skullbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793804048441,
+      "tag": "0003_odd_starbolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793804050798,
+      "tag": "0004_short_kang",
+      "breakpoints": true
     }
   ]
 }

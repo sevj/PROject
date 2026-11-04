@@ -6,8 +6,8 @@ import { Board } from "./board";
 
 async function Organisation() {
   await connection();
-  const { rows, collections, now } = getRegistry(getDb());
-  return <Board rows={rows} collections={collections} now={now} />;
+  const { rows, knownTags, now } = getRegistry(getDb());
+  return <Board rows={rows} knownTags={knownTags} now={now} />;
 }
 
 export default function OrganisationPage() {

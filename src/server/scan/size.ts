@@ -31,6 +31,7 @@ export async function runSizeScan(db: Db, projectIds?: number[]): Promise<void> 
     .where(
       and(
         isNull(projects.missingAt),
+        eq(projects.abandoned, false),
         inArray(projects.kind, ["project", "folder"]),
         projectIds ? inArray(projects.id, projectIds) : undefined,
       ),

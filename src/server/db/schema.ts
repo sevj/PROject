@@ -32,7 +32,8 @@ export const projects = sqliteTable("projects", {
   parentId: integer("parent_id").references((): AnySQLiteColumn => projects.id, {
     onDelete: "set null",
   }),
-  hidden: integer("hidden", { mode: "boolean" }).notNull().default(false),
+  /** Set aside by the user: never scanned again, and shown only in its own view. */
+  abandoned: integer("abandoned", { mode: "boolean" }).notNull().default(false),
   firstSeenAt: integer("first_seen_at", { mode: "timestamp" }).notNull().default(now),
   lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull().default(now),
   missingAt: integer("missing_at", { mode: "timestamp" }),
@@ -75,25 +76,6 @@ export const projectMeta = sqliteTable("project_meta", {
   note: text("note"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
 });
-
-export const collections = sqliteTable("collections", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull().unique(),
-  position: integer("position").notNull().default(0),
-});
-
-export const projectCollections = sqliteTable(
-  "project_collections",
-  {
-    projectId: integer("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    collectionId: integer("collection_id")
-      .notNull()
-      .references(() => collections.id, { onDelete: "cascade" }),
-  },
-  (table) => [primaryKey({ columns: [table.projectId, table.collectionId] })],
-);
 
 export const tags = sqliteTable("tags", {
   id: integer("id").primaryKey({ autoIncrement: true }),

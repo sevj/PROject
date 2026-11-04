@@ -1,10 +1,9 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "./db/client";
 import {
-  collections,
   PROJECT_STATUSES,
   type ProjectStatus,
-  projectCollections,
+  projectFacts,
   projectMeta,
   projects,
   projectTags,
@@ -52,67 +51,27 @@ export function setNote(db: Db, projectId: number, note: string) {
   patchMeta(db, [projectId], { note: note.slice(0, MAX_NOTE) || null });
 }
 
-export function createCollection(db: Db, name: string) {
-  const clean = cleanName(name);
-  if (!clean) return null;
-  const position = db.select({ total: sql<number>`count(*)` }).from(collections).get()?.total ?? 0;
-  return db
-    .insert(collections)
-    .values({ name: clean, position })
-    .onConflictDoUpdate({ target: collections.name, set: { name: clean } })
-    .returning()
-    .get();
-}
-
-export function renameCollection(db: Db, id: number, name: string): string | null {
-  const clean = cleanName(name);
-  if (!clean) return "Ce nom de collection n'est pas valide.";
-  const taken = db.select().from(collections).where(eq(collections.name, clean)).get();
-  if (taken && taken.id !== id) return `La collection « ${clean} » existe déjà.`;
-  db.update(collections).set({ name: clean }).where(eq(collections.id, id)).run();
-  return null;
-}
-
-/** Only removes the grouping: its projects and their other classification stay. */
-export function deleteCollection(db: Db, id: number) {
-  db.delete(collections).where(eq(collections.id, id)).run();
-}
-
-export function setHidden(db: Db, projectId: number, hidden: boolean) {
-  db.update(projects).set({ hidden }).where(eq(projects.id, projectId)).run();
-}
-
-export function setCollectionMembership(db: Db, projectIds: number[], collectionId: number, member: boolean) {
+export function setAbandoned(db: Db, projectIds: number[], abandoned: boolean) {
+  if (projectIds.length === 0) return;
   db.transaction((tx) => {
-    if (!member) {
-      tx.delete(projectCollections)
-        .where(
-          and(
-            eq(projectCollections.collectionId, collectionId),
-            inArray(projectCollections.projectId, projectIds),
-          ),
-        )
-        .run();
-      return;
-    }
-    for (const projectId of projectIds) {
-      tx.insert(projectCollections).values({ projectId, collectionId }).onConflictDoNothing().run();
+    tx.update(projects).set({ abandoned }).where(inArray(projects.id, projectIds)).run();
+    if (abandoned) {
+      // No scan will update these again, so a running state would stay wrong forever.
+      tx.update(projectFacts).set({ containers: [] }).where(inArray(projectFacts.projectId, projectIds)).run();
     }
   });
 }
 
+/** `Adimeo` and `adimeo` are one tag: the first spelling is kept. */
 function ensureTag(db: Db, name: string) {
-  return db
-    .insert(tags)
-    .values({ name })
-    .onConflictDoUpdate({ target: tags.name, set: { name } })
-    .returning()
-    .get();
+  const lower = name.toLocaleLowerCase("fr");
+  const existing = db.select().from(tags).all().find((tag) => tag.name.toLocaleLowerCase("fr") === lower);
+  return existing ?? db.insert(tags).values({ name }).returning().get();
 }
 
 export function addTag(db: Db, projectIds: number[], name: string) {
   const clean = cleanName(name);
-  if (!clean) return;
+  if (!clean || projectIds.length === 0) return;
   db.transaction((tx) => {
     const tag = ensureTag(tx as unknown as Db, clean);
     for (const projectId of projectIds) {
@@ -121,78 +80,106 @@ export function addTag(db: Db, projectIds: number[], name: string) {
   });
 }
 
-/** A tag used by nobody disappears from the suggestions. */
-export function removeTag(db: Db, projectId: number, name: string) {
+/** A tag used by nobody disappears from the filters and the suggestions. */
+export function removeTag(db: Db, projectIds: number[], name: string) {
+  if (projectIds.length === 0) return;
   db.transaction((tx) => {
     const tag = tx.select().from(tags).where(eq(tags.name, name)).get();
     if (!tag) return;
     tx.delete(projectTags)
-      .where(and(eq(projectTags.projectId, projectId), eq(projectTags.tagId, tag.id)))
+      .where(and(inArray(projectTags.projectId, projectIds), eq(projectTags.tagId, tag.id)))
       .run();
     const left = tx.select().from(projectTags).where(eq(projectTags.tagId, tag.id)).limit(1).get();
     if (!left) tx.delete(tags).where(eq(tags.id, tag.id)).run();
   });
 }
 
-export type ClassificationExport = {
-  version: 1;
-  collections: string[];
-  projects: {
-    path: string;
-    status: ProjectStatus | null;
-    favorite: boolean;
-    note: string | null;
-    collections: string[];
-    tags: string[];
-  }[];
+export function renameTag(db: Db, name: string, nextName: string): string | null {
+  const clean = cleanName(nextName);
+  if (!clean) return "Ce nom de tag n'est pas valide.";
+  const tag = db.select().from(tags).where(eq(tags.name, name)).get();
+  if (!tag) return "Ce tag n'existe plus.";
+  const lower = clean.toLocaleLowerCase("fr");
+  const taken = db.select().from(tags).all().find((item) => item.name.toLocaleLowerCase("fr") === lower);
+  if (taken && taken.id !== tag.id) return `Le tag « ${taken.name} » existe déjà.`;
+  db.update(tags).set({ name: clean }).where(eq(tags.id, tag.id)).run();
+  return null;
+}
+
+/** Only removes the label: its projects and the rest of their classification stay. */
+export function deleteTag(db: Db, name: string) {
+  db.delete(tags).where(eq(tags.name, name)).run();
+}
+
+export type ExportedProject = {
+  path: string;
+  status: ProjectStatus | null;
+  favorite: boolean;
+  note: string | null;
+  abandoned: boolean;
+  tags: string[];
 };
 
+export type ClassificationExport = { version: 2; projects: ExportedProject[] };
+
 export function exportClassification(db: Db): ClassificationExport {
-  const collectionRows = db.select().from(collections).orderBy(collections.position).all();
-  const collectionNames = new Map(collectionRows.map(({ id, name }) => [id, name]));
   const tagNames = new Map(db.select().from(tags).all().map(({ id, name }) => [id, name]));
   const metas = new Map(db.select().from(projectMeta).all().map((meta) => [meta.projectId, meta]));
-  const memberships = db.select().from(projectCollections).all();
   const taggings = db.select().from(projectTags).all();
 
-  const exported: ClassificationExport["projects"] = [];
+  const exported: ExportedProject[] = [];
   for (const project of db.select().from(projects).all()) {
     const meta = metas.get(project.id);
-    const inCollections = memberships
-      .filter((item) => item.projectId === project.id)
-      .flatMap((item) => collectionNames.get(item.collectionId) ?? []);
     const withTags = taggings
       .filter((item) => item.projectId === project.id)
-      .flatMap((item) => tagNames.get(item.tagId) ?? []);
+      .flatMap((item) => tagNames.get(item.tagId) ?? [])
+      .sort((a, b) => a.localeCompare(b, "fr"));
     // Only what the user decided: everything else is recalculated by a scan.
-    if (!meta && inCollections.length === 0 && withTags.length === 0) continue;
+    if (!meta && !project.abandoned && withTags.length === 0) continue;
     exported.push({
       path: project.path,
       status: meta?.status ?? null,
       favorite: meta?.favorite ?? false,
       note: meta?.note ?? null,
-      collections: inCollections,
+      abandoned: project.abandoned,
       tags: withTags,
     });
   }
-  return { version: 1, collections: collectionRows.map(({ name }) => name), projects: exported };
+  return { version: 2, projects: exported };
 }
 
-function parseExport(input: unknown): ClassificationExport | null {
-  const data = input as Partial<ClassificationExport> | null;
-  if (data?.version !== 1 || !Array.isArray(data.collections) || !Array.isArray(data.projects)) return null;
-  const strings = (value: unknown) => Array.isArray(value) && value.every((item) => typeof item === "string");
-  if (!strings(data.collections)) return null;
-  const valid = data.projects.every(
-    (project) =>
-      typeof project?.path === "string" &&
-      (project.status === null || isStatus(project.status)) &&
-      typeof project.favorite === "boolean" &&
-      (project.note === null || typeof project.note === "string") &&
-      strings(project.collections) &&
-      strings(project.tags),
-  );
-  return valid ? (data as ClassificationExport) : null;
+const isStrings = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+function parseProject(input: unknown, version: number): ExportedProject | null {
+  const item = input as Record<string, unknown> | null;
+  if (
+    typeof item?.path !== "string" ||
+    !(item.status === null || isStatus(item.status)) ||
+    typeof item.favorite !== "boolean" ||
+    !(item.note === null || typeof item.note === "string") ||
+    !isStrings(item.tags)
+  ) {
+    return null;
+  }
+  const base = { path: item.path, status: item.status, favorite: item.favorite, note: item.note };
+  if (version === 2) {
+    return typeof item.abandoned === "boolean" ? { ...base, abandoned: item.abandoned, tags: item.tags } : null;
+  }
+  // Exports made while collections existed: the same conversion as the database migration.
+  if (!isStrings(item.collections)) return null;
+  return {
+    ...base,
+    abandoned: item.collections.includes("Abandonnés"),
+    tags: [...item.tags, ...item.collections.filter((name) => name !== "Abandonnés")],
+  };
+}
+
+function parseExport(input: unknown): ExportedProject[] | null {
+  const data = input as { version?: unknown; projects?: unknown } | null;
+  if ((data?.version !== 1 && data?.version !== 2) || !Array.isArray(data.projects)) return null;
+  const parsed = data.projects.map((project) => parseProject(project, data.version as number));
+  return parsed.every((project) => project !== null) ? (parsed as ExportedProject[]) : null;
 }
 
 export type ImportResult = { imported: number; unknownPaths: string[] } | { error: string };
@@ -205,37 +192,24 @@ export function importClassification(db: Db, json: string): ImportResult {
   } catch {
     return { error: "Ce fichier n'est pas du JSON valide." };
   }
-  const data = parseExport(parsed);
-  if (!data) return { error: "Ce fichier n'est pas un export de Project Manager." };
+  const items = parseExport(parsed);
+  if (!items) return { error: "Ce fichier n'est pas un export de Project Manager." };
 
   return db.transaction((tx) => {
     const txDb = tx as unknown as Db;
-    for (const name of data.collections) createCollection(txDb, name);
-    const collectionIds = new Map(tx.select().from(collections).all().map(({ id, name }) => [name, id]));
     const projectIds = new Map(tx.select().from(projects).all().map(({ id, path }) => [path, id]));
 
     const unknownPaths: string[] = [];
     let imported = 0;
-    for (const item of data.projects) {
+    for (const item of items) {
       const projectId = projectIds.get(item.path);
       if (projectId === undefined) {
         unknownPaths.push(item.path);
         continue;
       }
-      patchMeta(txDb, [projectId], {
-        status: item.status,
-        favorite: item.favorite,
-        note: item.note,
-      });
-      tx.delete(projectCollections).where(eq(projectCollections.projectId, projectId)).run();
+      patchMeta(txDb, [projectId], { status: item.status, favorite: item.favorite, note: item.note });
+      setAbandoned(txDb, [projectId], item.abandoned);
       tx.delete(projectTags).where(eq(projectTags.projectId, projectId)).run();
-      for (const name of item.collections) {
-        const collection = createCollection(txDb, name);
-        if (collection) {
-          collectionIds.set(collection.name, collection.id);
-          setCollectionMembership(txDb, [projectId], collection.id, true);
-        }
-      }
       for (const name of item.tags) addTag(txDb, [projectId], name);
       imported += 1;
     }

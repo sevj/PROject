@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   computeStats,
+  countTags,
   countView,
   formatAge,
   formatSize,
   type RegistryRow,
   selectRows,
-  todoReasons,
 } from "./registry";
 
 const DAY = 24 * 3600 * 1000;
@@ -40,7 +40,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     status: null,
     favorite: false,
     note: null,
-    collectionIds: [],
+    abandoned: false,
     tags: [],
     ...patch,
   };
@@ -61,6 +61,7 @@ const rows = [
   row("nogit", { hasGit: false, dirtyCount: null, lastCommitAt: null }),
   row("plain", { kind: "folder", hasGit: false, dirtyCount: null, lastCommitAt: null }),
   row("gone", { missing: true, dirtyCount: 9 }),
+  row("dropped", { abandoned: true, dirtyCount: 7, containers: [{ name: "c", service: "c", state: "running", status: "Up", ports: "" }] }),
   row("broken", { kind: "folder", hasGit: false, dirtyCount: null, lastCommitAt: null, scanError: "EACCES" }),
 ];
 
@@ -77,14 +78,15 @@ describe("selectRows", () => {
     ]);
   });
 
-  it("keeps missing and plain folders in their own views", () => {
-    expect(names(selectRows(rows, { view: "missing", query: "", sort: "name" }))).toEqual(["gone"]);
-    expect(names(selectRows(rows, { view: "folders", query: "", sort: "name" }))).toEqual(["broken", "plain"]);
-    expect(names(selectRows(rows, { view: "errors", query: "", sort: "name" }))).toEqual(["broken"]);
+  it("shows abandoned projects only in their own view, even once deleted", () => {
+    expect(names(selectRows(rows, { view: "abandoned", query: "", sort: "name" }))).toEqual(["dropped"]);
+    const deleted = [row("deleted", { abandoned: true, missing: true })];
+    expect(names(selectRows(deleted, { view: "abandoned", query: "", sort: "name" }))).toEqual(["deleted"]);
+    expect(names(selectRows(deleted, { view: "all", query: "", sort: "name" }))).toEqual([]);
   });
 
   it("sorts by modified files, and searches the path case-insensitively", () => {
-    expect(names(selectRows(rows, { view: "dirty", query: "", sort: "dirty" }))).toEqual(["dirty"]);
+    expect(names(selectRows(rows, { view: "all", query: "", sort: "dirty" }))[0]).toBe("dirty");
     expect(names(selectRows(rows, { view: "all", query: " OLD ", sort: "name" }))).toEqual(["old"]);
   });
 
@@ -95,66 +97,43 @@ describe("selectRows", () => {
   });
 });
 
-describe("classification filters", () => {
-  const classified = [
-    row("a", { collectionIds: [1], favorite: true, tags: ["Client"] }),
-    row("b", { collectionIds: [2] }),
+describe("tag filters", () => {
+  const tagged = [
+    row("a", { tags: ["Client", "PHP"] }),
+    row("b", { tags: ["Client"] }),
     row("c"),
+    row("dropped", { tags: ["Client"], abandoned: true }),
     row("plain", { kind: "folder" }),
   ];
+  const select = (options: { tags?: string[]; untagged?: boolean }) =>
+    names(selectRows(tagged, { view: "all", query: "", sort: "name", ...options }));
 
-  it("lists unclassified projects, without plain folders", () => {
-    expect(names(selectRows(classified, { view: "unclassified", query: "", sort: "name" }))).toEqual(["c"]);
+  it("requires every selected tag", () => {
+    expect(select({ tags: ["Client"] })).toEqual(["a", "b"]);
+    expect(select({ tags: ["Client", "PHP"] })).toEqual(["a"]);
+    expect(select({ tags: ["Absent"] })).toEqual([]);
   });
 
-  it("filters by favorite, collection and tag", () => {
-    expect(names(selectRows(classified, { view: "favorites", query: "", sort: "name" }))).toEqual(["a"]);
-    expect(names(selectRows(classified, { view: "all", query: "", sort: "name", collectionId: 2 }))).toEqual(["b"]);
-    expect(names(selectRows(classified, { view: "all", query: "client", sort: "name" }))).toEqual(["a"]);
-  });
-});
-
-describe("todo view", () => {
-  const clean = { upstream: "origin/main", ahead: 0, behind: 0, remoteUrl: "git@x:a/b.git" };
-
-  it.each([
-    [{ ...clean }, []],
-    [{ ...clean, behind: 4 }, []],
-    [{ ...clean, dirtyCount: 1 }, ["1 modif"]],
-    [{ ...clean, dirtyCount: 3, ahead: 2 }, ["3 modifs", "2 non poussés"]],
-    [{ ...clean, ahead: 1 }, ["1 non poussé"]],
-    [{ ...clean, upstream: null, ahead: null }, ["branche sans suivi"]],
-    [{ ...clean, upstream: null, ahead: null, branch: null }, []],
-    [{ upstream: null, ahead: null, remoteUrl: null }, ["sans remote"]],
-    [{ upstream: null, remoteUrl: null, commitCount: 0 }, []],
-    [{ hasGit: false, dirtyCount: null }, []],
-  ])("explains %j", (patch, expected) => {
-    expect(todoReasons(row("x", patch))).toEqual(expected);
+  it("lists untagged projects, without plain folders", () => {
+    expect(select({ untagged: true })).toEqual(["c"]);
   });
 
-  it("lists the oldest first, without archived, missing or clean projects", () => {
-    const list = [
-      row("recent", { ...clean, dirtyCount: 1, lastCommitAt: NOW - DAY }),
-      row("oldest", { ...clean, dirtyCount: 1, lastCommitAt: NOW - 90 * DAY }),
-      row("no-commit", { ...clean, dirtyCount: 1, lastCommitAt: null, commitCount: 0 }),
-      row("archived", { ...clean, dirtyCount: 1, status: "archived" }),
-      row("gone", { ...clean, dirtyCount: 1, missing: true }),
-      row("clean", clean),
-    ];
-    expect(names(selectRows(list, { view: "todo", query: "", sort: "commit" }))).toEqual([
-      "oldest",
-      "recent",
-      "no-commit",
-    ]);
-    expect(names(selectRows(list, { view: "todo", query: "", sort: "name" }))[0]).toBe("no-commit");
+  it("finds a project through a tag in the search", () => {
+    expect(names(selectRows(tagged, { view: "all", query: "php", sort: "name" }))).toEqual(["a"]);
+  });
+
+  it("counts within the current view", () => {
+    const all = countTags(tagged, "all");
+    expect(all.counts.get("Client")).toBe(2);
+    expect(all.untagged).toBe(1);
+    expect(countTags(tagged, "abandoned").counts.get("Client")).toBe(1);
   });
 });
 
 describe("computeStats", () => {
-  it("counts projects only and excludes missing ones", () => {
+  it("counts projects only, without missing or abandoned ones", () => {
     expect(computeStats(rows, NOW)).toEqual({ projects: 5, git: 4, dirty: 1, active30: 1, dormant: 1, running: 1 });
-    expect(names(selectRows(rows, { view: "docker", query: "", sort: "name" }))).toEqual(["old"]);
-    expect(countView(rows, "nogit")).toBe(1);
+    expect(countView(rows, "abandoned")).toBe(1);
   });
 });
 

@@ -34,11 +34,11 @@ export type RegistryRow = {
   status: ProjectStatus | null;
   favorite: boolean;
   note: string | null;
-  collectionIds: number[];
+  abandoned: boolean;
   tags: string[];
 };
 
-export type RegistryView = "all" | "todo" | "favorites" | "unclassified" | "dirty" | "docker" | "nogit" | "folders" | "errors" | "missing";
+export type RegistryView = "all" | "abandoned";
 export type RegistrySort = "commit" | "name" | "dirty" | "size";
 
 const DAY = 24 * 3600 * 1000;
@@ -47,34 +47,10 @@ export function runningCount(row: RegistryRow): number {
   return row.containers.filter((container) => container.state === "running").length;
 }
 
-/** What is at risk of being forgotten. Empty when the project is in a clean state. */
-export function todoReasons(row: RegistryRow): string[] {
-  if (!row.hasGit) return [];
-  const reasons: string[] = [];
-  const dirty = row.dirtyCount ?? 0;
-  const ahead = row.ahead ?? 0;
-  if (dirty > 0) reasons.push(`${dirty} modif${dirty > 1 ? "s" : ""}`);
-  if (ahead > 0) reasons.push(`${ahead} non poussé${ahead > 1 ? "s" : ""}`);
-  if ((row.commitCount ?? 0) > 0 && !row.upstream) {
-    if (!row.remoteUrl) reasons.push("sans remote");
-    // A detached HEAD has no branch to track: a checked-out tag or commit is not a forgotten push.
-    else if (row.branch) reasons.push("branche sans suivi");
-  }
-  return reasons;
-}
-
 const VIEW_TESTS: Record<RegistryView, (row: RegistryRow) => boolean> = {
-  all: (row) => !row.missing && row.kind === "project",
-  // An archived project was set aside on purpose, so it stops asking for attention.
-  todo: (row) => !row.missing && row.kind === "project" && row.status !== "archived" && todoReasons(row).length > 0,
-  favorites: (row) => !row.missing && row.favorite,
-  unclassified: (row) => !row.missing && row.kind === "project" && row.collectionIds.length === 0,
-  dirty: (row) => !row.missing && (row.dirtyCount ?? 0) > 0,
-  docker: (row) => !row.missing && runningCount(row) > 0,
-  nogit: (row) => !row.missing && row.kind === "project" && !row.hasGit,
-  folders: (row) => !row.missing && row.kind === "folder",
-  errors: (row) => !row.missing && row.scanError !== null,
-  missing: (row) => row.missing,
+  all: (row) => !row.missing && !row.abandoned && row.kind === "project",
+  // Includes a folder deleted since: its row is the only trace left of that decision.
+  abandoned: (row) => row.abandoned,
 };
 
 export function countView(rows: RegistryRow[], view: RegistryView): number {
@@ -88,37 +64,38 @@ const SORTERS: Record<RegistrySort, (a: RegistryRow, b: RegistryRow) => number> 
   commit: (a, b) => (b.lastCommitAt ?? -1) - (a.lastCommitAt ?? -1),
 };
 
-/** Whatever waits the longest comes first. */
-const oldestFirst = (a: RegistryRow, b: RegistryRow) =>
-  (a.lastCommitAt ?? Infinity) - (b.lastCommitAt ?? Infinity);
-
-export function isOldestFirst(view: RegistryView, sort: RegistrySort): boolean {
-  return view === "todo" && sort === "commit";
-}
-
 export function selectRows(
   rows: RegistryRow[],
   {
     view,
     query,
     sort,
-    collectionId = null,
-  }: { view: RegistryView; query: string; sort: RegistrySort; collectionId?: number | null },
+    tags = [],
+    untagged = false,
+  }: { view: RegistryView; query: string; sort: RegistrySort; tags?: string[]; untagged?: boolean },
 ): RegistryRow[] {
   const needle = query.trim().toLowerCase();
   return rows
     .filter(VIEW_TESTS[view])
-    .filter((row) => collectionId === null || row.collectionIds.includes(collectionId))
+    // Several tags narrow the list: a project must carry all of them.
+    .filter((row) => tags.every((tag) => row.tags.includes(tag)))
+    .filter((row) => !untagged || row.tags.length === 0)
     .filter(
       (row) =>
         !needle ||
         row.path.toLowerCase().includes(needle) ||
         row.tags.some((tag) => tag.toLowerCase().includes(needle)),
     )
-    .sort(
-      (a, b) =>
-        (isOldestFirst(view, sort) ? oldestFirst : SORTERS[sort])(a, b) || a.name.localeCompare(b.name, "fr"),
-    );
+    .sort((a, b) => SORTERS[sort](a, b) || a.name.localeCompare(b.name, "fr"));
+}
+
+export function countTags(rows: RegistryRow[], view: RegistryView) {
+  const inView = rows.filter(VIEW_TESTS[view]);
+  const counts = new Map<string, number>();
+  for (const row of inView) {
+    for (const tag of row.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  return { counts, untagged: inView.filter((row) => row.tags.length === 0).length };
 }
 
 export function computeStats(rows: RegistryRow[], now: number) {

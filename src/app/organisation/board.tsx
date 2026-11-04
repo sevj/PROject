@@ -5,7 +5,6 @@ import { useOptimistic, useRef, useState, useTransition } from "react";
 import { formatAge, type RegistryRow, STATUS_LABELS } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
 import { importBackup, updateStatus } from "../actions";
-import type { CollectionOption } from "../classification-editor";
 import { BUTTON, DATA } from "../ui";
 
 const COLUMNS: { status: ProjectStatus | null; label: string }[] = [
@@ -68,14 +67,14 @@ function Backup() {
 
 export function Board({
   rows,
-  collections,
+  knownTags,
   now,
 }: {
   rows: RegistryRow[];
-  collections: CollectionOption[];
+  knownTags: string[];
   now: number;
 }) {
-  const [collectionId, setCollectionId] = useState<number | null>(null);
+  const [tag, setTag] = useState<string | null>(null);
   const [, start] = useTransition();
   const [optimistic, applyMove] = useOptimistic(
     rows,
@@ -91,27 +90,28 @@ export function Board({
     });
   };
 
-  const filters: { id: number | null; name: string }[] = [{ id: null, name: "Tous" }, ...collections];
+  const filters: { value: string | null; label: string }[] = [
+    { value: null, label: "Tous" },
+    ...knownTags.map((name) => ({ value: name, label: name })),
+  ];
   const shown = optimistic.filter(
     (row) =>
-      !row.missing &&
-      row.kind === "project" &&
-      (collectionId === null || row.collectionIds.includes(collectionId)),
+      !row.missing && !row.abandoned && row.kind === "project" && (tag === null || row.tags.includes(tag)),
   );
 
   return (
     <main className="flex-1">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink px-4 py-2">
-        <div role="group" aria-label="Filtrer par collection" className="flex flex-wrap pl-px">
-          {filters.map(({ id, name }) => (
+        <div role="group" aria-label="Filtrer par tag" className="flex flex-wrap pl-px">
+          {filters.map(({ value, label }) => (
             <button
-              key={name}
+              key={label}
               type="button"
-              aria-pressed={collectionId === id}
-              onClick={() => setCollectionId(id)}
+              aria-pressed={tag === value}
+              onClick={() => setTag(value)}
               className="-ml-px min-h-10 cursor-pointer border border-ink px-3.5 font-medium aria-pressed:bg-ink aria-pressed:text-bg"
             >
-              {name}
+              {label}
             </button>
           ))}
         </div>

@@ -3,28 +3,11 @@
 import { useTransition } from "react";
 import { STATUS_LABELS, type RegistryRow } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
-import {
-  addTagTo,
-  removeTagFrom,
-  saveNote,
-  toggleCollection,
-  toggleFavorite,
-  updateStatus,
-} from "./actions";
-import { CHECKBOX, DATA, FIELD, LABEL } from "./ui";
-
-export type CollectionOption = { id: number; name: string };
+import { addTagTo, removeTagFrom, saveNote, toggleFavorite, updateStatus } from "./actions";
+import { DATA, FIELD, LABEL } from "./ui";
 
 /** Mount with `key={row.id}`: the note field keeps its own text while typing. */
-export function ClassificationEditor({
-  row,
-  collections,
-  knownTags,
-}: {
-  row: RegistryRow;
-  collections: CollectionOption[];
-  knownTags: string[];
-}) {
+export function ClassificationEditor({ row, knownTags }: { row: RegistryRow; knownTags: string[] }) {
   const [, start] = useTransition();
   const run = (action: () => Promise<void>) => start(action);
 
@@ -61,27 +44,6 @@ export function ClassificationEditor({
         </div>
       </div>
 
-      <fieldset>
-        <legend className={`${LABEL} pb-1`}>Collections</legend>
-        {collections.length === 0 ? (
-          <p className="text-mut">Crée une première collection depuis le registre.</p>
-        ) : (
-          <div className="flex flex-wrap gap-x-4">
-            {collections.map(({ id, name }) => (
-              <label key={id} className="flex min-h-8 cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  className={CHECKBOX}
-                  checked={row.collectionIds.includes(id)}
-                  onChange={(event) => run(() => toggleCollection([row.id], id, event.target.checked))}
-                />
-                {name}
-              </label>
-            ))}
-          </div>
-        )}
-      </fieldset>
-
       <div>
         <span className={`${LABEL} block pb-1`}>Tags</span>
         {row.tags.length > 0 ? (
@@ -91,7 +53,7 @@ export function ClassificationEditor({
                 key={tag}
                 type="button"
                 aria-label={`Retirer le tag ${tag}`}
-                onClick={() => run(() => removeTagFrom(row.id, tag))}
+                onClick={() => run(() => removeTagFrom([row.id], tag))}
                 className={`${DATA} min-h-7 cursor-pointer border border-rule px-2 hover:border-alert hover:text-alert`}
               >
                 {tag} ×

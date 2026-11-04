@@ -1,13 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  deleteCollectionById,
-  renameCollectionById,
-  saveSettingsForm,
-  scanNow,
-  showProject,
-} from "../actions";
+import { deleteTagByName, renameTagByName, saveSettingsForm, scanNow } from "../actions";
 import { BUTTON, DATA, FIELD, LABEL } from "../ui";
 
 const SECTION = "border-b border-rule px-5 pt-5 pb-6";
@@ -17,12 +11,12 @@ type Props = {
   ideCommands: Record<string, string>;
   terminalCommand: string;
   stacks: string[];
-  hidden: { id: number; path: string }[];
-  collections: { id: number; name: string; count: number }[];
+  tags: { name: string; count: number }[];
 };
 
-export function SettingsForm({ root, ideCommands, terminalCommand, stacks, hidden, collections }: Props) {
+export function SettingsForm({ root, ideCommands, terminalCommand, stacks, tags }: Props) {
   const [message, setMessage] = useState<string | null>(null);
+  const [tagMessage, setTagMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   return (
@@ -84,20 +78,25 @@ export function SettingsForm({ root, ideCommands, terminalCommand, stacks, hidde
       </form>
 
       <section className={SECTION}>
-        <h2 className={`${LABEL} pb-3`}>Collections</h2>
-        {collections.length === 0 ? <p className="text-mut">Aucune collection pour l&apos;instant.</p> : null}
-        {collections.map(({ id, name, count }) => (
-          <div key={id} className="flex flex-wrap items-center gap-2 border-b border-rule py-2 last:border-b-0">
+        <h2 className={`${LABEL} pb-3`}>Tags</h2>
+        {tagMessage ? (
+          <p role="alert" className={`${DATA} pb-2 text-alert`}>
+            {tagMessage}
+          </p>
+        ) : null}
+        {tags.length === 0 ? <p className="text-mut">Aucun tag pour l&apos;instant.</p> : null}
+        {tags.map(({ name, count }) => (
+          <div key={name} className="flex flex-wrap items-center gap-2 border-b border-rule py-2 last:border-b-0">
             <form
               className="min-w-[200px] flex-1"
               action={(data) => {
                 const next = String(data.get("name") ?? "");
-                start(async () => setMessage(await renameCollectionById(id, next)));
+                start(async () => setTagMessage(await renameTagByName(name, next)));
               }}
             >
               <label>
                 <span className="sr-only">Renommer {name}</span>
-                <input key={name} name="name" defaultValue={name} maxLength={80} className={FIELD} />
+                <input name="name" defaultValue={name} maxLength={80} className={FIELD} />
               </label>
             </form>
             <span className={`${DATA} text-mut`}>
@@ -108,26 +107,13 @@ export function SettingsForm({ root, ideCommands, terminalCommand, stacks, hidde
               disabled={pending}
               className={BUTTON}
               onClick={() => {
-                const detail = count > 0 ? ` Les ${count} projets restent, seul ce classement disparaît.` : "";
-                if (window.confirm(`Supprimer la collection « ${name} » ?${detail}`)) {
-                  start(() => deleteCollectionById(id));
+                const detail = count > 0 ? ` Il sera retiré de ${count} projet${count > 1 ? "s" : ""}.` : "";
+                if (window.confirm(`Supprimer le tag « ${name} » ?${detail}`)) {
+                  start(() => deleteTagByName(name));
                 }
               }}
             >
               Supprimer
-            </button>
-          </div>
-        ))}
-      </section>
-
-      <section className={SECTION}>
-        <h2 className={`${LABEL} pb-3`}>Dossiers masqués</h2>
-        {hidden.length === 0 ? <p className="text-mut">Aucun dossier masqué.</p> : null}
-        {hidden.map(({ id, path }) => (
-          <div key={id} className="flex items-center justify-between gap-3 border-b border-rule py-2 last:border-b-0">
-            <span className={`${DATA} truncate`}>{path}</span>
-            <button type="button" disabled={pending} className={BUTTON} onClick={() => start(() => showProject(id))}>
-              Réafficher
             </button>
           </div>
         ))}

@@ -1,23 +1,24 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   addTag,
-  createCollection,
-  deleteCollection,
+  deleteTag,
   exportClassification,
   importClassification,
   removeTag,
-  renameCollection,
-  setCollectionMembership,
+  renameTag,
+  setAbandoned,
   setFavorite,
   setNote,
   setStatus,
 } from "./classification";
 import { type Db, openDb } from "./db/client";
-import { collections, projectCollections, projectMeta, projects, tags } from "./db/schema";
+import { projectFacts, projectMeta, projects, projectTags, tags } from "./db/schema";
 
 let db: Db;
 let a: number;
 let b: number;
+
+const tagNames = () => db.select().from(tags).all().map((tag) => tag.name).sort();
 
 beforeEach(() => {
   db = openDb(":memory:");
@@ -41,78 +42,79 @@ describe("meta", () => {
   });
 });
 
-describe("collections", () => {
-  it("cleans names, reuses an existing one and refuses an empty one", () => {
-    const first = createCollection(db, "  Clients   Adimeo ");
-    expect(first?.name).toBe("Clients Adimeo");
-    expect(createCollection(db, "Clients Adimeo")?.id).toBe(first?.id);
-    expect(createCollection(db, "   ")).toBeNull();
-    expect(createCollection(db, "x".repeat(81))).toBeNull();
-    expect(db.select().from(collections).all()).toHaveLength(1);
+describe("abandoned", () => {
+  it("flags several projects and forgets their running containers", () => {
+    const container = { name: "c", service: "c", state: "running", status: "Up", ports: "" };
+    db.insert(projectFacts).values({ projectId: a, containers: [container] }).run();
+    setAbandoned(db, [a, b], true);
+    expect(db.select().from(projects).all().map((p) => p.abandoned)).toEqual([true, true]);
+    expect(db.select().from(projectFacts).get()?.containers).toEqual([]);
+    setAbandoned(db, [b], false);
+    expect(db.select().from(projects).all().map((p) => p.abandoned)).toEqual([true, false]);
   });
 
-  it("adds several projects, tolerates duplicates and removes only the requested ones", () => {
-    const id = createCollection(db, "Perso")?.id ?? 0;
-    setCollectionMembership(db, [a, b], id, true);
-    setCollectionMembership(db, [a], id, true);
-    expect(db.select().from(projectCollections).all()).toHaveLength(2);
-    setCollectionMembership(db, [a], id, false);
-    expect(db.select().from(projectCollections).all().map((m) => m.projectId)).toEqual([b]);
+  it("tolerates an empty selection", () => {
+    setAbandoned(db, [], true);
+    expect(db.select().from(projects).all().map((p) => p.abandoned)).toEqual([false, false]);
   });
 });
 
-describe("rename and delete", () => {
-  it("renames, refusing an empty name or one already taken", () => {
-    const perso = createCollection(db, "Perso")?.id ?? 0;
-    createCollection(db, "Clients");
-    expect(renameCollection(db, perso, "Personnel")).toBeNull();
-    expect(renameCollection(db, perso, "Personnel")).toBeNull();
-    expect(renameCollection(db, perso, "Clients")).toContain("existe déjà");
-    expect(renameCollection(db, perso, "  ")).toContain("pas valide");
-    expect(db.select().from(collections).all().map((c) => c.name).sort()).toEqual(["Clients", "Personnel"]);
+describe("tags", () => {
+  it("cleans names, refuses empty ones and ignores case when reusing", () => {
+    addTag(db, [a], "  Adimeo   Client ");
+    addTag(db, [b], "adimeo client");
+    addTag(db, [a], "   ");
+    addTag(db, [a], "x".repeat(81));
+    expect(tagNames()).toEqual(["Adimeo Client"]);
+    expect(db.select().from(projectTags).all()).toHaveLength(2);
   });
 
-  it("deletes a collection and keeps its projects and their meta", () => {
-    const id = createCollection(db, "Perso")?.id ?? 0;
-    setCollectionMembership(db, [a], id, true);
+  it("adds twice without error and removes from several projects", () => {
+    addTag(db, [a, b], "php");
+    addTag(db, [a], "php");
+    addTag(db, [a], "web");
+    removeTag(db, [a], "php");
+    expect(tagNames()).toEqual(["php", "web"]);
+    removeTag(db, [a, b], "php");
+    expect(tagNames()).toEqual(["web"]);
+  });
+
+  it("renames, allows a case change and refuses a taken name", () => {
+    addTag(db, [a], "perso");
+    addTag(db, [a], "client");
+    expect(renameTag(db, "perso", "Perso")).toBeNull();
+    expect(renameTag(db, "Perso", "CLIENT")).toContain("existe déjà");
+    expect(renameTag(db, "Perso", "  ")).toContain("pas valide");
+    expect(renameTag(db, "absent", "x")).toContain("n'existe plus");
+    expect(tagNames()).toEqual(["client", "Perso"].sort());
+  });
+
+  it("deletes a tag and keeps its projects and meta", () => {
+    addTag(db, [a], "perso");
     setStatus(db, [a], "active");
-    deleteCollection(db, id);
-    expect(db.select().from(projectCollections).all()).toEqual([]);
+    deleteTag(db, "perso");
+    expect(db.select().from(projectTags).all()).toEqual([]);
     expect(db.select().from(projects).all()).toHaveLength(2);
     expect(db.select().from(projectMeta).get()?.status).toBe("active");
   });
 });
 
-describe("tags", () => {
-  it("removes a tag from the list once nobody uses it", () => {
-    addTag(db, [a, b], " php ");
-    removeTag(db, a, "php");
-    expect(db.select().from(tags).all()).toHaveLength(1);
-    removeTag(db, b, "php");
-    expect(db.select().from(tags).all()).toHaveLength(0);
-  });
-});
-
 describe("export and import", () => {
   function classify() {
-    const id = createCollection(db, "Perso")?.id ?? 0;
-    createCollection(db, "Vide");
-    setCollectionMembership(db, [a], id, true);
     setStatus(db, [a], "active");
     setFavorite(db, a, true);
     setNote(db, a, "note");
     addTag(db, [a], "php");
+    setAbandoned(db, [b], true);
   }
 
-  it("exports only what the user decided", () => {
+  const exportedA = { path: "/p/a", status: "active", favorite: true, note: "note", abandoned: false, tags: ["php"] };
+  const exportedB = { path: "/p/b", status: null, favorite: false, note: null, abandoned: true, tags: [] };
+
+  it("exports only what the user decided, including abandoned projects", () => {
+    db.insert(projects).values({ path: "/p/untouched", name: "untouched" }).run();
     classify();
-    expect(exportClassification(db)).toEqual({
-      version: 1,
-      collections: ["Perso", "Vide"],
-      projects: [
-        { path: "/p/a", status: "active", favorite: true, note: "note", collections: ["Perso"], tags: ["php"] },
-      ],
-    });
+    expect(exportClassification(db)).toEqual({ version: 2, projects: [exportedA, exportedB] });
   });
 
   it("restores everything into an empty database and reports unknown paths", () => {
@@ -121,44 +123,52 @@ describe("export and import", () => {
 
     const target = openDb(":memory:");
     target.insert(projects).values({ path: "/p/a", name: "a" }).run();
-    expect(importClassification(target, json)).toEqual({ imported: 1, unknownPaths: [] });
+    target.insert(projects).values({ path: "/p/b", name: "b" }).run();
+    expect(importClassification(target, json)).toEqual({ imported: 2, unknownPaths: [] });
     expect(exportClassification(target)).toEqual(JSON.parse(json));
 
-    const other = openDb(":memory:");
-    expect(importClassification(other, json)).toEqual({ imported: 0, unknownPaths: ["/p/a"] });
-    expect(other.select().from(collections).all()).toHaveLength(2);
+    expect(importClassification(openDb(":memory:"), json)).toEqual({
+      imported: 0,
+      unknownPaths: ["/p/a", "/p/b"],
+    });
+  });
+
+  it("converts an export made while collections existed", () => {
+    const old = {
+      version: 1,
+      collections: ["Abandonnés", "Perso"],
+      projects: [
+        { path: "/p/a", status: null, favorite: false, note: null, collections: ["Abandonnés", "Perso"], tags: ["php"] },
+      ],
+    };
+    expect(importClassification(db, JSON.stringify(old))).toEqual({ imported: 1, unknownPaths: [] });
+    expect(exportClassification(db).projects).toEqual([
+      { path: "/p/a", status: null, favorite: false, note: null, abandoned: true, tags: ["Perso", "php"] },
+    ]);
   });
 
   it("replaces listed projects and leaves the others alone", () => {
     classify();
-    setStatus(db, [b], "paused");
     const result = importClassification(
       db,
       JSON.stringify({
-        version: 1,
-        collections: [],
-        projects: [{ path: "/p/a", status: null, favorite: false, note: null, collections: ["Neuve"], tags: [] }],
+        version: 2,
+        projects: [{ path: "/p/a", status: null, favorite: false, note: null, abandoned: false, tags: ["neuf"] }],
       }),
     );
     expect(result).toEqual({ imported: 1, unknownPaths: [] });
-    const exported = exportClassification(db);
-    expect(exported.projects.find((p) => p.path === "/p/a")).toEqual({
-      path: "/p/a",
-      status: null,
-      favorite: false,
-      note: null,
-      collections: ["Neuve"],
-      tags: [],
-    });
-    expect(exported.projects.find((p) => p.path === "/p/b")?.status).toBe("paused");
+    const exported = exportClassification(db).projects;
+    expect(exported.find((p) => p.path === "/p/a")?.tags).toEqual(["neuf"]);
+    expect(exported.find((p) => p.path === "/p/b")?.abandoned).toBe(true);
   });
 
   it.each([
     ["pas du json", "n'est pas du JSON"],
     ["{}", "n'est pas un export"],
-    ['{"version":2,"collections":[],"projects":[]}', "n'est pas un export"],
-    ['{"version":1,"collections":[1],"projects":[]}', "n'est pas un export"],
-    ['{"version":1,"collections":[],"projects":[{"path":"/p/a","status":"x","favorite":false,"note":null,"collections":[],"tags":[]}]}', "n'est pas un export"],
+    ['{"version":3,"projects":[]}', "n'est pas un export"],
+    ['{"version":2,"projects":[{"path":"/p/a","status":"x","favorite":false,"note":null,"abandoned":false,"tags":[]}]}', "n'est pas un export"],
+    ['{"version":2,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "n'est pas un export"],
+    ['{"version":1,"projects":[{"path":"/p/a","status":null,"favorite":false,"note":null,"tags":[]}]}', "n'est pas un export"],
   ])("refuses %s without changing anything", (json, message) => {
     classify();
     const before = exportClassification(db);

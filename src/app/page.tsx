@@ -7,14 +7,13 @@ import { RegistryView } from "./registry-view";
 
 async function Registry() {
   await connection();
-  const { rows, lastScan, now, collections, knownTags } = getRegistry(getDb());
+  const { rows, lastScan, now, knownTags } = getRegistry(getDb());
   return (
     <RegistryView
       rows={rows}
       lastScan={lastScan}
       now={now}
       sizing={isSizing()}
-      collections={collections}
       knownTags={knownTags}
     />
   );

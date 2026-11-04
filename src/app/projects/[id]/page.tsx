@@ -72,8 +72,9 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const project = Number.isInteger(projectId) ? getProject(getDb(), projectId) : null;
   if (!project) notFound();
 
-  const { row, absolutePath, docs, envFiles, now, collections, knownTags } = project;
-  const commits = row.hasGit && !row.missing ? await readRecentCommits(absolutePath) : [];
+  const { row, absolutePath, docs, envFiles, now, knownTags } = project;
+  // An abandoned project is not read anymore, except for what is explicitly opened below.
+  const commits = row.hasGit && !row.missing && !row.abandoned ? await readRecentCommits(absolutePath) : [];
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
   // Only a path found by the scan can be opened: `doc` comes from the URL.
   const selectedDoc = typeof doc === "string" && docs.includes(doc) ? doc : defaultDoc;
@@ -96,10 +97,15 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <ProjectButtons row={row} />
-          <RefreshButton projectId={row.id} sizing={isSizing()} />
+          {row.abandoned ? null : <RefreshButton projectId={row.id} sizing={isSizing()} />}
         </div>
       </div>
 
+      {row.abandoned ? (
+        <p role="status" className={`${DATA} border-b border-rule px-5 py-2 text-mut`}>
+          Projet abandonné : il n&apos;est plus scanné, ces informations datent de son dernier scan.
+        </p>
+      ) : null}
       {row.missing ? (
         <p role="alert" className={`${DATA} border-b border-alert px-5 py-2 text-alert`}>
           Ce dossier n&apos;existe plus sur le disque. Tes notes et ton classement sont conservés.
@@ -181,7 +187,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
         <aside className="min-w-0 flex-[1_1_400px] bg-panel">
           <section className={SECTION}>
             <h2 className={`${LABEL} mb-3.5`}>Organisation</h2>
-            <ClassificationEditor key={row.id} row={row} collections={collections} knownTags={knownTags} />
+            <ClassificationEditor key={row.id} row={row} knownTags={knownTags} />
           </section>
           <section className={SECTION}>
             <h2 className={`${LABEL} mb-3.5`}>

@@ -3,16 +3,14 @@
 import { revalidatePath } from "next/cache";
 import {
   addTag,
-  createCollection,
-  deleteCollection,
+  deleteTag,
   importClassification,
   type ImportResult,
   isStatus,
   removeTag,
-  renameCollection,
-  setCollectionMembership,
+  renameTag,
+  setAbandoned,
   setFavorite,
-  setHidden,
   setNote,
   setStatus,
 } from "@/server/classification";
@@ -73,24 +71,38 @@ export async function saveNote(projectId: number, note: string): Promise<void> {
   refreshAll();
 }
 
-export async function addCollection(name: string): Promise<void> {
-  createCollection(getDb(), name);
-  refreshAll();
-}
-
-export async function toggleCollection(projectIds: number[], collectionId: number, member: boolean): Promise<void> {
-  setCollectionMembership(getDb(), ids(projectIds), collectionId, member === true);
-  refreshAll();
-}
-
 export async function addTagTo(projectIds: number[], name: string): Promise<void> {
   addTag(getDb(), ids(projectIds), name);
   refreshAll();
 }
 
-export async function removeTagFrom(projectId: number, name: string): Promise<void> {
-  removeTag(getDb(), projectId, String(name));
+export async function removeTagFrom(projectIds: number[], name: string): Promise<void> {
+  removeTag(getDb(), ids(projectIds), String(name));
   refreshAll();
+}
+
+export async function renameTagByName(name: string, nextName: string): Promise<string | null> {
+  const error = renameTag(getDb(), String(name), nextName);
+  refreshAll();
+  return error;
+}
+
+export async function deleteTagByName(name: string): Promise<void> {
+  deleteTag(getDb(), String(name));
+  refreshAll();
+}
+
+/** Restoring picks the project back up, since its data stopped being updated. */
+export async function markAbandoned(projectIds: number[], abandoned: boolean): Promise<string | null> {
+  const db = getDb();
+  const projects = ids(projectIds);
+  setAbandoned(db, projects, abandoned === true);
+  if (abandoned !== true) {
+    for (const projectId of projects) await rescanProject(db, projectId);
+    startSizing(projects);
+  }
+  refreshAll();
+  return null;
 }
 
 export async function importBackup(json: string): Promise<ImportResult> {
@@ -122,34 +134,13 @@ export async function dockerAction(projectId: number, mode: "up" | "stop"): Prom
   const project = launchable(projectId);
   if (!project) return "Ce projet n'existe plus.";
   if (mode !== "up" && mode !== "stop") return "Action inconnue.";
+  if (project.row.abandoned) return "Ce projet est abandonné : restaure-le d'abord.";
   const { hasCompose, containers } = project.compose;
   const error = await runCompose(mode, composeDirectories(mode, project.absolutePath, hasCompose, containers));
   // Docker has no live view: without this, the button would show a stale state.
   await rescanProject(getDb(), projectId);
   refreshAll();
   return error;
-}
-
-export async function hideProject(projectId: number): Promise<string | null> {
-  setHidden(getDb(), projectId, true);
-  refreshAll();
-  return null;
-}
-
-export async function showProject(projectId: number): Promise<void> {
-  setHidden(getDb(), projectId, false);
-  refreshAll();
-}
-
-export async function renameCollectionById(id: number, name: string): Promise<string | null> {
-  const error = renameCollection(getDb(), id, name);
-  refreshAll();
-  return error;
-}
-
-export async function deleteCollectionById(id: number): Promise<void> {
-  deleteCollection(getDb(), id);
-  refreshAll();
 }
 
 export async function saveSettingsForm(form: Record<string, string>): Promise<string | null> {

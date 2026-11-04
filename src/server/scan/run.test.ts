@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "../db/client";
 import { projectFacts, projectMeta, projects, scans } from "../db/schema";
+import { setAbandoned } from "../classification";
 import { getSettings, saveSettings } from "../settings";
 import { rescanProject, runScan as realRunScan } from "./run";
 
@@ -120,7 +121,6 @@ describe("runScan", () => {
     await runScan(db, root);
     const { id } = row("app").project;
     db.insert(projectMeta).values({ projectId: id, note: "reprendre ici" }).run();
-    db.update(projects).set({ hidden: true }).where(eq(projects.id, id)).run();
 
     renameSync(join(root, "app"), join(root, "renamed"));
     await runScan(db, root);
@@ -132,7 +132,6 @@ describe("runScan", () => {
     await runScan(db, root);
     expect(row("app").project.id).toBe(id);
     expect(row("app").project.missingAt).toBeNull();
-    expect(row("app").project.hidden).toBe(true);
     expect(row("renamed").project.missingAt).not.toBeNull();
   });
 
@@ -188,14 +187,51 @@ describe("runScan", () => {
     expect(db.select().from(projectMeta).get()?.note).toBe("garder");
   });
 
-  it("uses the settings root by default and keeps a hidden project hidden", async () => {
+  it("never opens an abandoned project again, and keeps its data as it was", async () => {
     make("app/package.json");
+    make("group/child/package.json");
+    make("group/other/package.json");
     saveSettings(db, { root });
     await realRunScan(db, getSettings(db).root, { docker: noDocker });
-    const { id } = row("app").project;
-    db.update(projects).set({ hidden: true }).where(eq(projects.id, id)).run();
+    const app = row("app").project.id;
+    const child = row("child").project.id;
+    setAbandoned(db, [app, child], true);
+
+    make("app/composer.json");
+    make("group/child/composer.json");
+    make("other/package.json");
     await realRunScan(db, getSettings(db).root, { docker: noDocker });
-    expect(row("app").project.hidden).toBe(true);
+
+    expect(row("app").facts?.stacks).toEqual(["Node"]);
+    expect(row("child").facts?.stacks).toEqual(["Node"]);
+    expect(row("app").project.abandoned).toBe(true);
+    expect(row("other").project.kind).toBe("project");
+    expect(await rescanProject(db, app, { docker: noDocker })).toBe(false);
+    expect(row("app").facts?.stacks).toEqual(["Node"]);
+
+    rmSync(join(root, "app"), { recursive: true });
+    await realRunScan(db, getSettings(db).root, { docker: noDocker });
+    expect(row("app").project.missingAt).toBeNull();
+
+    setAbandoned(db, [child], false);
+    await realRunScan(db, getSettings(db).root, { docker: noDocker });
+    expect(row("child").facts?.stacks.sort()).toEqual(["Node", "PHP"]);
+  });
+
+  it("does not attach containers to an abandoned project", async () => {
+    make("app/docker-compose.yml", "");
+    await runScan(db, root);
+    setAbandoned(db, [row("app").project.id], true);
+    const container = {
+      name: "c",
+      service: "c",
+      state: "running",
+      status: "Up",
+      ports: "",
+      workingDir: join(root, "app"),
+    };
+    await realRunScan(db, root, { docker: async () => ({ containers: [container], error: null }) });
+    expect(row("app").facts?.containers).toEqual([]);
   });
 
   it("marks a project as missing when refreshing a deleted folder", async () => {

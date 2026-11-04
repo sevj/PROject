@@ -132,7 +132,11 @@ function emptyFolder(path: string, name: string, kind: DetectedKind, error: stri
   };
 }
 
-export async function detectFolder(path: string, name: string): Promise<DetectedFolder[]> {
+export async function detectFolder(
+  path: string,
+  name: string,
+  skipped: ReadonlySet<string> = new Set(),
+): Promise<DetectedFolder[]> {
   let listing: Listing;
   try {
     listing = await list(path);
@@ -147,6 +151,7 @@ export async function detectFolder(path: string, name: string): Promise<Detected
   const children = await Promise.all(
     listing.dirs.filter(isVisitable).map(async (dir) => {
       const childPath = join(path, dir);
+      if (skipped.has(childPath)) return null;
       try {
         const childListing = await list(childPath);
         return hasMarkers(childListing) ? describeProject(childPath, dir, path, childListing) : null;
@@ -162,13 +167,18 @@ export async function detectFolder(path: string, name: string): Promise<Detected
   return [emptyFolder(path, name, "folder", null)];
 }
 
-/** Lists what lives under `root`. Writes nothing and never opens a `.env` file. */
-export async function detectFolders(root: string): Promise<DetectedFolder[]> {
+/**
+ * Lists what lives under `root`. Writes nothing and never opens a `.env` file.
+ * `skipped` folders are not even opened, which is what makes a project abandoned.
+ */
+export async function detectFolders(root: string, skipped: ReadonlySet<string> = new Set()): Promise<DetectedFolder[]> {
   if (!existsSync(root)) {
     throw new Error(`Le dossier racine n'existe pas : ${root}`);
   }
   const { dirs } = await list(root);
-  const visitable = dirs.filter(isVisitable).sort((a, b) => a.localeCompare(b));
-  const detected = await Promise.all(visitable.map((dir) => detectFolder(join(root, dir), dir)));
+  const visitable = dirs
+    .filter((dir) => isVisitable(dir) && !skipped.has(join(root, dir)))
+    .sort((a, b) => a.localeCompare(b));
+  const detected = await Promise.all(visitable.map((dir) => detectFolder(join(root, dir), dir, skipped)));
   return detected.flat();
 }

@@ -5,40 +5,34 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   computeStats,
+  countTags,
   countView,
   formatAge,
   formatSize,
-  isOldestFirst,
   type RegistryRow,
   type RegistrySort,
   type RegistryView as View,
   runningCount,
   selectRows,
   STATUS_LABELS,
-  todoReasons,
 } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
-import { addCollection, addTagTo, scanNow, toggleCollection, updateStatus } from "./actions";
-import { ClassificationEditor, type CollectionOption } from "./classification-editor";
+import { addTagTo, markAbandoned, removeTagFrom, scanNow, updateStatus } from "./actions";
+import { ClassificationEditor } from "./classification-editor";
 import { ProjectButtons } from "./project-buttons";
-import { BUTTON, CHECKBOX, DATA, FIELD, LABEL } from "./ui";
+import { BUTTON, CHECKBOX, DATA, LABEL } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
 const COLUMNS =
   "grid min-w-[798px] flex-1 grid-cols-[minmax(150px,1.4fr)_104px_100px_56px_68px_134px_56px_64px] items-center gap-x-2.5 pr-4";
 
-const VIEWS: { id: View; label: string; alwaysShown: boolean }[] = [
-  { id: "all", label: "Tous", alwaysShown: true },
-  { id: "todo", label: "À traiter", alwaysShown: true },
-  { id: "favorites", label: "Favoris", alwaysShown: true },
-  { id: "unclassified", label: "Non classés", alwaysShown: true },
-  { id: "dirty", label: "Modifiés", alwaysShown: true },
-  { id: "docker", label: "Docker lancé", alwaysShown: true },
-  { id: "nogit", label: "Sans git", alwaysShown: true },
-  { id: "folders", label: "Autres dossiers", alwaysShown: true },
-  { id: "errors", label: "Erreurs de scan", alwaysShown: false },
-  { id: "missing", label: "Disparus", alwaysShown: false },
+const VIEWS: { id: View; label: string }[] = [
+  { id: "all", label: "Tous" },
+  { id: "abandoned", label: "Abandonnés" },
 ];
+
+const PICK =
+  "group flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 px-4 text-left hover:bg-sel aria-pressed:bg-ink aria-pressed:text-bg aria-pressed:hover:bg-ink";
 
 function cellColor(commits: number): string {
   if (commits === 0) return "var(--r0)";
@@ -69,14 +63,12 @@ function SortButton({
   sort,
   onSort,
   right,
-  ascending,
   children,
 }: {
   id: RegistrySort;
   sort: RegistrySort;
   onSort: (sort: RegistrySort) => void;
   right?: boolean;
-  ascending?: boolean;
   children: string;
 }) {
   const active = id === sort;
@@ -88,7 +80,7 @@ function SortButton({
       className={`${LABEL} h-9 cursor-pointer hover:text-ink ${right ? "text-right" : "text-left"} ${active ? "text-ink" : ""}`}
     >
       {children}
-      {active ? (ascending ? " ↑" : " ↓") : ""}
+      {active ? " ↓" : ""}
     </button>
   );
 }
@@ -110,11 +102,13 @@ function dockerLabel(row: RegistryRow): string {
 
 function BulkBar({
   selected,
-  collections,
+  view,
+  knownTags,
   onClear,
 }: {
   selected: number[];
-  collections: CollectionOption[];
+  view: View;
+  knownTags: string[];
   onClear: () => void;
 }) {
   const [pending, start] = useTransition();
@@ -123,6 +117,45 @@ function BulkBar({
       <span className="font-semibold">
         {selected.length} sélectionné{selected.length > 1 ? "s" : ""}
       </span>
+      <form
+        action={(data) => {
+          const name = String(data.get("tag") ?? "");
+          start(() => addTagTo(selected, name));
+        }}
+      >
+        <label>
+          <span className="sr-only">Ajouter un tag à la sélection</span>
+          <input
+            name="tag"
+            list="bulk-known-tags"
+            placeholder="Ajouter un tag, puis Entrée"
+            maxLength={80}
+            className={`${BULK_FIELD} w-56 placeholder:text-mut`}
+          />
+        </label>
+        <datalist id="bulk-known-tags">
+          {knownTags.map((tag) => (
+            <option key={tag} value={tag} />
+          ))}
+        </datalist>
+      </form>
+      <select
+        aria-label="Retirer un tag de la sélection"
+        disabled={pending || knownTags.length === 0}
+        value=""
+        onChange={(event) => {
+          const { value } = event.target;
+          if (value) start(() => removeTagFrom(selected, value));
+        }}
+        className={BULK_FIELD}
+      >
+        <option value="">Retirer un tag…</option>
+        {knownTags.map((tag) => (
+          <option key={tag} value={tag}>
+            {tag}
+          </option>
+        ))}
+      </select>
       <select
         aria-label="Changer le statut"
         disabled={pending}
@@ -142,51 +175,19 @@ function BulkBar({
           </option>
         ))}
       </select>
-      <select
-        aria-label="Ajouter à une collection"
-        disabled={pending || collections.length === 0}
-        value=""
-        onChange={(event) => {
-          const id = Number(event.target.value);
-          if (id) start(() => toggleCollection(selected, id, true));
-        }}
-        className={BULK_FIELD}
+      <button
+        type="button"
+        disabled={pending}
+        className={BUTTON}
+        onClick={() =>
+          start(async () => {
+            await markAbandoned(selected, view !== "abandoned");
+            onClear();
+          })
+        }
       >
-        <option value="">Ajouter à…</option>
-        {collections.map(({ id, name }) => (
-          <option key={id} value={id}>
-            {name}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="Retirer d'une collection"
-        disabled={pending || collections.length === 0}
-        value=""
-        onChange={(event) => {
-          const id = Number(event.target.value);
-          if (id) start(() => toggleCollection(selected, id, false));
-        }}
-        className={BULK_FIELD}
-      >
-        <option value="">Retirer de…</option>
-        {collections.map(({ id, name }) => (
-          <option key={id} value={id}>
-            {name}
-          </option>
-        ))}
-      </select>
-      <form
-        action={(data) => {
-          const name = String(data.get("tag") ?? "");
-          start(() => addTagTo(selected, name));
-        }}
-      >
-        <label>
-          <span className="sr-only">Ajouter un tag à la sélection</span>
-          <input name="tag" placeholder="Ajouter un tag" maxLength={80} className={`${BULK_FIELD} w-44 placeholder:text-mut`} />
-        </label>
-      </form>
+        {view === "abandoned" ? "Restaurer" : "Abandonner"}
+      </button>
       <button type="button" onClick={onClear} className={BUTTON}>
         Désélectionner
       </button>
@@ -194,17 +195,7 @@ function BulkBar({
   );
 }
 
-function Inspector({
-  row,
-  now,
-  collections,
-  knownTags,
-}: {
-  row: RegistryRow;
-  now: number;
-  collections: CollectionOption[];
-  knownTags: string[];
-}) {
+function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; knownTags: string[] }) {
   const ahead = row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : "pas de suivi distant";
   return (
     <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_340px] bg-panel px-5 pt-5 pb-6">
@@ -212,7 +203,7 @@ function Inspector({
       <h1 className="mt-1 mb-4 text-[32px] leading-[1.05] font-bold tracking-tight break-words">{row.name}</h1>
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
       <div className="mb-5">
-        <ProjectButtons key={row.id} row={row} canHide />
+        <ProjectButtons key={row.id} row={row} />
       </div>
       {row.hasGit ? (
         <>
@@ -239,7 +230,7 @@ function Inspector({
         <Fact label="Taille hors dépendances" value={formatSize(row.sizeBytes)} />
       </dl>
       <div className="mt-5">
-        <ClassificationEditor key={row.id} row={row} collections={collections} knownTags={knownTags} />
+        <ClassificationEditor key={row.id} row={row} knownTags={knownTags} />
       </div>
       <Link href={`/projects/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-medium underline">
         Ouvrir la fiche complète
@@ -253,11 +244,9 @@ export function RegistryView({
   lastScan,
   now,
   sizing,
-  collections,
   knownTags,
 }: {
   rows: RegistryRow[];
-  collections: CollectionOption[];
   knownTags: string[];
   lastScan: { status: string; at: number; error: string | null; warning: string | null } | null;
   now: number;
@@ -265,9 +254,9 @@ export function RegistryView({
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>("all");
-  const [collectionId, setCollectionId] = useState<number | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [untagged, setUntagged] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
-  const [, startCollection] = useTransition();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<RegistrySort>("commit");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -295,9 +284,27 @@ export function RegistryView({
 
   const stats = useMemo(() => computeStats(rows, now), [rows, now]);
   const visible = useMemo(
-    () => selectRows(rows, { view, query, sort, collectionId }),
-    [rows, view, query, sort, collectionId],
+    () => selectRows(rows, { view, query, sort, tags: selectedTags, untagged }),
+    [rows, view, query, sort, selectedTags, untagged],
   );
+  const tagCounts = useMemo(() => countTags(rows, view), [rows, view]);
+  // A tag removed from its last project must not keep filtering the list on its own.
+  const activeTags = selectedTags.filter((tag) => knownTags.includes(tag));
+  if (activeTags.length !== selectedTags.length) setSelectedTags(activeTags);
+
+  const switchView = (next: View) => {
+    setView(next);
+    setSelectedTags([]);
+    setUntagged(false);
+    // A selection left in the other view would be acted on without being visible.
+    setChecked(new Set());
+  };
+  const toggleTag = (tag: string) => {
+    setUntagged(false);
+    setSelectedTags((current) =>
+      current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag],
+    );
+  };
   const allChecked = visible.length > 0 && visible.every((row) => checked.has(row.id));
   const toggleChecked = (id: number, value: boolean) => {
     setChecked((current) => {
@@ -376,7 +383,7 @@ export function RegistryView({
       ) : null}
 
       {checked.size > 0 ? (
-        <BulkBar selected={[...checked]} collections={collections} onClear={() => setChecked(new Set())} />
+        <BulkBar selected={[...checked]} view={view} knownTags={knownTags} onClear={() => setChecked(new Set())} />
       ) : null}
 
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] border-b border-ink">
@@ -392,57 +399,37 @@ export function RegistryView({
 
       <div className="flex flex-wrap items-stretch">
         <aside className="max-w-full flex-[1_1_208px] border-r border-rule py-3.5">
-          <div className={`${LABEL} px-4 pb-2`}>Vues</div>
-          {VIEWS.filter(({ id, alwaysShown }) => alwaysShown || countView(rows, id) > 0).map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={view === id && collectionId === null}
-              onClick={() => {
-                setView(id);
-                setCollectionId(null);
-              }}
-              className="group flex min-h-10 w-full cursor-pointer items-center justify-between px-4 text-left hover:bg-sel aria-pressed:bg-ink aria-pressed:text-bg aria-pressed:hover:bg-ink"
-            >
+          {VIEWS.map(({ id, label }) => (
+            <button key={id} type="button" aria-pressed={view === id} onClick={() => switchView(id)} className={PICK}>
               <span>{label}</span>
               <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{countView(rows, id)}</span>
             </button>
           ))}
-          <div className={`${LABEL} px-4 pt-5 pb-2`}>Collections</div>
-          {collections.map(({ id, name }) => (
+          <div className={`${LABEL} px-4 pt-5 pb-2`}>Tags</div>
+          <button
+            type="button"
+            aria-pressed={untagged}
+            onClick={() => {
+              setSelectedTags([]);
+              setUntagged((current) => !current);
+            }}
+            className={PICK}
+          >
+            <span>Sans tag</span>
+            <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.untagged}</span>
+          </button>
+          {knownTags.map((tag) => (
             <button
-              key={id}
+              key={tag}
               type="button"
-              aria-pressed={collectionId === id}
-              onClick={() => {
-                setCollectionId(id);
-                setView("all");
-              }}
-              className="group flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 px-4 text-left hover:bg-sel aria-pressed:bg-ink aria-pressed:text-bg aria-pressed:hover:bg-ink"
+              aria-pressed={selectedTags.includes(tag)}
+              onClick={() => toggleTag(tag)}
+              className={PICK}
             >
-              <span className="truncate">{name}</span>
-              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>
-                {rows.filter((row) => !row.missing && row.collectionIds.includes(id)).length}
-              </span>
+              <span className="truncate">{tag}</span>
+              <span className={`${DATA} text-mut group-aria-pressed:text-bg`}>{tagCounts.counts.get(tag) ?? 0}</span>
             </button>
           ))}
-          <form
-            className="px-4 pt-2"
-            action={(data) => {
-              const name = String(data.get("collection") ?? "");
-              startCollection(() => addCollection(name));
-            }}
-          >
-            <label>
-              <span className="sr-only">Nouvelle collection</span>
-              <input
-                name="collection"
-                placeholder="Nouvelle collection"
-                maxLength={80}
-                className={`${FIELD} placeholder:text-mut`}
-              />
-            </label>
-          </form>
         </aside>
 
         <div className="min-w-0 flex-[999_1_620px] border-r border-rule">
@@ -459,16 +446,10 @@ export function RegistryView({
               </label>
               <div className={COLUMNS}>
               <SortButton id="name" sort={sort} onSort={setSort}>Projet</SortButton>
-              {view === "todo" ? (
-                <span className={`${LABEL} col-span-2`}>À faire</span>
-              ) : (
-                <>
-                  <span className={LABEL}>Stack</span>
-                  <span className={LABEL}>Branche</span>
-                </>
-              )}
+              <span className={LABEL}>Stack</span>
+              <span className={LABEL}>Branche</span>
               <SortButton id="dirty" sort={sort} onSort={setSort} right>Modifs</SortButton>
-              <SortButton id="commit" sort={sort} onSort={setSort} ascending={isOldestFirst(view, sort)}>Commit</SortButton>
+              <SortButton id="commit" sort={sort} onSort={setSort}>Commit</SortButton>
               <span className={LABEL}>26 semaines</span>
               <span className={LABEL}>Docker</span>
               <SortButton id="size" sort={sort} onSort={setSort} right>Taille</SortButton>
@@ -499,18 +480,10 @@ export function RegistryView({
                   {row.parentName ? <span className="font-normal text-mut">{row.parentName} / </span> : null}
                   {row.name}
                 </span>
-                {view === "todo" ? (
-                  <span className={`${DATA} col-span-2 truncate`} title={todoReasons(row).join(" · ")}>
-                    {todoReasons(row).join(" · ")}
-                  </span>
-                ) : (
-                  <>
-                    <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
-                    <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
-                      {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
-                    </span>
-                  </>
-                )}
+                <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
+                <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
+                  {row.hasGit ? (row.branch ?? "détachée") : "sans git"}
+                </span>
                 <span
                   className={`${DATA} text-right ${(row.dirtyCount ?? 0) > 0 ? "font-medium text-alert" : "text-mut"}`}
                 >
@@ -526,7 +499,11 @@ export function RegistryView({
           </div>
           {visible.length === 0 ? (
             <p className="px-4 py-8 text-mut">
-              {scanning ? "Premier scan en cours…" : "Aucun projet ne correspond à ce filtre."}
+              {scanning
+                ? "Premier scan en cours…"
+                : view === "abandoned" && countView(rows, "abandoned") === 0
+                  ? "Aucun projet abandonné."
+                  : "Aucun projet ne correspond à ce filtre."}
             </p>
           ) : null}
           <div className={`${DATA} flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 text-mut`}>
@@ -548,7 +525,7 @@ export function RegistryView({
           </div>
         </div>
 
-        {selected ? <Inspector row={selected} now={now} collections={collections} knownTags={knownTags} /> : null}
+        {selected ? <Inspector row={selected} now={now} knownTags={knownTags} /> : null}
       </div>
     </main>
   );

@@ -27,7 +27,7 @@ function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | 
     .values({ path: folder.path, name: folder.name, kind: folder.kind, parentId, lastSeenAt: now })
     .onConflictDoUpdate({
       target: projects.path,
-      // `hidden` belongs to the user and stays untouched.
+      // `abandoned` belongs to the user and stays untouched.
       set: { name: folder.name, kind: folder.kind, parentId, lastSeenAt: now, missingAt: null },
     })
     .returning({ id: projects.id })
@@ -60,14 +60,14 @@ function saveFolder(db: Db, { folder, git, error }: Scanned, parentId: number | 
   return id;
 }
 
-/** Refreshes one project. False when its folder no longer exists. */
+/** Refreshes one project. False when its folder is gone, or when it is abandoned. */
 export async function rescanProject(
   db: Db,
   projectId: number,
   { docker = readDocker }: { docker?: () => Promise<DockerState> } = {},
 ): Promise<boolean> {
   const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
-  if (!project) return false;
+  if (!project || project.abandoned) return false;
   const now = new Date();
 
   if (!existsSync(project.path)) {
@@ -83,7 +83,7 @@ export async function rescanProject(
   const known = db
     .select({ path: projects.path })
     .from(projects)
-    .where(eq(projects.kind, "project"))
+    .where(and(eq(projects.kind, "project"), eq(projects.abandoned, false)))
     .all()
     .map(({ path }) => path);
 
@@ -112,8 +112,16 @@ export async function runScan(
   const { id: scanId } = db.insert(scans).values({ startedAt: now }).returning().get();
 
   try {
+    const abandoned = new Set(
+      db
+        .select({ path: projects.path })
+        .from(projects)
+        .where(eq(projects.abandoned, true))
+        .all()
+        .map(({ path }) => path),
+    );
     const [scanned, dockerState] = await Promise.all([
-      detectFolders(root).then((folders) => mapLimit(folders, GIT_CONCURRENCY, scanFolder)),
+      detectFolders(root, abandoned).then((folders) => mapLimit(folders, GIT_CONCURRENCY, scanFolder)),
       docker(),
     ]);
 
@@ -146,6 +154,8 @@ export async function runScan(
         .where(
           and(
             isNull(projects.missingAt),
+            // Not looking at a folder says nothing about whether it still exists.
+            eq(projects.abandoned, false),
             or(eq(projects.path, root), like(projects.path, `${root}/%`)),
             seen.length > 0 ? notInArray(projects.id, seen) : undefined,
           ),
