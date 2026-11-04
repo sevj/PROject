@@ -65,6 +65,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     note: null,
     abandoned: false,
     tags: [],
+    dependencies: null,
     ...patch,
   };
 }

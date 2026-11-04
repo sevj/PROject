@@ -56,6 +56,16 @@ export type RegistryRow = {
   note: string | null;
   abandoned: boolean;
   tags: string[];
+  /** The last dependency analysis, if one was made. */
+  dependencies: DependencyAlerts | null;
+};
+
+export type DependencyAlerts = {
+  vulnerabilities: number;
+  worst: "critical" | "high" | "moderate" | "low" | "info" | null;
+  outdated: number;
+  major: number;
+  analyzedAt: number;
 };
 
 export type RegistryView = "all" | "abandoned";

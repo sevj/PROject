@@ -33,9 +33,11 @@ import { DockerTab } from "./docker-tab";
 import { EnvTab } from "./env-tab";
 import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
+import { readDependencies } from "@/server/dependencies";
 import { ProjectTree } from "./project-tree";
+import { SecurityTab } from "./security-tab";
 
-const TABS = ["general", "docker", "git", "env", "claude", "structure", "documentation"] as const;
+const TABS = ["general", "docker", "git", "env", "claude", "security", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 const TAB =
   "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";
@@ -104,6 +106,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const dockerStack = readsDocker ? await readDockerStack(absolutePath) : null;
   const dockerLive = tab === "docker" && !row.missing && !row.abandoned ? await listProjectContainers(getDb(), projectId) : null;
   const envView = tab === "env" && !row.missing ? await readEnvView(getDb(), projectId, absolutePath, row.hasGit) : null;
+  const dependencies = tab === "security" ? readDependencies(getDb(), projectId) : null;
   const tree = tab === "structure" && !row.missing ? await listProjectFolder(absolutePath, ".") : null;
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
   // Only a path found on disk beforehand can be opened: `doc` comes from the URL.
@@ -261,6 +264,10 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                 <p className="text-mut">{m.unreadableFolder}</p>
               </section>
             )
+          ) : null}
+
+          {tab === "security" ? (
+            <SecurityTab projectId={row.id} stored={dependencies} now={now} readOnly={row.missing || row.abandoned} />
           ) : null}
 
           {tab === "structure" ? (

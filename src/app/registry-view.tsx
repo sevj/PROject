@@ -23,6 +23,7 @@ import type { ProjectStatus } from "@/server/db/schema";
 import { markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
 import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ClassificationEditor } from "./classification-editor";
+import { DependencyMark } from "./dependency-mark";
 import { useStoredSort } from "./use-stored-sort";
 import { ClaudeConsoleButton } from "./claude-console-button";
 import { ProjectDescription } from "./project-description";
@@ -588,6 +589,7 @@ export function RegistryView({
           <span className="block truncate font-semibold">
             {row.favorite ? <span aria-label={m.favorite} className="text-accent">★ </span> : null}
             {row.name}
+            <DependencyMark alerts={row.dependencies} />
           </span>
           <TagList tags={row.tags} />
         </span>

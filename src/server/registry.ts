@@ -4,6 +4,7 @@ import { ideCommandFor, ideLabel } from "@/lib/commands";
 import type { RegistryRow } from "@/lib/registry";
 import type { Db } from "./db/client";
 import { projectFacts, projectMeta, projects, projectTags, scans, tags } from "./db/schema";
+import { readDependencyCounters } from "./dependencies";
 import { serverMessages } from "./i18n";
 import { REFRESH_INTERRUPTED } from "./scan/run";
 import { getSettings } from "./settings";
@@ -66,6 +67,7 @@ function toRow(
   parent: ReturnType<typeof toParent> | null,
   { meta, tags: rowTags }: Classification,
   ideCommands: Record<string, string>,
+  dependencies: RegistryRow["dependencies"],
 ): RegistryRow {
   return {
     id: project.id,
@@ -117,6 +119,7 @@ function toRow(
     note: meta?.note ?? null,
     abandoned: project.abandoned,
     tags: rowTags,
+    dependencies,
   };
 }
 
@@ -139,7 +142,7 @@ export function getProject(db: Db, id: number) {
     : undefined;
   const parent = parentRow && parentId ? toParent(parentRow, loadClassification(db, parentId)(parentId)) : null;
   return {
-    row: toRow(joined, parent, loadClassification(db, id)(id), getSettings(db).ideCommands),
+    row: toRow(joined, parent, loadClassification(db, id)(id), getSettings(db).ideCommands, readDependencyCounters(db).get(id) ?? null),
     compose: { hasCompose: joined.facts.hasCompose, containers: joined.facts.containers },
     knownTags: loadKnownTags(db),
     absolutePath: joined.project.path,
@@ -158,6 +161,7 @@ export function getRegistry(db: Db) {
 
   const classificationOf = loadClassification(db);
   const { ideCommands } = getSettings(db);
+  const counters = readDependencyCounters(db);
   const parents = new Map(all.map((joined) => [joined.project.id, toParent(joined, classificationOf(joined.project.id))]));
 
   const rows: RegistryRow[] = [];
@@ -166,7 +170,7 @@ export function getRegistry(db: Db) {
     // A group is only a heading for its children.
     if (project.kind === "group") continue;
     const parent = project.parentId ? (parents.get(project.parentId) ?? null) : null;
-    rows.push(toRow(joined, parent, classificationOf(project.id), ideCommands));
+    rows.push(toRow(joined, parent, classificationOf(project.id), ideCommands, counters.get(project.id) ?? null));
   }
 
   const m = serverMessages(db).registry;

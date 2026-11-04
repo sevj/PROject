@@ -7,6 +7,7 @@ import {
   primaryKey,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 const now = sql`(unixepoch())`;
@@ -223,3 +224,19 @@ export const settings = sqliteTable("settings", {
     .$type<{ locale?: string; ideCommands: Record<string, string>; terminalCommand: string }>()
     .notNull(),
 });
+
+/** The last result of an analysis a project can be put through, dated: read when asked, shown until the next one. */
+export const analyses = sqliteTable(
+  "analyses",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** What was analyzed, such as "dependencies". */
+    kind: text("kind").notNull(),
+    result: text("result", { mode: "json" }).notNull(),
+    analyzedAt: integer("analyzed_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [uniqueIndex("analyses_project_kind").on(table.projectId, table.kind)],
+);
