@@ -231,7 +231,7 @@ function BulkBar({
 
 function Inspector({ row, now, knownTags }: { row: RegistryRow; now: number; knownTags: string[] }) {
   return (
-    <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6">
+    <section aria-label="Projet sélectionné" className="min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto">
       <div className={`${DATA} break-all text-mut`}>{row.path}</div>
       <div className="mt-1 mb-4">
         <ProjectName
