@@ -45,6 +45,19 @@ const KIND_COLOR: Record<Kind, string> = {
   page: "var(--kind-page)",
 };
 
+function KindBadge({ kind, label }: { kind: Kind; label: string }) {
+  // Pages are where one goes, not what one acts on: an outline is enough for them.
+  const style =
+    kind === "page"
+      ? { color: KIND_COLOR.page, boxShadow: `inset 0 0 0 1px ${KIND_COLOR.page}` }
+      : { background: KIND_COLOR[kind], color: kind === "action" ? "var(--bg)" : "var(--kind-text)" };
+  return (
+    <span className="inline-flex w-[84px] shrink-0 justify-center px-1.5 font-mono text-[11px] leading-[20px] font-medium tracking-[.04em] uppercase" style={style}>
+      {label}
+    </span>
+  );
+}
+
 const PROJECT_TABS = ["docker", "git", "env", "environments", "claude", "security", "structure", "documentation"] as const;
 
 function readRecent(): string[] {
@@ -322,9 +335,9 @@ export function CommandPalette() {
           onClick={(event) => {
             if (event.target === dialog.current) close();
           }}
-          className="mx-auto mt-[12vh] w-[min(640px,calc(100vw-32px))] border border-rule-strong bg-panel font-sans text-[14px] text-ink shadow-2xl backdrop:bg-black/50"
+          className="mx-auto mt-[12vh] w-[min(640px,calc(100vw-32px))] border border-rule-strong bg-panel font-sans text-[14px] text-ink shadow-2xl outline-none backdrop:bg-black/50"
         >
-          <div className="flex items-center gap-2 border-b border-rule-strong px-3">
+          <div className="flex items-center gap-2 border-b-2 border-rule-strong px-3 focus-within:border-accent">
             {focus ? <span className={`${BADGE} shrink-0`}>{m.actionsOf(focus.title)}</span> : null}
             <input
               ref={input}
@@ -343,7 +356,9 @@ export function CommandPalette() {
               aria-expanded
               spellCheck={false}
               autoComplete="off"
-              className="min-h-12 w-full bg-transparent text-[16px] placeholder:text-mut focus:outline-none"
+              // The field is the whole band: the line under it shows the focus, not a ring around it.
+              style={{ outline: "none" }}
+              className="min-h-12 w-full bg-transparent text-[16px] placeholder:text-mut"
             />
           </div>
           <ul ref={list} id="palette-list" role="listbox" aria-label={m.label} className="max-h-[50vh] overflow-y-auto py-1">
@@ -357,19 +372,14 @@ export function CommandPalette() {
                 aria-selected={index === selected}
                 onMouseMove={() => setSelected(index)}
                 onClick={() => choose(index)}
-                className={`flex cursor-pointer items-center gap-3 border-l-[3px] px-3 py-1.5 ${index === selected ? "bg-accent-soft" : ""}`}
-                style={{ borderLeftColor: KIND_COLOR[entry.kind] }}
+                className={`flex cursor-pointer items-center gap-3 px-3 py-1.5 ${index === selected ? "bg-accent-soft" : ""}`}
               >
+                {focus ? null : <KindBadge kind={entry.kind} label={m.kinds[entry.kind]} />}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{entry.title}</span>
                   {entry.subtitle ? <span className={`${DATA} block truncate text-mut`}>{entry.subtitle}</span> : null}
                 </span>
                 {!focus && entry.actions.length > 1 && index === selected ? <span className={`${DATA} text-mut`}>Tab →</span> : null}
-                {focus ? null : (
-                  <span className={`${DATA} shrink-0`} style={{ color: KIND_COLOR[entry.kind] }}>
-                    {m.kinds[entry.kind]}
-                  </span>
-                )}
               </li>
             ))}
           </ul>
