@@ -45,7 +45,8 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [x] EXPLAIN visuel (PostgreSQL, MySQL, MariaDB ; SQLite avec son explorateur) : plan d'exécution en arbre avec coût, lignes estimées/réelles et nœuds lents mis en évidence (PostgreSQL `EXPLAIN (FORMAT JSON)`, MySQL/MariaDB `EXPLAIN FORMAT=JSON`, SQLite `EXPLAIN QUERY PLAN`). Lecture seule : pas d'`ANALYZE` sur une requête qui écrit.
 - [x] SQLite : fichiers `.db`/`.sqlite` détectés dans le projet, ouverts en lecture seule.
 - [x] Redis : clés paginées (`SCAN`), type et TTL, valeur affichée selon le type, commandes de lecture uniquement. (aucun champ de commande libre ; scripts de lecture fixes, non essayés sur un vrai Redis)
-- [ ] À voir ensuite : schéma et relations entre tables (clés étrangères), comparaison de deux dumps.
+- [ ] Schéma et relations entre tables : clés étrangères (PostgreSQL, MySQL/MariaDB, SQLite), diagramme des tables liées, navigation d'une clé étrangère vers la ligne qu'elle désigne.
+- Écarté : comparaison de deux dumps.
 
 ## Idées Git (à documenter, pas décidé de les faire)
 Les actions Git restent volontairement limitées (voir README). À rediscuter avant tout développement :
