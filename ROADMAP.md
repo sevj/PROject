@@ -70,7 +70,7 @@ Dans l'ordre. Rien n'écrit dans un projet sans bouton explicite.
 - [x] Config Claude par projet : consignes lues et état (`CLAUDE.md`, `AGENTS.md`), boutons pour les faire générer ou relire par Claude, noms des hooks, skills et serveurs MCP.
 - [x] MCP de l'app en lecture seule pour ses consoles Claude : projets, conteneurs, ports, analyses, structure des bases. (ni valeurs `.env`, ni lignes de base)
 - [x] Serveurs distants : catalogue partagé (SSH, Kubernetes), environnements par projet avec adresses et accès, test de connexion sur demande. (mots de passe demandés, ou chiffrés si tu choisis de les mémoriser)
-- [ ] Serveurs distants : ouvrir une console SSH ou kubectl dans l'app, avec confirmation sur un environnement protégé.
+- [x] Serveurs distants : ouvrir une console SSH ou kubectl dans l'app, avec confirmation sur un environnement protégé. (se ferme avec la page, comme une console Docker ; un Deployment n'ouvre que sur un pod qui lui appartient)
 - [ ] Serveurs distants : logs, état des pods, version déployée.
 
 ## Écarté (review du 2026-11-05)

@@ -9,16 +9,23 @@ import {
   isRemotePath,
   isUsername,
   isWebUrl,
+  choosePod,
+  isPodName,
   kubeClusterArguments,
-  kubeTargetArguments,
+  kubeExecArguments,
+  kubePodsArguments,
+  kubeWorkloadArguments,
   looksLikeProduction,
+  parsePods,
   parseSshAliases,
   readKubeExit,
   privateKeysAmong,
   readSshExit,
   sshArguments,
+  sshConsoleArguments,
   sshProbe,
   type SshTarget,
+  workloadSelector,
 } from "./remote-servers";
 
 const target: SshTarget = { host: "srv1", port: 2222, username: "deploy", auth: "agent", keyPath: null, jumpHost: null };
@@ -97,6 +104,25 @@ describe("sshArguments", () => {
   });
 });
 
+describe("sshConsoleArguments", () => {
+  it("opens a terminal that can ask its questions", () => {
+    const args = sshConsoleArguments(target, null, false, "/home/me");
+    expect(args[0]).toBe("-tt");
+    expect(args).not.toContain("BatchMode=yes");
+    expect(args).not.toContain("NumberOfPasswordPrompts=1");
+    expect(args.join(" ")).not.toContain("StrictHostKeyChecking");
+    expect(args.slice(-2)).toEqual(["--", "srv1"]);
+  });
+
+  it("goes to the folder, quoted, and keeps the session if it is gone", () => {
+    expect(sshConsoleArguments(target, "/var/it's", false, "/h").at(-1)).toBe(`cd '/var/it'\\''s'; exec "\${SHELL:-/bin/sh}" -l`);
+  });
+
+  it("gives a kept password one try", () => {
+    expect(sshConsoleArguments({ ...target, auth: "password" }, null, true, "/h")).toContain("NumberOfPasswordPrompts=1");
+  });
+});
+
 describe("sshProbe", () => {
   it("only looks, and quotes the folder", () => {
     expect(sshProbe(null)).toBe("true");
@@ -120,15 +146,93 @@ describe("readSshExit", () => {
 
 describe("kubectl", () => {
   it("always names its context and never changes the current one", () => {
-    const all = [...kubeClusterArguments("prod"), ...kubeTargetArguments("prod", "ns", "deployment/api")];
-    expect(all).toContain("--context=prod");
+    const all = [...kubeClusterArguments("prod"), ...kubeWorkloadArguments("prod", "ns", "deployment/api"), ...kubePodsArguments("prod", null, "app=api")];
+    expect(all.filter((arg) => arg === "--context=prod")).toHaveLength(3);
     expect(all).not.toContain("config");
     expect(all).not.toContain("use-context");
   });
+});
 
-  it("reads a workload or the first pod of a label", () => {
-    expect(kubeTargetArguments("c", "ns", "deployment/api").slice(3)).toEqual(["get", "deployment/api", "-o", "jsonpath={.spec.template.spec.containers[*].name}"]);
-    expect(kubeTargetArguments("c", null, "app=api").slice(2, 5)).toEqual(["get", "pods", "--selector=app=api"]);
+// As the cluster of connector-astee answers: the selector of the main workload also matches its database.
+const raw = (name: string, owner: { kind: string; name: string } | null, hash?: string, extra: object = {}, ready = true) => ({
+  metadata: { name, labels: hash ? { "pod-template-hash": hash } : {}, ownerReferences: owner ? [{ ...owner, controller: true }] : [], ...extra },
+  spec: { containers: [{ name: "php" }, { name: "nginx" }] },
+  status: { containerStatuses: [{ ready }] },
+});
+const main = raw("astee-685b-pmh65", { kind: "ReplicaSet", name: "astee-685b" }, "685b");
+const bdd = raw("astee-bdd-6798-dctsv", { kind: "ReplicaSet", name: "astee-bdd-6798" }, "6798");
+const rabbit = raw("astee-rabbitmq-5d88-jz75g", { kind: "ReplicaSet", name: "astee-rabbitmq-5d88" }, "5d88");
+const pods = (...items: object[]) => parsePods(JSON.stringify({ items }));
+
+describe("parsePods", () => {
+  it("finds the workload that owns a pod", () => {
+    const [a, b, c, d] = pods(main, raw("db-0", { kind: "StatefulSet", name: "db" }), raw("x", { kind: "ReplicaSet", name: "bare" }, "other"), raw("alone", null));
+    expect(a).toMatchObject({ name: "astee-685b-pmh65", owner: "deployment/astee", ready: true, terminating: false, containers: ["php", "nginx"] });
+    expect(b.owner).toBe("statefulset/db");
+    expect(c.owner).toBe("replicaset/bare");
+    expect(d.owner).toBeNull();
+  });
+
+  it("does not take a pod still starting for a ready one", () => {
+    expect(pods({ metadata: { name: "new" } })[0].ready).toBe(false);
+  });
+});
+
+describe("workloadSelector", () => {
+  it("reads the labels, and has nothing to say without any", () => {
+    expect(workloadSelector(JSON.stringify({ spec: { selector: { matchLabels: { app: "x", service: "y" } } } }))).toBe("app=x,service=y");
+    expect(workloadSelector(JSON.stringify({ spec: { selector: { matchExpressions: [] } } }))).toBeNull();
+  });
+});
+
+describe("choosePod", () => {
+  it("enters the pod the deployment owns, even when its selector matches others", () => {
+    for (const order of [[rabbit, bdd, main], [main, bdd, rabbit]]) {
+      expect(choosePod(pods(...order), "deployment/astee")).toMatchObject({ pod: { name: "astee-685b-pmh65" } });
+    }
+  });
+
+  it("does not mistake a neighbour whose name starts the same", () => {
+    expect(choosePod(pods(bdd, rabbit), "deployment/astee")).toEqual({ failure: "noRunningPod" });
+    expect(choosePod(pods(bdd), "deployment/astee-bdd")).toMatchObject({ pod: { name: "astee-bdd-6798-dctsv" } });
+  });
+
+  it("refuses labels that span several workloads, and names them", () => {
+    expect(choosePod(pods(main, bdd), "app=astee")).toEqual({ failure: "ambiguousTarget", detail: "deployment/astee, deployment/astee-bdd" });
+    expect(choosePod(pods(main), "app=astee,service=principal")).toMatchObject({ pod: { name: "astee-685b-pmh65" } });
+  });
+
+  it("takes two versions of one deployment for one workload, during a rollout", () => {
+    const next = raw("astee-99aa-new", { kind: "ReplicaSet", name: "astee-99aa" }, "99aa");
+    expect(choosePod(pods(main, next), "app=astee")).toHaveProperty("pod");
+  });
+
+  it("prefers a ready pod, and never one on its way out", () => {
+    const old = raw("a-old", { kind: "ReplicaSet", name: "a-1" }, "1", { deletionTimestamp: "2026-01-01T00:00:00Z" });
+    const starting = raw("b-starting", { kind: "ReplicaSet", name: "a-2" }, "2", {}, false);
+    const up = raw("c-up", { kind: "ReplicaSet", name: "a-2" }, "2");
+    expect(choosePod(pods(old, starting, up), "deployment/a")).toMatchObject({ pod: { name: "c-up" } });
+    expect(choosePod(pods(old), "deployment/a")).toEqual({ failure: "noRunningPod" });
+  });
+
+  it("finds statefulsets and daemonsets by their own name", () => {
+    expect(choosePod(pods(raw("db-0", { kind: "StatefulSet", name: "db" })), "statefulset/db")).toHaveProperty("pod");
+    expect(choosePod(pods(raw("n-1", { kind: "DaemonSet", name: "n" })), "daemonset/n")).toHaveProperty("pod");
+  });
+});
+
+describe("kubectl exec", () => {
+  it("names its context, its namespace and its container, and enters a chosen pod", () => {
+    const args = kubeExecArguments("prod", "ns", "api-7f9c", "php");
+    expect(args.slice(0, 6)).toEqual(["--context=prod", "--namespace=ns", "exec", "-it", "pod/api-7f9c", "--container=php"]);
+    expect(args.slice(6, 9)).toEqual(["--", "sh", "-c"]);
+    expect(args.join(" ")).not.toContain("deployment/");
+  });
+
+  it("looks only for pods that run", () => {
+    expect(kubePodsArguments("c", null, "app=api")).toContain("--field-selector=status.phase=Running");
+    expect(isPodName("api-7f9c-x2")).toBe(true);
+    for (const bad of ["", "--help", "a b"]) expect(isPodName(bad)).toBe(false);
   });
 });
 
@@ -138,7 +242,6 @@ describe("readKubeExit", () => {
     expect(readKubeExit(null, "")).toBe("timeout");
     expect(readKubeExit(1, 'error: context "x" does not exist')).toBe("contextMissing");
     expect(readKubeExit(1, 'Error from server (NotFound): deployments.apps "x" not found')).toBe("targetMissing");
-    expect(readKubeExit(1, "error: error executing jsonpath: array index out of bounds: index 0")).toBe("targetMissing");
     expect(readKubeExit(1, "Error from server (Forbidden): pods is forbidden")).toBe("refused");
     expect(readKubeExit(1, "Unable to connect to the server: dial tcp")).toBe("unreachable");
   });

@@ -2,9 +2,12 @@ import { randomBytes } from "node:crypto";
 import type { ClaudeTask } from "@/lib/claude-console";
 import type { ConsoleOptions } from "@/lib/console-options";
 import { hostnameOf, LOOPBACK_HOSTNAMES } from "@/lib/local-request";
+import type { RemoteCommand } from "../remote-console";
 
 export type GrantTarget =
   | { kind: "docker"; containerId: string; options: ConsoleOptions }
+  /** Everything is decided when the right is given. It can hold a password: in memory, for 30 seconds at most. */
+  | { kind: "remote"; command: RemoteCommand; notes: { refused: string; unknownHostKey: string } }
   | {
       kind: "claude";
       /** What a page connects to again. A console already running ignores the rest. */

@@ -6,9 +6,10 @@ import { useMessages } from "@/i18n/provider";
 import { looksLikeProduction } from "@/lib/remote-servers";
 import type { AccessView, EnvironmentView, ServerView, Suggestions } from "@/server/remote-servers";
 import { TestButton } from "../../connection-test";
-import { removeAccess, removeEnvironment, submitAccess, submitEnvironment } from "../../environment-actions";
+import { openRemoteConsole, removeAccess, removeEnvironment, submitAccess, submitEnvironment } from "../../environment-actions";
 import { CloseIcon, OpenIcon, PlusIcon } from "../../icons";
 import { Modal, useConfirm } from "../../modal";
+import { TerminalPanel } from "./terminal-panel";
 import { FormField, ServerFormModal } from "../../server-form";
 import { BADGE, BADGE_ALERT, BUTTON, BUTTON_ICON, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, LINK, SECTION_TITLE } from "../../ui";
 
@@ -200,9 +201,9 @@ function accessSummary({ serverKind, path, namespace, target, container }: Acces
   return (serverKind === "ssh" ? [path] : [namespace, target, container]).filter(Boolean).join(" / ");
 }
 
-function AccessRow({ projectId, environmentId, access, servers, suggestions, readOnly }: {
+function AccessRow({ projectId, environment, access, servers, suggestions, readOnly }: {
   projectId: number;
-  environmentId: number;
+  environment: EnvironmentView;
   access: AccessView;
   servers: ServerView[];
   suggestions: Suggestions;
@@ -210,10 +211,28 @@ function AccessRow({ projectId, environmentId, access, servers, suggestions, rea
 }) {
   const messages = useMessages();
   const m = messages.environments;
+  const environmentId = environment.id;
   const [editing, setEditing] = useState(false);
+  // Null while closed. What was confirmed stays so for its reconnections.
+  const [consoleOpen, setConsoleOpen] = useState<{ confirmed: boolean } | null>(null);
   const [pending, start] = useTransition();
   const { confirm, confirmation } = useConfirm();
   const detail = accessSummary(access);
+  // `kubectl exec` needs something to enter.
+  const canOpen = !readOnly && (access.serverKind === "ssh" || access.target !== null);
+
+  const askConsole = () => {
+    if (!environment.protected) {
+      setConsoleOpen({ confirmed: false });
+      return;
+    }
+    confirm({
+      ...m.consoleConfirm(environment.name, access.label),
+      action: m.console,
+      danger: true,
+      onConfirm: () => setConsoleOpen({ confirmed: true }),
+    });
+  };
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-rule py-2 last:border-b-0">
@@ -226,6 +245,9 @@ function AccessRow({ projectId, environmentId, access, servers, suggestions, rea
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {canOpen ? (
+          <button type="button" onClick={askConsole} className={BUTTON_SMALL}>{m.console}</button>
+        ) : null}
         <TestButton serverId={access.serverId} accessId={access.id} serverName={access.label} />
         {readOnly ? null : (
           <>
@@ -248,6 +270,15 @@ function AccessRow({ projectId, environmentId, access, servers, suggestions, rea
           </>
         )}
       </div>
+      {consoleOpen ? (
+        <TerminalPanel
+          title={`${environment.name} · ${access.label}`}
+          open={() => openRemoteConsole(projectId, access.id, consoleOpen.confirmed)}
+          reconnectLabel={messages.sheet.console.reconnect}
+          info={environment.protected ? <span className={BADGE_ALERT}>{m.protectedBadge}</span> : undefined}
+          onClose={() => setConsoleOpen(null)}
+        />
+      ) : null}
       {editing ? (
         <AccessFormModal projectId={projectId} environmentId={environmentId} access={access} servers={servers} suggestions={suggestions} onClose={() => setEditing(false)} />
       ) : null}
@@ -315,7 +346,7 @@ function EnvironmentCard({ projectId, environment, servers, suggestions, readOnl
       {environment.accesses.length > 0 ? (
         <ul className="mt-2">
           {environment.accesses.map((access) => (
-            <AccessRow key={access.id} projectId={projectId} environmentId={environment.id} access={access} servers={servers} suggestions={suggestions} readOnly={readOnly} />
+            <AccessRow key={access.id} projectId={projectId} environment={environment} access={access} servers={servers} suggestions={suggestions} readOnly={readOnly} />
           ))}
         </ul>
       ) : null}

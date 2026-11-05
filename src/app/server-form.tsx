@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import type { SshAuth } from "@/lib/remote-servers";
 import type { ServerInput, ServerKind, ServerView, Suggestions } from "@/server/remote-servers";
 import { submitServer } from "./environment-actions";
+import { useFlash } from "./flash";
 import { Modal } from "./modal";
 import { BUTTON, BUTTON_PRIMARY, FIELD, SEGMENT_SMALL } from "./ui";
 
@@ -53,6 +55,9 @@ export function ServerFormModal({
   const [keyPath, setKeyPath] = useState(server?.keyPath ?? "");
   const [jumpHost, setJumpHost] = useState(server?.jumpHost ?? "");
   const [context, setContext] = useState(server?.context ?? "");
+  const [password, setPassword] = useState("");
+  const flash = useFlash();
+  const router = useRouter();
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -74,10 +79,20 @@ export function ServerFormModal({
       const saved = await submitServer(server?.id ?? null, input);
       if ("problem" in saved) {
         setProblem(m.problems[saved.problem]);
-      } else {
-        onSaved?.(saved.id);
-        onClose();
+        return;
       }
+      if (kind === "ssh" && auth === "password" && password !== "") {
+        // Apart from the action: see the route. The server itself is saved by now, so this is only said.
+        const kept = await fetch(`/api/servers/${saved.id}/password`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        }).then(({ ok }) => ok, () => false);
+        if (!kept) flash("error", m.passwordNotKept);
+        router.refresh();
+      }
+      onSaved?.(saved.id);
+      onClose();
     });
   };
 
@@ -135,7 +150,18 @@ export function ServerFormModal({
                     <Choices id="server-keys" values={suggestions.keys} />
                   </FormField>
                 ) : null}
-                {auth === "password" ? <p className="text-[12px] text-mut">{m.passwordHint}</p> : null}
+                {auth === "password" ? (
+                  <FormField label={m.password} hint={m.passwordHint}>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={server?.hasPassword ? m.passwordKept : undefined}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className={FIELD}
+                    />
+                  </FormField>
+                ) : null}
                 <FormField label={m.jumpHost} hint={m.jumpHint}>
                   <input value={jumpHost} onChange={(event) => setJumpHost(event.target.value)} className={FIELD} />
                 </FormField>

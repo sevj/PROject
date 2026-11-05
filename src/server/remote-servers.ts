@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { cleanLogText } from "@/lib/container-logs";
 import {
+  choosePod,
   isContainerName,
   isHost,
   isJumpHost,
@@ -16,17 +17,22 @@ import {
   isRemotePath,
   isUsername,
   isWebUrl,
+  isWorkload,
   kubeClusterArguments,
-  kubeTargetArguments,
+  kubePodsArguments,
+  kubeWorkloadArguments,
+  parsePods,
   parseSshAliases,
   privateKeysAmong,
   readKubeExit,
   readSshExit,
+  type RunningPod,
   type SshAuth,
   sshArguments,
   sshProbe,
   type TestFailure,
   type TestResult,
+  workloadSelector,
 } from "@/lib/remote-servers";
 import type { Db } from "./db/client";
 import { environmentAccesses, type EnvironmentUrl, projectEnvironments, projects, projectMeta, remoteServers } from "./db/schema";
@@ -186,6 +192,14 @@ export function deleteServer(db: Db, id: number): Problem | null {
   return null;
 }
 
+/** Kept as given, spaces included, and without trying it: the server may be out of reach for now. */
+export function keepPassword(db: Db, id: number, password: string): boolean {
+  const server = db.select({ auth: remoteServers.auth }).from(remoteServers).where(eq(remoteServers.id, id)).get();
+  if (server?.auth !== "password" || password === "" || password.includes("\n")) return false;
+  db.update(remoteServers).set({ passwordSecret: encryptSecret(password) }).where(eq(remoteServers.id, id)).run();
+  return true;
+}
+
 export function forgetPassword(db: Db, id: number): void {
   db.update(remoteServers).set({ passwordSecret: null }).where(eq(remoteServers.id, id)).run();
 }
@@ -306,7 +320,8 @@ export type Ran = { code: number | null; stdout: string; stderr: string; notInst
 export type CommandRunner = (command: string, args: string[], password?: string) => Promise<Ran>;
 
 const TEST_TIMEOUT_MS = 20_000;
-const OUTPUT_LIMIT = 64 * 1024;
+/** Enough for the pods of a whole namespace as JSON: cut, they could not be read at all. */
+const OUTPUT_LIMIT = 16 * 1024 * 1024;
 
 /**
  * `sshpass -d 3` reads the password from a pipe of its own: on a command line or in the
@@ -351,6 +366,37 @@ export async function readSuggestions(run: CommandRunner = runCommand, home = ho
   };
 }
 
+/** The pod a console on this target enters, which a test has to look at too. */
+export async function resolveKubePod(
+  run: CommandRunner,
+  context: string,
+  namespace: string | null,
+  target: string,
+): Promise<{ pod: RunningPod } | { failure: TestFailure; detail: string }> {
+  const lastLine = (text: string) => text.split(/\r?\n/).map(cleanLogText).filter(Boolean).at(-1)?.slice(0, 300) ?? "";
+  const ask = async (args: string[]): Promise<{ stdout: string } | { failure: TestFailure; detail: string }> => {
+    const ran = await run("kubectl", args);
+    if (ran.notInstalled) return { failure: "kubectlMissing", detail: "" };
+    const failure = readKubeExit(ran.code, ran.stderr);
+    return failure ? { failure, detail: lastLine(ran.stderr) } : { stdout: ran.stdout };
+  };
+  try {
+    let selector = target;
+    if (isWorkload(target)) {
+      const workload = await ask(kubeWorkloadArguments(context, namespace, target));
+      if ("failure" in workload) return workload;
+      selector = workloadSelector(workload.stdout) ?? "";
+    }
+    const pods = await ask(kubePodsArguments(context, namespace, selector || null));
+    if ("failure" in pods) return pods;
+    const chosen = choosePod(parsePods(pods.stdout), target);
+    return "pod" in chosen ? chosen : { detail: "", ...chosen };
+  } catch (error) {
+    // Not the JSON it should be.
+    return { failure: "unknown", detail: error instanceof Error ? error.message.slice(0, 300) : "" };
+  }
+}
+
 export type TestRequest = { serverId: number; accessId?: number; password?: string; remember?: boolean };
 
 const failed = (failure: TestFailure, stderr: string, password?: string): TestResult => {
@@ -376,16 +422,18 @@ export async function testConnection(db: Db, request: TestRequest, run: CommandR
 
   if (server.kind === "kubernetes") {
     const context = server.context ?? "";
-    const ran = access?.target
-      ? await run("kubectl", kubeTargetArguments(context, access.namespace, access.target))
-      : await run("kubectl", kubeClusterArguments(context));
+    if (access?.target) {
+      const resolved = await resolveKubePod(run, context, access.namespace, access.target);
+      if ("failure" in resolved) return { ok: false, ...resolved };
+      if (access.container && !resolved.pod.containers.includes(access.container)) {
+        return { ok: false, failure: "containerMissing", detail: resolved.pod.containers.join(", ") };
+      }
+      return { ok: true };
+    }
+    const ran = await run("kubectl", kubeClusterArguments(context));
     if (ran.notInstalled) return { ok: false, failure: "kubectlMissing", detail: "" };
     const failure = readKubeExit(ran.code, ran.stderr);
-    if (failure) return failed(failure, ran.stderr);
-    if (access?.container && !ran.stdout.split(/\s+/).includes(access.container)) {
-      return { ok: false, failure: "containerMissing", detail: ran.stdout.trim() };
-    }
-    return { ok: true };
+    return failure ? failed(failure, ran.stderr) : { ok: true };
   }
 
   const auth = server.auth ?? "agent";

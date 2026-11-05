@@ -10,6 +10,7 @@ import {
   deleteEnvironment,
   deleteServer,
   forgetPassword,
+  keepPassword,
   listEnvironments,
   listServers,
   type CommandRunner,
@@ -31,6 +32,17 @@ const idOf = (saved: { id: number } | { problem: string }) => {
   if ("problem" in saved) throw new Error(saved.problem);
   return saved.id;
 };
+
+/** Answers as kubectl does: the workload first, then its pods. */
+const cluster = (podItems: object[], selectorLabels: Record<string, string> = { app: "api" }) =>
+  vi.fn<CommandRunner>(async (_command, args) => ({
+    code: 0,
+    stderr: "",
+    notInstalled: false,
+    stdout: JSON.stringify(args.includes("pods") ? { items: podItems } : { spec: { selector: { matchLabels: selectorLabels } } }),
+  }));
+const ownPod = { metadata: { name: "api-1-x", labels: { "pod-template-hash": "1" }, ownerReferences: [{ kind: "ReplicaSet", name: "api-1", controller: true }] }, spec: { containers: [{ name: "nginx" }, { name: "php" }] } };
+const otherPod = { metadata: { name: "api-bdd-2-y", labels: { "pod-template-hash": "2" }, ownerReferences: [{ kind: "ReplicaSet", name: "api-bdd-2", controller: true }] }, spec: { containers: [{ name: "db" }] } };
 
 let db: Db;
 let projectId: number;
@@ -91,6 +103,25 @@ describe("servers", () => {
     keep();
     idOf(saveServer(db, id, ssh));
     expect(listServers(db)[0].hasPassword).toBe(false);
+  });
+
+  it("keeps a password given in the form, encrypted, and uses it", async () => {
+    const id = idOf(saveServer(db, null, { ...ssh, auth: "password" }));
+    expect(keepPassword(db, id, " hunter2 ")).toBe(true);
+    const stored = db.select().from(remoteServers).where(eq(remoteServers.id, id)).get()?.passwordSecret;
+    expect(stored).not.toContain("hunter2");
+    const run = answer(0);
+    await testConnection(db, { serverId: id }, run, "/h");
+    expect(run.mock.calls[0][2]).toBe(" hunter2 ");
+  });
+
+  it("keeps no password for a server that does not use one, nor an empty one", () => {
+    const agent = idOf(saveServer(db, null, ssh));
+    expect(keepPassword(db, agent, "x")).toBe(false);
+    const id = idOf(saveServer(db, null, { ...ssh, name: "p", auth: "password" }));
+    expect(keepPassword(db, id, "")).toBe(false);
+    expect(keepPassword(db, id, "a\nb")).toBe(false);
+    expect(listServers(db).every(({ hasPassword }) => !hasPassword)).toBe(true);
   });
 
   it("cannot delete a server still in use", () => {
@@ -229,13 +260,31 @@ describe("testConnection", () => {
     const serverId = idOf(saveServer(db, null, kube));
     const environmentId = idOf(saveEnvironment(db, projectId, null, { name: "A", protected: false, urls: [], notes: null }));
     const accessId = idOf(saveAccess(db, projectId, environmentId, null, { ...access, serverId, namespace: "ns", target: "deployment/api", container: "php" }));
-    const cluster = answer(0);
-    await testConnection(db, { serverId }, cluster, "/h");
-    expect(cluster.mock.calls[0][1]).toContain("--context=prod-ctx");
-    expect(cluster.mock.calls[0][1]).toContain("version");
-    expect(await testConnection(db, { serverId, accessId }, answer(0, "", "nginx php"), "/h")).toEqual({ ok: true });
-    expect(await testConnection(db, { serverId, accessId }, answer(0, "", "nginx"), "/h")).toMatchObject({ failure: "containerMissing", detail: "nginx" });
+    const version = answer(0);
+    await testConnection(db, { serverId }, version, "/h");
+    expect(version.mock.calls[0][1]).toContain("--context=prod-ctx");
+    expect(version.mock.calls[0][1]).toContain("version");
+    expect(await testConnection(db, { serverId, accessId }, cluster([otherPod, ownPod]), "/h")).toEqual({ ok: true });
     expect(await testConnection(db, { serverId, accessId }, answer(1, 'Error from server (NotFound): "api" not found'), "/h")).toMatchObject({ failure: "targetMissing" });
+    expect(await testConnection(db, { serverId, accessId }, answer(0, "", "not json"), "/h")).toMatchObject({ failure: "unknown" });
+  });
+
+  it("looks at the pod a console would enter, not one the selector also matches", async () => {
+    const serverId = idOf(saveServer(db, null, kube));
+    const environmentId = idOf(saveEnvironment(db, projectId, null, { name: "A", protected: false, urls: [], notes: null }));
+    const accessId = idOf(saveAccess(db, projectId, environmentId, null, { ...access, serverId, target: "deployment/api", container: "php" }));
+    expect(await testConnection(db, { serverId, accessId }, cluster([otherPod]), "/h")).toMatchObject({ failure: "noRunningPod" });
+    expect(await testConnection(db, { serverId, accessId }, cluster([{ ...ownPod, spec: { containers: [{ name: "nginx" }] } }]), "/h")).toMatchObject({ failure: "containerMissing", detail: "nginx" });
+    const run = cluster([ownPod]);
+    await testConnection(db, { serverId, accessId }, run, "/h");
+    expect(run.mock.calls[1][1]).toContain("--selector=app=api");
+  });
+
+  it("refuses labels that span several workloads", async () => {
+    const serverId = idOf(saveServer(db, null, kube));
+    const environmentId = idOf(saveEnvironment(db, projectId, null, { name: "A", protected: false, urls: [], notes: null }));
+    const accessId = idOf(saveAccess(db, projectId, environmentId, null, { ...access, serverId, target: "app=api" }));
+    expect(await testConnection(db, { serverId, accessId }, cluster([ownPod, otherPod]), "/h")).toMatchObject({ failure: "ambiguousTarget", detail: "deployment/api, deployment/api-bdd" });
   });
 
   it("refuses an access that is not on this server", async () => {

@@ -17,10 +17,19 @@ async function openClaude(grant: Extract<Grant, { kind: "claude" }>): Promise<Te
   return openClaudeTerminal(grant);
 }
 
+async function openRemote(grant: Extract<Grant, { kind: "remote" }>): Promise<Terminal> {
+  const { openRemoteTerminal } = await import("./remote-terminal");
+  return openRemoteTerminal(grant.command, grant.notes);
+}
+
 /** A shell ends with its connection. Claude may be in the middle of something, so it goes on. */
 function serve(ws: WebSocket, grant: Grant): void {
   if (grant.kind === "docker") {
     startSession(ws, () => openDockerTerminal(grant.containerId, grant.options));
+    return;
+  }
+  if (grant.kind === "remote") {
+    startSession(ws, () => openRemote(grant));
     return;
   }
   const { consoleId: id, projectId, projectName, sessionId, startedAt } = grant;
@@ -28,7 +37,13 @@ function serve(ws: WebSocket, grant: Grant): void {
 }
 
 // Kept on globalThis so that a hot reload in dev does not open a second server.
-const holder = globalThis as unknown as { __pmConsoleServer?: Promise<ConsoleServer> };
+const holder = globalThis as unknown as { __pmConsoleServer?: Promise<ConsoleServer>; __pmConsoleServerVersion?: number };
+
+/**
+ * To raise when `serve` learns a new kind of grant. A server started before a hot reload keeps
+ * its old code and would misread the grant: a new one takes over, and the old one finishes what it holds.
+ */
+const SERVER_VERSION = 2;
 
 async function start(): Promise<ConsoleServer> {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
@@ -79,6 +94,10 @@ async function start(): Promise<ConsoleServer> {
 }
 
 export async function ensureConsoleServer(): Promise<number> {
+  if (holder.__pmConsoleServerVersion !== SERVER_VERSION) {
+    holder.__pmConsoleServer = undefined;
+    holder.__pmConsoleServerVersion = SERVER_VERSION;
+  }
   holder.__pmConsoleServer ??= start().catch((error) => {
     holder.__pmConsoleServer = undefined;
     throw error;
