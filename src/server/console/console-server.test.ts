@@ -282,6 +282,18 @@ done
       ws.close();
     });
 
+    it("gives it the app's MCP server, and the work it was asked to start on", async () => {
+      const ws = connect(
+        issueGrant({ kind: "claude", consoleId: randomUUID(), projectId: 1, projectName: "p", startedAt: 1, cwd: dir, sessionId: SESSION, resume: false, task: "review", appHost: "127.0.0.1:4300" }),
+      );
+      const { frames, until } = collect(ws);
+      await until((all) => output(all).includes("term="));
+      const flat = output(frames).replace(/\s+/g, " ");
+      expect(flat).toMatch(/--mcp-config \S*mcp\.json/);
+      expect(flat).toContain("Review this project's instructions");
+      ws.close();
+    });
+
     it("resumes a session when asked to", async () => {
       const ws = connect(claudeGrant(true));
       const { until } = collect(ws);

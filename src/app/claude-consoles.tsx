@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { MAX_CLAUDE_CONSOLES } from "@/lib/claude-console";
+import { type ClaudeTask, MAX_CLAUDE_CONSOLES } from "@/lib/claude-console";
 import { endClaudeConsole, listClaudeConsoles } from "./actions";
 import type { StateKind } from "@/lib/docker-state";
 
@@ -19,10 +19,12 @@ export type OpenConsole = Project & {
   consoleId?: string;
   /** Set when it was found running rather than opened here: it connects when first shown. */
   since?: number;
+  /** What it is asked to do when it starts. */
+  task?: ClaudeTask;
   status: StateKind;
 };
 
-type Consoles = { open: (project: Project, resumeId?: string) => void };
+type Consoles = { open: (project: Project, resumeId?: string, task?: ClaudeTask) => void };
 
 const ConsolesContext = createContext<Consoles>({ open: () => undefined });
 
@@ -44,7 +46,7 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
   const openedByProject = useRef(new Map<number, number>());
 
   const open = useCallback(
-    ({ projectId, projectName }: Project, resumeId?: string) => {
+    ({ projectId, projectName }: Project, resumeId?: string, task?: ClaudeTask) => {
       setVisible(true);
       const existing = resumeId ? consoles.find((item) => item.sessionId === resumeId) : undefined;
       if (existing) {
@@ -68,6 +70,7 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
           projectName,
           resumeId,
           sessionId: resumeId,
+          task,
           label: number === 1 ? projectName : `${projectName} ${number}`,
           status: "starting",
         },

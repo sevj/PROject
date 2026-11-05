@@ -1,5 +1,8 @@
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { type IPty, spawn } from "node-pty";
-import { claudeArguments, claudeEnvironment } from "@/lib/claude-console";
+import { claudeArguments, claudeEnvironment, type ClaudeTask } from "@/lib/claude-console";
+import { mcpConfig } from "../mcp/token";
 import { endConsole, isSessionOpen, trackConsole } from "./claude-sessions";
 import type { Terminal } from "./terminal";
 
@@ -10,16 +13,24 @@ export type ClaudeTarget = {
   cwd: string;
   sessionId: string;
   resume: boolean;
+  task?: ClaudeTask;
+  /** Where the page was asked from, which is also where this program reaches the app. */
+  appHost: string;
+  projectId: number;
 };
 
 /** Claude itself, with no shell around it, and with the rights of whoever runs the app. */
-export async function openClaudeTerminal({ cwd, sessionId, resume }: ClaudeTarget): Promise<Terminal> {
+export async function openClaudeTerminal({ cwd, sessionId, resume, task, appHost, projectId }: ClaudeTarget): Promise<Terminal> {
   // Checked when the right to connect was given, but two could have been given at once.
   if (isSessionOpen(sessionId)) throw new Error("This conversation is already open in another console.");
   const tracked = trackConsole(sessionId);
   let program: IPty;
   try {
-    program = spawn("claude", claudeArguments({ id: sessionId, resume, hookFile: tracked.file }), {
+    // It holds a token, so never on a command line: beside the hook's file, in a folder only
+    // this user can open and that goes with the program.
+    const mcpFile = join(dirname(tracked.file), "mcp.json");
+    writeFileSync(mcpFile, mcpConfig(appHost, projectId), { mode: 0o600 });
+    program = spawn("claude", claudeArguments({ id: sessionId, resume, hookFile: tracked.file, mcpFile, task }), {
       name: "xterm-256color",
       cols: 80,
       rows: 24,

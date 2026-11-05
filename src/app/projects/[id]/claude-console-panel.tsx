@@ -4,6 +4,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { openClaudeConsole, readClaudeConsoleUsage } from "@/app/actions";
 import { DATA } from "@/app/ui";
 import { useMessages } from "@/i18n/provider";
+import type { ClaudeTask } from "@/lib/claude-console";
 import type { StateKind } from "@/lib/docker-state";
 import { TerminalPanel } from "./terminal-panel";
 
@@ -15,6 +16,7 @@ export function ClaudeConsolePanel({
   resumeId,
   consoleId,
   since,
+  task,
   shown,
   frame,
   controls,
@@ -29,6 +31,7 @@ export function ClaudeConsolePanel({
   /** Set when this console was already running on the server: it is joined, not started. */
   consoleId?: string;
   since?: number;
+  task?: ClaudeTask;
   shown: boolean;
   frame: RefObject<HTMLElement | null>;
   controls: React.ReactNode;
@@ -42,6 +45,8 @@ export function ClaudeConsolePanel({
   // Connecting again goes back to the conversation that was open, rather than starting another.
   const session = useRef(resumeId ?? null);
   const running = useRef(consoleId ?? null);
+  // Asked once: connecting again goes back to the conversation, it does not start the work over.
+  const pendingTask = useRef(task);
   const [openedAt] = useState(() => since ?? Date.now());
   const [usage, setUsage] = useState({ costInDollars: 0, calls: 0 });
 
@@ -72,8 +77,9 @@ export function ClaudeConsolePanel({
     <TerminalPanel
       title={m.title(projectName)}
       open={async () => {
-        const grant = await openClaudeConsole(projectId, session.current, running.current);
+        const grant = await openClaudeConsole(projectId, session.current, running.current, pendingTask.current);
         if ("sessionId" in grant) {
+          pendingTask.current = undefined;
           session.current = grant.sessionId;
           running.current = grant.consoleId;
           onSession(grant.sessionId);

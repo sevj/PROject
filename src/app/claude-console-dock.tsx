@@ -54,6 +54,7 @@ function DockedConsole({
           resumeId={item.resumeId}
           consoleId={item.consoleId}
           since={item.since}
+          task={item.task}
           shown={shown}
           frame={frame}
           controls={

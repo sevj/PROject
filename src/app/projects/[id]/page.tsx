@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { isMarkdown } from "@/lib/docs";
 import { formatAge } from "@/lib/registry";
 import type { Messages } from "@/i18n";
+import { readClaudeConfig } from "@/server/claude-config";
 import { readClaudeUsage, SESSIONS_SHOWN } from "@/server/claude-usage/report";
 import { readSessionTitles } from "@/server/claude-usage/session-titles";
 import { getFetchRemote } from "@/server/classification";
@@ -29,6 +30,7 @@ import { ProjectCleanup } from "../../project-cleanup";
 import { ProjectOrganizer } from "../../project-organizer";
 import { BackIcon } from "../../icons";
 import { BUTTON_SMALL, CARD, DATA, SECTION_TITLE } from "../../ui";
+import { ClaudeConfigCard } from "./claude-config-card";
 import { ClaudeTab } from "./claude-tab";
 import { ClaudeUsageBlock } from "./claude-usage";
 import { DockerComponents } from "./docker-components";
@@ -104,6 +106,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
     tab === "claude" && claudeUsage
       ? await readSessionTitles(getDb(), claudeUsage.sessions.slice(0, SESSIONS_SHOWN).map(({ sessionId }) => sessionId))
       : {};
+  const claudeConfig = tab === "claude" && !row.missing ? await readClaudeConfig(absolutePath) : null;
   const gitDetails =
     tab === "git" && row.hasGit && !row.missing && !row.abandoned ? await readGitDetails(absolutePath) : null;
   const readsDocker = (tab === "general" || tab === "docker") && !row.missing && !row.abandoned;
@@ -231,6 +234,16 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
               <ProjectFacts row={row} now={now} wide />
             </>
+          ) : null}
+
+          {tab === "claude" && claudeConfig ? (
+            <ClaudeConfigCard
+              config={claudeConfig}
+              projectId={row.id}
+              projectName={row.name}
+              canOpen={!row.missing && !row.abandoned}
+              m={m.claudeConfig}
+            />
           ) : null}
 
           {tab === "claude" ? (

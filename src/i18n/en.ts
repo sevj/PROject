@@ -363,6 +363,28 @@ export const en = {
       last30Days: "Last 30 days",
       projects: "Projects",
     },
+    claudeConfig: {
+      title: "Claude setup",
+      states: {
+        none: "Nothing is written for Claude in this project: it has to find everything again each session.",
+        ok: "Claude reads this project's instructions.",
+        shadowed: "Claude does not read AGENTS.md: a CLAUDE.md replaces it without importing it. Adding @AGENTS.md to that CLAUDE.md fixes it.",
+      },
+      start: { generate: "Generate with Claude", review: "Review with Claude" },
+      tasks: {
+        generate: "Opens a console where Claude explores the project and proposes a CLAUDE.md. It starts working at once, which costs, and waits for your approval before writing.",
+        review: "Opens a console where Claude checks these instructions against the project and lists what it would change. It starts working at once, which costs, and waits for your approval before editing.",
+      },
+      lines: (count: number) => plural(count, "line"),
+      fromNext: "written by Next",
+      mcpServers: "MCP servers",
+      hooks: "Hooks",
+      skills: "Skills",
+      agents: "Agents",
+      commands: "Commands",
+      rules: "Rules",
+      memories: "Claude's memories",
+    },
     claudeUsage: {
       title: "Claude Code usage",
       none: "Claude Code has not been used in this folder.",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claudeArguments, claudeEnvironment, isSessionId, sessionHookSettings } from "./claude-console";
+import { CLAUDE_TASKS, claudeArguments, claudeEnvironment, isClaudeTask, isSessionId, sessionHookSettings } from "./claude-console";
 
 const ID = "24e58f29-84d6-4eed-930f-68d02b4aae30";
 
@@ -13,6 +13,20 @@ describe("isSessionId", () => {
 });
 
 describe("claudeArguments", () => {
+  it("gives the app's MCP server from a file, and the task last so that no option swallows it", () => {
+    const args = claudeArguments({ id: ID, resume: false, hookFile: "/f", mcpFile: "/m.json", task: "review" });
+    expect(args.slice(2, 4)).toEqual(["--mcp-config", "/m.json"]);
+    expect(args.indexOf("--settings")).toBe(4);
+    expect(args.at(-1)).toBe(CLAUDE_TASKS.review);
+    expect(CLAUDE_TASKS.review.startsWith("-")).toBe(false);
+  });
+
+  it("does not ask for a task unless one was chosen, and knows only its own", () => {
+    expect(claudeArguments({ id: ID, resume: false, hookFile: "/f" })).toHaveLength(4);
+    expect(isClaudeTask("generate")).toBe(true);
+    for (const value of ["rm -rf /", "", null, "GENERATE"]) expect(isClaudeTask(value)).toBe(false);
+  });
+
   it("names the session of a new conversation, or the one to resume", () => {
     expect(claudeArguments({ id: ID, resume: false, hookFile: "/f" }).slice(0, 2)).toEqual(["--session-id", ID]);
     expect(claudeArguments({ id: ID, resume: true, hookFile: "/f" }).slice(0, 2)).toEqual(["--resume", ID]);

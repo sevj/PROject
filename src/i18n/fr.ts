@@ -361,6 +361,28 @@ export const fr: Messages = {
       last30Days: "30 derniers jours",
       projects: "Projets",
     },
+    claudeConfig: {
+      title: "Configuration de Claude",
+      states: {
+        none: "Rien n'est écrit pour Claude dans ce projet : il doit tout redécouvrir à chaque session.",
+        ok: "Claude lit les consignes de ce projet.",
+        shadowed: "Claude ne lit pas AGENTS.md : un CLAUDE.md le remplace sans l'importer. Ajouter @AGENTS.md à ce CLAUDE.md règle le problème.",
+      },
+      start: { generate: "Générer avec Claude", review: "Faire une review avec Claude" },
+      tasks: {
+        generate: "Ouvre une console où Claude explore le projet et te propose un CLAUDE.md. Il travaille tout de suite, ce qui consomme, et attend ton accord avant d'écrire.",
+        review: "Ouvre une console où Claude confronte ces consignes au projet et liste ce qu'il changerait. Il travaille tout de suite, ce qui consomme, et attend ton accord avant de modifier.",
+      },
+      lines: (count) => `${count} ligne${count > 1 ? "s" : ""}`,
+      fromNext: "écrit par Next",
+      mcpServers: "Serveurs MCP",
+      hooks: "Hooks",
+      skills: "Skills",
+      agents: "Agents",
+      commands: "Commandes",
+      rules: "Règles",
+      memories: "Souvenirs de Claude",
+    },
     claudeUsage: {
       title: "Consommation Claude Code",
       none: "Claude Code n'a pas été utilisé dans ce dossier.",

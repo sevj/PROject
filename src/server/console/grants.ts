@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { ClaudeTask } from "@/lib/claude-console";
 import type { ConsoleOptions } from "@/lib/console-options";
 import { hostnameOf, LOOPBACK_HOSTNAMES } from "@/lib/local-request";
 
@@ -14,6 +15,7 @@ export type GrantTarget =
       cwd: string;
       sessionId: string;
       resume: boolean;
+      task?: ClaudeTask;
     };
 
 export type Grant = GrantTarget & {

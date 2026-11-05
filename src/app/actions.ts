@@ -22,7 +22,7 @@ import type { ProjectStatus } from "@/server/db/schema";
 import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
 import { randomUUID } from "node:crypto";
-import { type ClaudeConsoleGrant, isSessionId, MAX_CLAUDE_CONSOLES, type RunningClaudeConsole } from "@/lib/claude-console";
+import { type ClaudeConsoleGrant, isClaudeTask, isSessionId, MAX_CLAUDE_CONSOLES, type RunningClaudeConsole } from "@/lib/claude-console";
 import { getFetchRemote, setFetchRemote } from "@/server/classification";
 import { readRemotes } from "@/server/scan/git";
 import { parseConsoleOptions } from "@/lib/console-options";
@@ -314,6 +314,7 @@ export async function openClaudeConsole(
   projectId: number,
   resumeId: unknown,
   consoleId?: unknown,
+  task?: unknown,
 ): Promise<ClaudeConsoleGrant | { error: string }> {
   const db = getDb();
   const m = serverMessages(db).errors;
@@ -346,7 +347,19 @@ export async function openClaudeConsole(
   try {
     const port = await ensureConsoleServer();
     const cwd = resumeFrom ?? project.absolutePath;
-    const token = issueGrant({ kind: "claude", consoleId: id, projectId, projectName: project.row.name, startedAt, cwd, sessionId, resume, appHost });
+    const token = issueGrant({
+      kind: "claude",
+      consoleId: id,
+      projectId,
+      projectName: project.row.name,
+      startedAt,
+      cwd,
+      sessionId,
+      resume,
+      // Only what starts a new conversation is given one: a console that comes back has its own.
+      task: !running && !resume && isClaudeTask(task) ? task : undefined,
+      appHost,
+    });
     return { port, sessionId, consoleId: id, token };
   } catch (error) {
     return { error: m.consoleUnavailable(error instanceof Error ? error.message : String(error)) };

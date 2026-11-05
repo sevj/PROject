@@ -67,7 +67,8 @@ Dans l'ordre. Rien n'écrit dans un projet sans bouton explicite.
 ## 10. Ajouts (retenu)
 - [x] Page Claude globale : coût par projet, jour et modèle.
 - [x] Nettoyage des projets : dossiers régénérables (`var/cache`, `var/log`, `node_modules`…), avec aperçu et confirmation. (dans Structure et Ressources ; seulement ignorés par git et sans fichier suivi, `var/` entier jamais)
-- [ ] Config Claude par projet : `CLAUDE.md`, hooks, serveurs MCP. Le contenu reste à étayer ensemble avant de développer.
+- [x] Config Claude par projet : consignes lues et état (`CLAUDE.md`, `AGENTS.md`), boutons pour les faire générer ou relire par Claude, noms des hooks, skills et serveurs MCP.
+- [x] MCP de l'app en lecture seule pour ses consoles Claude : projets, conteneurs, ports, analyses, structure des bases. (ni valeurs `.env`, ni lignes de base)
 - [ ] Serveurs distants d'un projet (intégration, production…) : les déclarer. À développer plus tard, le détail reste à définir.
 
 ## Écarté (review du 2026-11-05)
