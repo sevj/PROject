@@ -386,3 +386,59 @@ export const eolReleases = sqliteTable("eol_releases", {
   releases: text("releases", { mode: "json" }).$type<Release[]>().notNull(),
   fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
 });
+
+/** A header of a saved HTTP request. A secret one holds its value encrypted by `src/server/secrets.ts`. */
+export type HttpHeader = { name: string; value: string; secret: boolean };
+
+/** HTTP requests kept for a project, to send to one of its environments. */
+export const httpRequests = sqliteTable("http_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  method: text("method").notNull(),
+  url: text("url").notNull(),
+  headers: text("headers", { mode: "json" }).$type<HttpHeader[]>().notNull().default([]),
+  body: text("body"),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+});
+
+/**
+ * `{{name}}` in a request, by environment: `environmentId` null is the machine itself ("Local").
+ * A secret value is encrypted, and never goes back to the browser.
+ */
+export const httpVariables = sqliteTable(
+  "http_variables",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    environmentId: integer("environment_id").references(() => projectEnvironments.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    value: text("value").notNull(),
+    secret: integer("secret", { mode: "boolean" }).notNull().default(false),
+  },
+  (table) => [uniqueIndex("http_variables_scope_name").on(table.projectId, table.environmentId, table.name)],
+);
+
+/** The last answers of a request, newest last; only the last few are kept. */
+export const httpResponses = sqliteTable("http_responses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  requestId: integer("request_id")
+    .notNull()
+    .references(() => httpRequests.id, { onDelete: "cascade" }),
+  environment: text("environment").notNull(),
+  method: text("method").notNull(),
+  /** As sent, variables replaced, secrets masked. */
+  url: text("url").notNull(),
+  status: integer("status"),
+  error: text("error"),
+  durationMs: integer("duration_ms").notNull(),
+  size: integer("size").notNull().default(0),
+  headers: text("headers", { mode: "json" }).$type<[string, string][]>().notNull().default([]),
+  body: text("body").notNull().default(""),
+  truncated: integer("truncated", { mode: "boolean" }).notNull().default(false),
+  sentAt: integer("sent_at", { mode: "timestamp" }).notNull().default(now),
+});

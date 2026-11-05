@@ -92,7 +92,7 @@ function KindBadge({ kind, label }: { kind: Kind; label: string }) {
   );
 }
 
-const PROJECT_TABS = ["docker", "git", "env", "environments", "claude", "security", "structure", "documentation"] as const;
+const PROJECT_TABS = ["docker", "git", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
 
 function readRecent(): string[] {
   try {

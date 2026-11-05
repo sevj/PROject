@@ -38,6 +38,8 @@ import { ClaudeUsageBlock } from "./claude-usage";
 import { DockerComponents } from "./docker-components";
 import { DockerTab } from "./docker-tab";
 import { EnvTab } from "./env-tab";
+import { listHttp } from "@/server/http-requests";
+import { HttpTab } from "./http-tab";
 import { EnvironmentsTab } from "./environments-tab";
 import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
@@ -46,7 +48,7 @@ import { ProjectSites } from "./project-sites";
 import { ProjectTree } from "./project-tree";
 import { SecurityTab } from "./security-tab";
 
-const TABS = ["general", "docker", "git", "env", "environments", "claude", "security", "structure", "documentation"] as const;
+const TABS = ["general", "docker", "git", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 
 function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) {
@@ -298,6 +300,8 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               readOnly={row.abandoned}
             />
           ) : null}
+
+          {tab === "http" ? <HttpTab projectId={row.id} view={listHttp(getDb(), projectId)} readOnly={row.abandoned} /> : null}
 
           {tab === "security" ? (
             <SecurityTab projectId={row.id} stored={dependencies} now={now} readOnly={row.missing || row.abandoned} />
