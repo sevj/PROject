@@ -34,15 +34,15 @@ type Action = { id: string; label: string; confirm?: Omit<Confirmation, "onConfi
 type Entry = { id: string; kind: Kind; title: string; subtitle?: string; keywords?: string; actions: Action[] };
 type Opened = { kind: "docker"; projectId: number; first: WindowTab } | { kind: "remote"; projectId: number; first: RemoteTab };
 
-/** One color per kind, from the theme's series: the same in light and dark, told apart at a glance. */
+/** One color per kind, far apart on the wheel and set for each theme in globals.css. */
 const KIND_COLOR: Record<Kind, string> = {
-  project: "var(--series-1)",
-  container: "var(--series-6)",
-  access: "var(--series-2)",
-  server: "var(--series-4)",
-  vpn: "var(--series-3)",
-  action: "var(--series-5)",
-  page: "var(--series-other)",
+  project: "var(--kind-project)",
+  container: "var(--kind-container)",
+  access: "var(--kind-access)",
+  server: "var(--kind-server)",
+  vpn: "var(--kind-vpn)",
+  action: "var(--kind-action)",
+  page: "var(--kind-page)",
 };
 
 const PROJECT_TABS = ["docker", "git", "env", "environments", "claude", "security", "structure", "documentation"] as const;

@@ -28,6 +28,14 @@
   --series-6: #3987e5;
   --series-7: #e66767;
   --series-other: #5c5c68;
+  /* The palette's kinds of items: hues far apart, so that none is taken for another. */
+  --kind-project: #a594f9;
+  --kind-container: #4cb4ff;
+  --kind-access: #ff8a4c;
+  --kind-server: #f2d04b;
+  --kind-vpn: #5fd38d;
+  --kind-action: #f472b6;
+  --kind-page: #8a8a94;
 }
 
 :root[data-theme="light"] {
@@ -55,6 +63,13 @@
   --series-6: #2a78d6;
   --series-7: #e34948;
   --series-other: #9a9aa2;
+  --kind-project: #5b45c4;
+  --kind-container: #0b72c9;
+  --kind-access: #d4520f;
+  --kind-server: #a07800;
+  --kind-vpn: #1f7a4a;
+  --kind-action: #c2257a;
+  --kind-page: #6b6b75;
 }
 
 @theme inline {
