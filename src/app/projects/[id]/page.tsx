@@ -121,7 +121,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   return (
     <main className="mx-auto w-full max-w-[1240px] flex-1 px-5 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5 pt-6 pb-6">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-[1_1_420px]">
           <Link href="/" className={`${BUTTON_SMALL} mb-2`}>
             <BackIcon />
             {m.back}
@@ -145,7 +145,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             <ProjectDescription projectId={row.id} description={row.description} detected={row.manifestDescription} />
           </div>
           {!row.missing && !row.abandoned ? (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <ClaudeConsoleButton projectId={row.id} projectName={row.name} />
               <Suspense fallback={null}>
                 <ProjectSites projectId={row.id} />
