@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { layerServices, layoutMap, type MapService, projectNodeId, serviceId, toMapState } from "./project-map";
+import {
+  isInChoice,
+  layerServices,
+  layoutMap,
+  mapChoices,
+  type MapProject,
+  type MapService,
+  projectNodeId,
+  serviceId,
+  toMapState,
+} from "./project-map";
 
 const service = (name: string, dependsOn: string[] = [], over: Partial<MapService> = {}): MapService => ({
   name,
@@ -9,6 +19,60 @@ const service = (name: string, dependsOn: string[] = [], over: Partial<MapServic
   ports: [],
   dependsOn,
   ...over,
+});
+
+describe("mapChoices", () => {
+  const project = (id: number, name: string, parent: MapProject["parent"] = null): MapProject => ({
+    id,
+    name,
+    parent,
+    services: [],
+  });
+  const anfr = { id: 10, name: "ANFR" };
+  const projects = [project(1, "Zeta"), project(2, "Usager", anfr), project(3, "Alpha"), project(4, "Cross", anfr)];
+
+  it("puts each multi-project among the others, followed by its sub-projects", () => {
+    expect(mapChoices(projects)).toEqual([
+      { id: 3, name: "Alpha", nested: false },
+      { id: 10, name: "ANFR", nested: false },
+      { id: 4, name: "Cross", nested: true },
+      { id: 2, name: "Usager", nested: true },
+      { id: 1, name: "Zeta", nested: false },
+    ]);
+  });
+
+  it("lists a multi-project once, however many sub-projects it has", () => {
+    expect(mapChoices(projects).filter(({ id }) => id === 10)).toHaveLength(1);
+  });
+
+  it("does not list what has nothing to show", () => {
+    expect(mapChoices([])).toEqual([]);
+  });
+
+  it("does not lose a project that is both a parent and on the map", () => {
+    const both = [project(10, "ANFR"), project(2, "Usager", anfr)];
+    expect(mapChoices(both)).toEqual([
+      { id: 10, name: "ANFR", nested: false },
+      { id: 2, name: "Usager", nested: true },
+    ]);
+  });
+
+  describe("isInChoice", () => {
+    const ids = (choice: number | null) => projects.filter((item) => isInChoice(item, choice)).map(({ id }) => id);
+
+    it("keeps everything with no choice", () => {
+      expect(ids(null)).toEqual([1, 2, 3, 4]);
+    });
+
+    it("keeps all the sub-projects of a multi-project", () => {
+      expect(ids(10)).toEqual([2, 4]);
+    });
+
+    it("keeps one sub-project, or one project, on its own", () => {
+      expect(ids(2)).toEqual([2]);
+      expect(ids(1)).toEqual([1]);
+    });
+  });
 });
 
 describe("layerServices", () => {
@@ -30,8 +94,8 @@ describe("layerServices", () => {
 
 describe("layoutMap", () => {
   const projects = [
-    { id: 1, name: "Shop", services: [service("app", ["db"]), service("db", [], { engine: "postgres" }), service("mail")] },
-    { id: 2, name: "Blog", services: [service("web")] },
+    { id: 1, name: "Shop", parent: null, services: [service("app", ["db"]), service("db", [], { engine: "postgres" }), service("mail")] },
+    { id: 2, name: "Blog", parent: null, services: [service("web")] },
   ];
 
   it("places a project, its entry services and what they need in columns", () => {

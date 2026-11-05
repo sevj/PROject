@@ -13,7 +13,43 @@ export type MapService = {
   dependsOn: string[];
 };
 
-export type MapProject = { id: number; name: string; services: MapService[] };
+export type MapProject = {
+  id: number;
+  name: string;
+  /** The multi-project it belongs to. */
+  parent: { id: number; name: string } | null;
+  services: MapService[];
+};
+
+export type MapChoice = { id: number; name: string; nested: boolean };
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "fr");
+
+/** What can be picked: each multi-project, followed by its sub-projects, among the others by name. */
+export function mapChoices(projects: MapProject[]): MapChoice[] {
+  const children = new Map<number, MapProject[]>();
+  const top = new Map<number, string>();
+  for (const project of projects) {
+    if (project.parent) {
+      children.set(project.parent.id, [...(children.get(project.parent.id) ?? []), project]);
+      top.set(project.parent.id, project.parent.name);
+    } else {
+      top.set(project.id, project.name);
+    }
+  }
+  return [...top]
+    .map(([id, name]) => ({ id, name }))
+    .sort(byName)
+    .flatMap(({ id, name }) => [
+      { id, name, nested: false },
+      ...(children.get(id) ?? []).sort(byName).map((child) => ({ id: child.id, name: child.name, nested: true })),
+    ]);
+}
+
+/** A multi-project stands for all of its sub-projects. */
+export function isInChoice(project: MapProject, choice: number | null): boolean {
+  return choice === null || project.id === choice || project.parent?.id === choice;
+}
 
 export type MapNode = {
   id: string;

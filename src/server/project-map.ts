@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { detectEngine } from "@/lib/db-engines";
 import { type MapProject, type MapService, type MapState, toMapState } from "@/lib/project-map";
 import type { Db } from "./db/client";
@@ -12,11 +13,24 @@ const RANK: Record<MapState, number> = { running: 0, other: 1, stopped: 2, absen
 
 /** Read when asked and never stored: what the compose files declare, and what Docker runs now. */
 export async function readProjectMap(db: Db): Promise<ProjectMap> {
+  const parents = alias(projects, "parents");
+  const parentMeta = alias(projectMeta, "parent_meta");
   const known = db
-    .select({ id: projects.id, name: projects.name, displayName: projectMeta.displayName, path: projects.path, hasCompose: projectFacts.hasCompose })
+    .select({
+      id: projects.id,
+      name: projects.name,
+      displayName: projectMeta.displayName,
+      path: projects.path,
+      hasCompose: projectFacts.hasCompose,
+      parentId: parents.id,
+      parentName: parents.name,
+      parentDisplayName: parentMeta.displayName,
+    })
     .from(projects)
     .leftJoin(projectFacts, eq(projectFacts.projectId, projects.id))
     .leftJoin(projectMeta, eq(projectMeta.projectId, projects.id))
+    .leftJoin(parents, eq(parents.id, projects.parentId))
+    .leftJoin(parentMeta, eq(parentMeta.projectId, projects.parentId))
     .where(and(eq(projects.kind, "project"), eq(projects.abandoned, false)))
     .all();
 
@@ -57,7 +71,17 @@ export async function readProjectMap(db: Db): Promise<ProjectMap> {
         });
       }
     }
-    if (services.size > 0) result.push({ id: project.id, name: project.displayName ?? project.name, services: [...services.values()] });
+    if (services.size > 0) {
+      result.push({
+        id: project.id,
+        name: project.displayName ?? project.name,
+        parent:
+          project.parentId !== null && project.parentName !== null
+            ? { id: project.parentId, name: project.parentDisplayName ?? project.parentName }
+            : null,
+        services: [...services.values()],
+      });
+    }
   }
   result.sort((a, b) => a.name.localeCompare(b.name, "fr"));
   return { projects: result, error: docker.error };

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { useMessages } from "@/i18n/provider";
-import { layoutMap } from "@/lib/project-map";
+import { isInChoice, layoutMap, mapChoices } from "@/lib/project-map";
 import type { ProjectMap } from "@/server/project-map";
 import { FIELD, LABEL } from "../ui";
 import { STATE_COLORS } from "./map-canvas";
@@ -14,7 +14,8 @@ const MapCanvas = dynamic(() => import("./map-canvas").then((module) => module.M
 export function MapView({ map }: { map: ProjectMap }) {
   const m = useMessages().map;
   const [only, setOnly] = useState<number | null>(null);
-  const layout = useMemo(() => layoutMap(map.projects.filter((project) => only === null || project.id === only)), [map.projects, only]);
+  const layout = useMemo(() => layoutMap(map.projects.filter((project) => isInChoice(project, only))), [map.projects, only]);
+  const choices = useMemo(() => mapChoices(map.projects), [map.projects]);
 
   return (
     <div className="grid gap-4">
@@ -33,9 +34,10 @@ export function MapView({ map }: { map: ProjectMap }) {
               <span className={`${LABEL} block pb-1`}>{m.project}</span>
               <select value={only ?? ""} onChange={(event) => setOnly(event.target.value === "" ? null : Number(event.target.value))} className={FIELD}>
                 <option value="">{m.all}</option>
-                {map.projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
+                {choices.map((choice) => (
+                  <option key={choice.id} value={choice.id}>
+                    {/* An option holds only text: spaces that are kept are all there is to indent with. */}
+                    {choice.nested ? `   ${choice.name}` : choice.name}
                   </option>
                 ))}
               </select>
