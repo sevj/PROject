@@ -208,7 +208,7 @@ export function CommandPalette() {
         { id: "terminal", label: a.terminal, run: () => result(openTerminal(project.id)) },
         { id: "fetch", label: a.fetch, run: () => result(fetchProject(project.id)) },
         { id: "export", label: a.exportConfig, run: () => download(`/api/projects/${project.id}/config`) },
-        { id: "import", label: a.importConfig, run: () => router.push(`/projects/${project.id}?tab=environments`) },
+        { id: "import", label: a.importConfig, run: () => router.push(`/projects/${project.id}`) },
         ...PROJECT_TABS.map((tab) => ({ id: `tab-${tab}`, label: a.tab(messages.sheet[tab]), run: () => router.push(`/projects/${project.id}?tab=${tab}`) })),
       ],
     }));

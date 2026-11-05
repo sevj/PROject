@@ -44,6 +44,7 @@ import { EnvironmentsTab } from "./environments-tab";
 import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
 import { readDependencies } from "@/server/dependencies";
+import { ConfigShare } from "./config-share";
 import { ProjectSites } from "./project-sites";
 import { ProjectTree } from "./project-tree";
 import { SecurityTab } from "./security-tab";
@@ -158,6 +159,9 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               </Suspense>
             </div>
           ) : null}
+          <div className="mt-2">
+            <ConfigShare projectId={row.id} readOnly={row.abandoned} />
+          </div>
         </div>
         <ProjectOrganizer key={row.id} row={row} knownTags={knownTags} />
       </div>
