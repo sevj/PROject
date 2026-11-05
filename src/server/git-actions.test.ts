@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -71,14 +71,6 @@ describe("switchBranch", () => {
     const dir = tempRepo();
     git(dir, "branch", "other");
     writeFileSync(join(dir, "a.txt"), "changed");
-    expect(await switchBranch(dir, "other")).toContain("1 modified file");
-    expect(currentBranch(dir)).toBe("main");
-  });
-
-  it("refuses with an untracked file", async () => {
-    const dir = tempRepo();
-    git(dir, "branch", "other");
-    writeFileSync(join(dir, "new.txt"), "new");
     expect(await switchBranch(dir, "other")).toContain("1 modified file");
     expect(currentBranch(dir)).toBe("main");
   });
@@ -190,6 +182,57 @@ describe("checkOutRemoteBranch", () => {
     }
     writeFileSync(join(dir, "a.txt"), "changed");
     expect(await checkOutRemoteBranch(dir, "origin/colleague")).toContain("1 modified file");
+    expect(currentBranch(dir)).toBe("main");
+  });
+});
+
+describe("untracked files", () => {
+  const withBranch = () => {
+    const dir = tempRepo();
+    git(dir, "branch", "other");
+    return dir;
+  };
+
+  it("do not stop a switch, and stay where they are", async () => {
+    const dir = withBranch();
+    writeFileSync(join(dir, "notes.txt"), "mine");
+    mkdirSync(join(dir, "exports"));
+    writeFileSync(join(dir, "exports", "data.csv"), "1,2");
+
+    expect(await switchBranch(dir, "other")).toBeNull();
+    expect(currentBranch(dir)).toBe("other");
+    expect(readFileSync(join(dir, "notes.txt"), "utf8")).toBe("mine");
+    expect(readFileSync(join(dir, "exports", "data.csv"), "utf8")).toBe("1,2");
+  });
+
+  it("do not stop checking out a remote branch", async () => {
+    const remote = tempRepo();
+    git(remote, "branch", "colleague");
+    const dir = clone(remote);
+    writeFileSync(join(dir, "notes.txt"), "mine");
+
+    expect(await checkOutRemoteBranch(dir, "origin/colleague")).toBeNull();
+    expect(currentBranch(dir)).toBe("colleague");
+  });
+
+  it("are never overwritten: git refuses, and the reason is passed on", async () => {
+    const dir = withBranch();
+    git(dir, "switch", "-q", "other");
+    commit(dir, "report.txt", "the branch has this file");
+    git(dir, "switch", "-q", "main");
+    writeFileSync(join(dir, "report.txt"), "mine, not committed");
+
+    expect(await switchBranch(dir, "other")).toEqual(expect.stringContaining("report.txt"));
+    expect(currentBranch(dir)).toBe("main");
+    expect(readFileSync(join(dir, "report.txt"), "utf8")).toBe("mine, not committed");
+  });
+
+  it("do not make up for a tracked file that was changed", async () => {
+    const dir = withBranch();
+    writeFileSync(join(dir, "notes.txt"), "mine");
+    writeFileSync(join(dir, "a.txt"), "changed");
+
+    expect(await switchBranch(dir, "other")).toContain("1 modified file");
     expect(currentBranch(dir)).toBe("main");
   });
 });

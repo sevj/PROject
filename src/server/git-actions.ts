@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { en, type Messages } from "@/i18n/en";
-import { readBranches, readDirtyCount, readRemoteBranches } from "./scan/git";
+import { readBranches, readRemoteBranches, readTrackedChangeCount } from "./scan/git";
 
 const run = promisify(execFile);
 
@@ -34,8 +34,9 @@ async function gitAction(cwd: string, args: string[], timeout = LOCAL_TIMEOUT): 
 }
 
 /**
- * Stricter than git, which would carry the changes along when they do not conflict:
- * they would then quietly end up on another branch.
+ * Stricter than git for tracked files, which it would carry along when they do not
+ * conflict: they would then quietly end up on another branch. Untracked files belong to
+ * no branch and stay where they are, and git refuses by itself to overwrite one.
  * The name comes from the browser, so it must be one that exists in this repository.
  */
 export async function switchBranch(
@@ -50,7 +51,7 @@ export async function switchBranch(
 }
 
 async function refusalWhenDirty(path: string, m: Messages["gitTab"]): Promise<string | null> {
-  const dirty = await readDirtyCount(path);
+  const dirty = await readTrackedChangeCount(path);
   if (dirty === null) return m.dirtyUnknown;
   return dirty > 0 ? m.dirtyBlocksSwitch(dirty) : null;
 }

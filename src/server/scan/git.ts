@@ -267,6 +267,8 @@ export type GitDetails = {
   removable: BranchDetail[];
   /** Read when the tab opens, since the last refresh may be old and this decides what can be done. */
   dirtyCount: number;
+  /** What stops a change of branch. */
+  trackedChangeCount: number;
   tags: TagDetail[];
   tagCount: number;
 };
@@ -597,8 +599,9 @@ export async function readCommitView(path: string, hash: string): Promise<Commit
 }
 
 /** Null when it cannot be told, which must not read as a clean folder. */
-export async function readDirtyCount(path: string): Promise<number | null> {
-  const status = await gitOptional(path, ["status", "--porcelain"]);
+/** What a change of branch would carry along: untracked files stay out of it. */
+export async function readTrackedChangeCount(path: string): Promise<number | null> {
+  const status = await gitOptional(path, ["status", "--porcelain", "--untracked-files=no"]);
   return status === undefined ? null : countLines(status);
 }
 
@@ -676,6 +679,7 @@ export async function readGitDetails(path: string, now = new Date()): Promise<Gi
     compareBase: base,
     removable: allBranches.filter(({ removable }) => removable),
     dirtyCount: changes.length,
+    trackedChangeCount: changes.filter(({ state }) => state !== "untracked").length,
     changes: changes.slice(0, CHANGE_LIMIT),
     stashes: parseStashes(stashes ?? ""),
     remoteBranches: allRemote.slice(0, BRANCH_LIMIT),

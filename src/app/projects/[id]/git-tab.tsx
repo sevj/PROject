@@ -98,7 +98,7 @@ function RemoteBranches({
             {branch.subject ? <div className="truncate text-mut">{branch.subject}</div> : null}
             <div className={`${DATA} mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-mut`}>
               <span>{branch.author}</span>
-              {details.dirtyCount === 0 ? (
+              {details.trackedChangeCount === 0 ? (
                 <CheckOutRemote projectId={row.id} remoteBranch={branch.name} running={runningCount(row)} />
               ) : null}
             </div>
@@ -124,7 +124,7 @@ function Branches({
   messages: Messages;
 }) {
   const m = messages.gitTab;
-  const canSwitch = details.dirtyCount === 0;
+  const canSwitch = details.trackedChangeCount === 0;
   const current = details.branches.find((branch) => branch.current);
   return (
     <>
@@ -144,7 +144,7 @@ function Branches({
           }))}
         />
       </div>
-      {canSwitch ? null : <p className={`${DATA} pb-2 text-alert`}>{m.dirtyBlocksSwitch(details.dirtyCount)}</p>}
+      {canSwitch ? null : <p className={`${DATA} pb-2 text-alert`}>{m.dirtyBlocksSwitch(details.trackedChangeCount)}</p>}
       {details.branchCount === 0 ? <p className="text-mut">{m.noBranches}</p> : null}
       <div className={LIST}>
         {details.branches.map((branch) => (

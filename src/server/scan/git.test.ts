@@ -221,6 +221,7 @@ describe("readGitDetails", () => {
       compareBase: null,
       removable: [],
       dirtyCount: 0,
+      trackedChangeCount: 0,
       changes: [],
       stashes: [],
       remoteBranches: [],
@@ -391,6 +392,7 @@ describe("readGitDetails working state", () => {
 
     const details = await readGitDetails(dir);
     expect(details.dirtyCount).toBe(2);
+    expect(details.trackedChangeCount).toBe(1);
     expect(details.changes).toContainEqual({ path: "a.txt", from: null, state: "modified" });
     expect(details.changes).toContainEqual({ path: "new.txt", from: null, state: "untracked" });
     expect(details.stashes[0]).toMatchObject({ branch: "main", message: "kept for later" });
