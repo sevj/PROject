@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   checkOutAllProjectRemoteBranches,
   checkOutProjectRemoteBranch,
+  chooseFetchRemote,
   cleanUpBranches,
   createProjectBranch,
   fetchProject,
@@ -208,13 +209,51 @@ export function NewBranch({ projectId, from }: { projectId: number; from: string
   );
 }
 
-export function FetchButton({ projectId }: { projectId: number }) {
+/** With several remotes, each project says which one it reads: one may be out of reach. */
+export function FetchControl({
+  projectId,
+  remotes,
+  chosen,
+}: {
+  projectId: number;
+  remotes: string[];
+  chosen: string | null;
+}) {
   const m = useMessages().gitTab;
   const { pending, run } = useGitAction();
+  const gone = chosen !== null && !remotes.includes(chosen);
   return (
-    <button type="button" disabled={pending} onClick={() => run(() => fetchProject(projectId), m.fetched)} className={BUTTON}>
-      {pending ? m.working : m.fetch}
-    </button>
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => run(() => fetchProject(projectId), chosen ? m.fetchedRemote(chosen) : m.fetched)}
+        className={BUTTON}
+      >
+        {pending ? m.working : m.fetch}
+      </button>
+      {remotes.length > 1 || gone ? (
+        <select
+          aria-label={m.fetchRemote}
+          title={m.fetchRemote}
+          disabled={pending}
+          value={chosen ?? ""}
+          onChange={(event) => {
+            const remote = event.target.value || null;
+            run(() => chooseFetchRemote(projectId, remote), m.fetchRemoteChosen(remote));
+          }}
+          className={`${FIELD} !w-auto`}
+        >
+          <option value="">{m.allRemotes}</option>
+          {remotes.map((remote) => (
+            <option key={remote} value={remote}>
+              {remote}
+            </option>
+          ))}
+          {gone ? <option value={chosen}>{m.missingRemote(chosen)}</option> : null}
+        </select>
+      ) : null}
+    </div>
   );
 }
 

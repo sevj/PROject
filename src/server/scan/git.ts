@@ -260,6 +260,7 @@ export type GitDetails = {
   compareBase: string | null;
   changes: ChangedFile[];
   stashes: StashEntry[];
+  remotes: string[];
   /** On a remote, without any local branch for them. */
   remoteBranches: RemoteBranch[];
   remoteBranchCount: number;
@@ -599,6 +600,11 @@ export async function readCommitView(path: string, hash: string): Promise<Commit
 }
 
 /** Null when it cannot be told, which must not read as a clean folder. */
+export async function readRemotes(path: string): Promise<string[]> {
+  const remotes = await gitOptional(path, ["remote"]);
+  return (remotes ?? "").split("\n").filter(Boolean);
+}
+
 /** What a change of branch would carry along: untracked files stay out of it. */
 export async function readTrackedChangeCount(path: string): Promise<number | null> {
   const status = await gitOptional(path, ["status", "--porcelain", "--untracked-files=no"]);
@@ -661,7 +667,7 @@ export async function readGitDetails(path: string, now = new Date()): Promise<Gi
     gitOptional(path, ["status", "--porcelain=v1", "-z"]),
     gitOptional(path, ["stash", "list", "--format=%gd%x00%ct%x00%gs"]),
   ]);
-  const allRemote = await readRemoteBranches(path, allBranches);
+  const [allRemote, remotes] = await Promise.all([readRemoteBranches(path, allBranches), readRemotes(path)]);
 
   const allTags = parseTags(tags ?? "");
   const changes = parseChanges(status ?? "");
@@ -682,6 +688,7 @@ export async function readGitDetails(path: string, now = new Date()): Promise<Gi
     trackedChangeCount: changes.filter(({ state }) => state !== "untracked").length,
     changes: changes.slice(0, CHANGE_LIMIT),
     stashes: parseStashes(stashes ?? ""),
+    remotes,
     remoteBranches: allRemote.slice(0, BRANCH_LIMIT),
     remoteBranchCount: allRemote.length,
     tags: allTags.slice(0, TAG_LIMIT),

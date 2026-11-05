@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   addTag,
   deleteTag,
+  getFetchRemote,
   removeTag,
   renameTag,
   setAbandoned,
   setDescription,
   setDisplayName,
   setFavorite,
+  setFetchRemote,
   setNote,
   setStatus,
 } from "./classification";
@@ -39,6 +41,22 @@ describe("meta", () => {
     setNote(db, a, "");
     const meta = db.select().from(projectMeta).all()[0];
     expect([meta.status, meta.note, meta.favorite]).toEqual([null, null, true]);
+  });
+});
+
+describe("fetch remote", () => {
+  it("reads all remotes until one is chosen, and again once it is unset", () => {
+    expect(getFetchRemote(db, a)).toBeNull();
+    setFetchRemote(db, a, "origin");
+    expect(getFetchRemote(db, a)).toBe("origin");
+    setFetchRemote(db, a, null);
+    expect(getFetchRemote(db, a)).toBeNull();
+  });
+
+  it("leaves the rest of what is known of the project alone", () => {
+    setNote(db, a, "kept");
+    setFetchRemote(db, a, "origin");
+    expect(db.select().from(projectMeta).get()).toMatchObject({ note: "kept", fetchRemote: "origin" });
   });
 });
 

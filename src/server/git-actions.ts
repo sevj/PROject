@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { en, type Messages } from "@/i18n/en";
-import { readBranches, readRemoteBranches, readTrackedChangeCount } from "./scan/git";
+import { readBranches, readRemoteBranches, readRemotes, readTrackedChangeCount } from "./scan/git";
 
 const run = promisify(execFile);
 
@@ -105,9 +105,15 @@ export function pullFastForward(path: string): Promise<string | null> {
   return gitAction(path, ["pull", "--no-rebase", "--ff-only"], FETCH_TIMEOUT);
 }
 
-export function fetchRemotes(path: string): Promise<string | null> {
+export async function fetchRemotes(
+  path: string,
+  remote: string | null = null,
+  m: Messages["gitTab"] = en.gitTab,
+): Promise<string | null> {
   // --prune only forgets the remote branches that are gone, never a local one.
-  return gitAction(path, ["fetch", "--all", "--prune"], FETCH_TIMEOUT);
+  if (remote === null) return gitAction(path, ["fetch", "--all", "--prune"], FETCH_TIMEOUT);
+  if (!(await readRemotes(path)).includes(remote)) return m.remoteGone(remote);
+  return gitAction(path, ["fetch", "--prune", "--", remote], FETCH_TIMEOUT);
 }
 
 /** The hash is what allows making the branch again. */

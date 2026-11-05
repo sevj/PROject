@@ -23,6 +23,8 @@ import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
 import { randomUUID } from "node:crypto";
 import { isSessionId } from "@/lib/claude-console";
+import { getFetchRemote, setFetchRemote } from "@/server/classification";
+import { readRemotes } from "@/server/scan/git";
 import { parseConsoleOptions } from "@/lib/console-options";
 import { findSessionStart, readClaudeUsage } from "@/server/claude-usage/report";
 import { syncClaudeUsageNow } from "@/server/claude-usage/scheduler";
@@ -422,9 +424,23 @@ export async function switchProjectBranch(projectId: number, branch: string): Pr
 export async function fetchProject(projectId: number): Promise<string | null> {
   const target = gitTarget(projectId);
   if ("error" in target) return target.error;
-  const error = await fetchRemotes(target.path);
+  const db = getDb();
+  const error = await fetchRemotes(target.path, getFetchRemote(db, projectId), serverMessages(db).gitTab);
   await afterGitAction(projectId);
   return error;
+}
+
+/** Null reads them all. A name comes from the browser, so it must be one this repository has. */
+export async function chooseFetchRemote(projectId: number, remote: unknown): Promise<string | null> {
+  const target = gitTarget(projectId);
+  if ("error" in target) return target.error;
+  const db = getDb();
+  if (remote !== null && (typeof remote !== "string" || !(await readRemotes(target.path)).includes(remote))) {
+    return serverMessages(db).gitTab.remoteGone(String(remote));
+  }
+  setFetchRemote(db, projectId, remote);
+  revalidatePath(`/projects/${projectId}`);
+  return null;
 }
 
 export async function cleanUpBranches(

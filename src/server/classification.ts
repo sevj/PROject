@@ -25,7 +25,7 @@ export function isStatus(value: unknown): value is ProjectStatus {
   return PROJECT_STATUSES.includes(value as ProjectStatus);
 }
 
-type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "status" | "favorite" | "note" | "displayName" | "description">>;
+type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "fetchRemote" | "status" | "favorite" | "note" | "displayName" | "description">>;
 
 function patchMeta(db: Db, projectIds: number[], patch: MetaPatch) {
   db.transaction((tx) => {
@@ -47,6 +47,19 @@ export function setStatus(db: Db, projectIds: number[], status: ProjectStatus | 
 
 export function setFavorite(db: Db, projectId: number, favorite: boolean) {
   patchMeta(db, [projectId], { favorite });
+}
+
+export function setFetchRemote(db: Db, projectId: number, remote: string | null) {
+  patchMeta(db, [projectId], { fetchRemote: remote });
+}
+
+export function getFetchRemote(db: Db, projectId: number): string | null {
+  const meta = db
+    .select({ fetchRemote: projectMeta.fetchRemote })
+    .from(projectMeta)
+    .where(eq(projectMeta.projectId, projectId))
+    .get();
+  return meta?.fetchRemote ?? null;
 }
 
 export function setNote(db: Db, projectId: number, note: string) {

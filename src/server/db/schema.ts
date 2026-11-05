@@ -95,6 +95,8 @@ export const projectMeta = sqliteTable("project_meta", {
   /** Replaces the folder name on screen. The folder itself is never renamed. */
   displayName: text("display_name"),
   description: text("description"),
+  /** The remote that Fetch reads. Null reads them all. */
+  fetchRemote: text("fetch_remote"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
 });
 

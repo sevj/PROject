@@ -7,6 +7,7 @@ import { formatAge } from "@/lib/registry";
 import type { Messages } from "@/i18n";
 import { readClaudeUsage, SESSIONS_SHOWN } from "@/server/claude-usage/report";
 import { readSessionTitles } from "@/server/claude-usage/session-titles";
+import { getFetchRemote } from "@/server/classification";
 import { getDb } from "@/server/db/client";
 import { readEnvView } from "@/server/env-vars";
 import { listProjectContainers } from "@/server/docker-containers";
@@ -241,7 +242,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             />
           ) : null}
 
-          {tab === "git" ? <GitTab row={row} now={now} details={gitDetails} messages={messages} /> : null}
+          {tab === "git" ? <GitTab row={row} now={now} details={gitDetails} fetchRemote={getFetchRemote(getDb(), projectId)} messages={messages} /> : null}
 
           {tab === "docker" ? (
             <DockerTab

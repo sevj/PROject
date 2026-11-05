@@ -5,7 +5,7 @@ import { parseRemote } from "@/lib/remote";
 import { type GitDetails, HISTORY_WEEKS } from "@/server/scan/git";
 import { GitFacts } from "../../project-facts";
 import { BADGE, CARD, DATA, SECTION_TITLE } from "../../ui";
-import { CheckOutAllRemotes, CheckOutRemote, CleanUpBranches, FetchButton, NewBranch, PullButton, SwitchBranch } from "./branch-actions";
+import { CheckOutAllRemotes, CheckOutRemote, CleanUpBranches, FetchControl, NewBranch, PullButton, SwitchBranch } from "./branch-actions";
 import { CommitChart } from "./commit-chart";
 import { CommitList } from "./commit-list";
 
@@ -114,11 +114,13 @@ function RemoteBranches({
 
 function Branches({
   details,
+  fetchRemote,
   row,
   now,
   messages,
 }: {
   details: GitDetails;
+  fetchRemote: string | null;
   row: RegistryRow;
   now: number;
   messages: Messages;
@@ -130,7 +132,9 @@ function Branches({
     <>
       <h2 className={`${SECTION_TITLE} mb-1`}>{m.branches(details.branchCount)}</h2>
       <div className="flex flex-wrap items-center gap-2 py-2">
-        {row.remoteUrl ? <FetchButton projectId={row.id} /> : null}
+        {details.remotes.length > 0 ? (
+          <FetchControl projectId={row.id} remotes={details.remotes} chosen={fetchRemote} />
+        ) : null}
         {current && current.upstream && current.behind > 0 ? (
           <PullButton projectId={row.id} branch={current.name} behind={current.behind} />
         ) : null}
@@ -215,11 +219,13 @@ export function GitTab({
   row,
   now,
   details,
+  fetchRemote,
   messages,
 }: {
   row: RegistryRow;
   now: number;
   details: GitDetails | null;
+  fetchRemote: string | null;
   messages: Messages;
 }) {
   const hasHistory = details !== null && details.authors.length > 0;
@@ -265,7 +271,7 @@ export function GitTab({
           </section>
           <div className="grid min-w-0 gap-4">
             <section className={CARD}>
-              <Branches details={details} row={row} now={now} messages={messages} />
+              <Branches details={details} fetchRemote={fetchRemote} row={row} now={now} messages={messages} />
             </section>
             {details.remoteBranchCount > 0 ? (
               <RemoteBranches details={details} row={row} now={now} messages={messages} />

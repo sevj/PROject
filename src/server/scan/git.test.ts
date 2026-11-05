@@ -224,6 +224,7 @@ describe("readGitDetails", () => {
       trackedChangeCount: 0,
       changes: [],
       stashes: [],
+      remotes: [],
       remoteBranches: [],
       remoteBranchCount: 0,
       commits: [],

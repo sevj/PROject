@@ -300,6 +300,41 @@ describe("pullFastForward", () => {
 });
 
 describe("fetchRemotes", () => {
+  describe("with several remotes", () => {
+    const withBrokenRemote = () => {
+      const remote = tempRepo();
+      const dir = clone(remote);
+      git(dir, "remote", "add", "broken", join(tempDir(), "nothing-here"));
+      git(remote, "branch", "fresh");
+      return dir;
+    };
+    const refs = (dir: string) => git(dir, "for-each-ref", "--format=%(refname:short)");
+
+    it("reads only the chosen one, whatever the state of the others", async () => {
+      const dir = withBrokenRemote();
+      expect(await fetchRemotes(dir, "origin")).toBeNull();
+      expect(refs(dir)).toContain("origin/fresh");
+    });
+
+    it("says what went wrong when the chosen one cannot be read", async () => {
+      const dir = withBrokenRemote();
+      expect(await fetchRemotes(dir, "broken")).toEqual(expect.any(String));
+      expect(refs(dir)).not.toContain("origin/fresh");
+    });
+
+    it("reads them all when none is chosen", async () => {
+      expect(await fetchRemotes(withBrokenRemote())).toEqual(expect.any(String));
+    });
+
+    it("runs nothing for a remote that does not exist", async () => {
+      const dir = withBrokenRemote();
+      for (const name of ["gone", "--all", "--upload-pack=touch /tmp/x", ""]) {
+        expect(await fetchRemotes(dir, name)).toContain("no longer exists");
+      }
+      expect(refs(dir)).not.toContain("origin/fresh");
+    });
+  });
+
   it("forgets a remote branch that is gone, and keeps the local one", async () => {
     const remote = tempRepo();
     git(remote, "branch", "old");
