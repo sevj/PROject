@@ -34,6 +34,17 @@ type Action = { id: string; label: string; confirm?: Omit<Confirmation, "onConfi
 type Entry = { id: string; kind: Kind; title: string; subtitle?: string; keywords?: string; actions: Action[] };
 type Opened = { kind: "docker"; projectId: number; first: WindowTab } | { kind: "remote"; projectId: number; first: RemoteTab };
 
+/** One color per kind, from the theme's series: the same in light and dark, told apart at a glance. */
+const KIND_COLOR: Record<Kind, string> = {
+  project: "var(--series-1)",
+  container: "var(--series-6)",
+  access: "var(--series-2)",
+  server: "var(--series-4)",
+  vpn: "var(--series-3)",
+  action: "var(--series-5)",
+  page: "var(--series-other)",
+};
+
 const PROJECT_TABS = ["docker", "git", "env", "environments", "claude", "security", "structure", "documentation"] as const;
 
 function readRecent(): string[] {
@@ -346,14 +357,19 @@ export function CommandPalette() {
                 aria-selected={index === selected}
                 onMouseMove={() => setSelected(index)}
                 onClick={() => choose(index)}
-                className={`flex cursor-pointer items-center gap-3 px-3 py-1.5 ${index === selected ? "bg-accent-soft" : ""}`}
+                className={`flex cursor-pointer items-center gap-3 border-l-[3px] px-3 py-1.5 ${index === selected ? "bg-accent-soft" : ""}`}
+                style={{ borderLeftColor: KIND_COLOR[entry.kind] }}
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{entry.title}</span>
                   {entry.subtitle ? <span className={`${DATA} block truncate text-mut`}>{entry.subtitle}</span> : null}
                 </span>
                 {!focus && entry.actions.length > 1 && index === selected ? <span className={`${DATA} text-mut`}>Tab →</span> : null}
-                {focus ? null : <span className={`${DATA} shrink-0 text-mut`}>{m.kinds[entry.kind]}</span>}
+                {focus ? null : (
+                  <span className={`${DATA} shrink-0`} style={{ color: KIND_COLOR[entry.kind] }}>
+                    {m.kinds[entry.kind]}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
