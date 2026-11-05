@@ -10,7 +10,8 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/proj
   await connection();
   const project = getProject(getDb(), Number((await params).id));
   if (!project) return new Response("Not Found", { status: 404 });
-  const config = exportConfig(getDb(), project.row.id, project.row.name);
+  const { row } = project;
+  const config = exportConfig(getDb(), row.id, { name: row.name, folder: row.folderName, description: row.description, tags: row.tags, status: row.status, note: row.note });
   return new Response(`${JSON.stringify(config, null, 2)}\n`, {
     headers: {
       "Content-Type": "application/json; charset=utf-8",

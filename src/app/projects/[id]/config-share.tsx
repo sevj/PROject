@@ -21,6 +21,24 @@ async function ask(projectId: number, config: unknown, apply: boolean): Promise<
   }
 }
 
+/** What an import does, item by item: created, kept or left aside, and why. */
+export function PlanList({ items }: { items: PlanItem[] }) {
+  const messages = useMessages();
+  const m = messages.environments.share;
+  return (
+    <ul className="grid max-h-[50vh] gap-1 overflow-y-auto">
+      {items.map((item, index) => (
+        <li key={index} className="flex flex-wrap items-center gap-2 border-b border-rule py-1.5 last:border-b-0">
+          <span className={`${DATA} w-32 shrink-0 text-mut`}>{m.kinds[item.kind]}</span>
+          <span className="min-w-0 flex-1 break-all">{item.kind === "status" && item.name in messages.status ? messages.status[item.name as keyof typeof messages.status] : item.name}</span>
+          <span className={`${DATA} px-1.5 ${ACTION_CLASS[item.action]}`}>{m.actions[item.action]}</span>
+          {item.reason && item.reason !== "exists" ? <span className="basis-full pl-[136px] text-[12px] text-mut">{m.reasons[item.reason]}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Export as a file, import from one with a look at what it would do first. */
 export function ConfigShare({ projectId, readOnly }: { projectId: number; readOnly: boolean }) {
   const messages = useMessages();
@@ -95,16 +113,7 @@ export function ConfigShare({ projectId, readOnly }: { projectId: number; readOn
       {plan ? (
         <Modal title={m.title(plan.project)} wide onClose={close}>
           <p className="text-mut">{m.intro}</p>
-          <ul className="grid max-h-[55vh] gap-1 overflow-y-auto">
-            {plan.items.map((item, index) => (
-              <li key={index} className="flex flex-wrap items-center gap-2 border-b border-rule py-1.5 last:border-b-0">
-                <span className={`${DATA} w-32 shrink-0 text-mut`}>{m.kinds[item.kind]}</span>
-                <span className="min-w-0 flex-1 break-all">{item.name}</span>
-                <span className={`${DATA} px-1.5 ${ACTION_CLASS[item.action]}`}>{m.actions[item.action]}</span>
-                {item.reason && item.reason !== "exists" ? <span className="basis-full pl-[136px] text-[12px] text-mut">{m.reasons[item.reason]}</span> : null}
-              </li>
-            ))}
-          </ul>
+          <PlanList items={plan.items} />
           {creating === 0 ? <p className="text-mut">{m.nothing}</p> : null}
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={pending || creating === 0} onClick={() => void apply()} className={BUTTON_PRIMARY}>

@@ -1,8 +1,10 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { type CommandAlias, normalizeAliases } from "@/lib/aliases";
 import { isHttpMethod, VARIABLE_NAME } from "@/lib/http-requests";
+import { addTag, isStatus, setDescription, setNote, setStatus } from "./classification";
 import type { Db } from "./db/client";
-import { environmentAccesses, httpRequests, httpVariables, projectEnvironments, remoteServers, vpns } from "./db/schema";
+import { environmentAccesses, httpRequests, httpVariables, projectEnvironments, projectMeta, type ProjectStatus, projectTags, remoteServers, tags, vpns } from "./db/schema";
+import { checkDirectory, registerProject } from "./projects";
 import { saveRequest } from "./http-requests";
 import { saveAccess, saveEnvironment, saveServer } from "./remote-servers";
 import { getSettings, saveSettings } from "./settings";
@@ -29,12 +31,17 @@ type SharedEnvironment = { name: string; protected: boolean; urls: { label: stri
 type SharedRequest = { name: string; method: string; url: string; headers: { name: string; value: string; secret: boolean }[]; body: string };
 type SharedVariable = { environment: string | null; name: string; value: string; secret: boolean };
 
+/** The project's sheet. `folder` is only a hint for where the importer cloned it. */
+export type SharedSheet = { name: string; folder: string; description: string | null; tags: string[]; status: ProjectStatus | null; note: string | null };
+
 /** What a file holds: names and addresses, never a password, a key, a token or a secret's value. */
 export type SharedConfig = {
   format: typeof CONFIG_FORMAT;
   version: typeof CONFIG_VERSION;
   exportedAt: string;
   project: string;
+  /** Absent from files written before it was added. */
+  sheet: SharedSheet | null;
   servers: SharedServer[];
   vpns: SharedVpn[];
   environments: SharedEnvironment[];
@@ -42,7 +49,7 @@ export type SharedConfig = {
   http: { requests: SharedRequest[]; variables: SharedVariable[] };
 };
 
-export function exportConfig(db: Db, projectId: number, projectName: string, now = new Date()): SharedConfig {
+export function exportConfig(db: Db, projectId: number, sheet: SharedSheet, now = new Date()): SharedConfig {
   const environments = db.select().from(projectEnvironments).where(eq(projectEnvironments.projectId, projectId)).all();
   const accesses = environments.length === 0 ? [] : db.select().from(environmentAccesses).where(inArray(environmentAccesses.environmentId, environments.map(({ id }) => id))).all();
   const serverRows = accesses.length === 0 ? [] : db.select().from(remoteServers).where(inArray(remoteServers.id, [...new Set(accesses.map(({ serverId }) => serverId))])).all();
@@ -56,7 +63,8 @@ export function exportConfig(db: Db, projectId: number, projectName: string, now
     format: CONFIG_FORMAT,
     version: CONFIG_VERSION,
     exportedAt: now.toISOString(),
-    project: projectName,
+    project: sheet.name,
+    sheet,
     servers: serverRows.map((server) => ({
       name: server.name,
       kind: server.kind,
@@ -106,6 +114,21 @@ export function exportConfig(db: Db, projectId: number, projectName: string, now
 const text = (value: unknown, max = 2000) => (typeof value === "string" ? value.slice(0, max) : null);
 const list = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : []);
 
+function readSheet(raw: unknown): SharedSheet | null {
+  if (!raw || typeof raw !== "object") return null;
+  const sheet = raw as Record<string, unknown>;
+  const name = text(sheet.name, 80)?.trim();
+  if (!name) return null;
+  return {
+    name,
+    folder: (text(sheet.folder, 255) ?? "").replace(/[/\\]/g, ""),
+    description: text(sheet.description, 4000),
+    tags: Array.isArray(sheet.tags) ? [...new Set(sheet.tags.flatMap((tag) => (typeof tag === "string" && tag.trim() ? [tag.trim().slice(0, 80)] : [])))].slice(0, 50) : [],
+    status: isStatus(sheet.status) ? sheet.status : null,
+    note: text(sheet.note, 8000),
+  };
+}
+
 /** The file read back, shape checked field by field: anything else in it is left aside. */
 export function readConfig(raw: unknown): SharedConfig | null {
   if (!raw || typeof raw !== "object") return null;
@@ -119,6 +142,7 @@ export function readConfig(raw: unknown): SharedConfig | null {
     version: CONFIG_VERSION,
     exportedAt: text(file.exportedAt, 40) ?? "",
     project: text(file.project, 120) ?? "",
+    sheet: readSheet(file.sheet),
     servers: list(file.servers).flatMap((item) => {
       const name = text(item.name, 80);
       if (!name || (item.kind !== "ssh" && item.kind !== "kubernetes")) return [];
@@ -182,7 +206,12 @@ export function readConfig(raw: unknown): SharedConfig | null {
 }
 
 export type PlanAction = "create" | "keep" | "skip";
-export type PlanItem = { kind: "server" | "vpn" | "environment" | "access" | "alias" | "request" | "variable"; name: string; action: PlanAction; reason?: "exists" | "needsFile" | "noServer" | "invalid" };
+export type PlanItem = {
+  kind: "project" | "description" | "tag" | "status" | "note" | "server" | "vpn" | "environment" | "access" | "alias" | "request" | "variable";
+  name: string;
+  action: PlanAction;
+  reason?: "exists" | "needsFile" | "noServer" | "invalid" | "filled";
+};
 export type ImportResult = { items: PlanItem[] };
 
 /**
@@ -192,6 +221,34 @@ export type ImportResult = { items: PlanItem[] };
  */
 export async function importConfig(db: Db, projectId: number, config: SharedConfig, apply: boolean): Promise<ImportResult> {
   const items: PlanItem[] = [];
+
+  // The sheet fills only what is empty here: a description, a status or a note already set stays.
+  if (config.sheet) {
+    const meta = db.select().from(projectMeta).where(eq(projectMeta.projectId, projectId)).get();
+    const known = new Set(
+      db.select({ name: tags.name }).from(projectTags).innerJoin(tags, eq(tags.id, projectTags.tagId)).where(eq(projectTags.projectId, projectId)).all().map(({ name }) => name),
+    );
+    const { description, status, note } = config.sheet;
+    if (description) {
+      const filled = !!meta?.description;
+      items.push({ kind: "description", name: description.slice(0, 80), action: filled ? "keep" : "create", reason: filled ? "filled" : undefined });
+      if (apply && !filled) setDescription(db, projectId, description);
+    }
+    for (const tag of config.sheet.tags) {
+      items.push({ kind: "tag", name: tag, action: known.has(tag) ? "keep" : "create", reason: known.has(tag) ? "exists" : undefined });
+      if (apply && !known.has(tag)) addTag(db, [projectId], tag);
+    }
+    if (status) {
+      const filled = !!meta?.status;
+      items.push({ kind: "status", name: status, action: filled ? "keep" : "create", reason: filled ? "filled" : undefined });
+      if (apply && !filled) setStatus(db, [projectId], status);
+    }
+    if (note) {
+      const filled = !!meta?.note;
+      items.push({ kind: "note", name: note.slice(0, 80), action: filled ? "keep" : "create", reason: filled ? "filled" : undefined });
+      if (apply && !filled) setNote(db, projectId, note);
+    }
+  }
 
   // VPNs, by name. An OpenVPN one needs its file, which only its owner has.
   const vpnIds = new Map(db.select({ id: vpns.id, name: vpns.name }).from(vpns).all().map(({ id, name }) => [name, id] as const));
@@ -306,4 +363,25 @@ export async function importConfig(db: Db, projectId: number, config: SharedConf
     items.push({ kind: "variable", name: label, action: "create" });
   }
   return { items };
+}
+
+/**
+ * A new project from a file, in a folder already cloned by whoever imports: its sheet, then its
+ * configuration. Without `apply`, only says what would be done, and whether the folder will do.
+ */
+export async function importProject(db: Db, directory: string, config: SharedConfig, apply: boolean): Promise<(ImportResult & { projectId: number | null }) | { error: string }> {
+  if (!config.sheet) return { error: "noSheet" };
+  const checked = checkDirectory(db, directory);
+  if ("error" in checked) return checked;
+  const sheetItems: PlanItem[] = [{ kind: "project", name: `${config.sheet.name} · ${checked.path}`, action: "create" }];
+  if (!apply) {
+    // The project does not exist yet: nothing of its own can be found, so all of it is planned.
+    const rest = await importConfig(db, -1, { ...config, sheet: config.sheet }, false);
+    return { projectId: null, items: [...sheetItems, ...rest.items] };
+  }
+  const registered = registerProject(db, { name: config.sheet.name, description: config.sheet.description ?? "", directory: checked.path, tags: config.sheet.tags });
+  if ("error" in registered) return registered;
+  const [projectId] = registered.ids;
+  const rest = await importConfig(db, projectId, config, true);
+  return { projectId, items: [...sheetItems, ...rest.items] };
 }

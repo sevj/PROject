@@ -23,6 +23,7 @@ import type { ProjectStatus } from "@/server/db/schema";
 import type { BulkJob } from "@/server/bulk-jobs";
 import { analyzeAllProjects, fetchAllProjects, markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
 import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
+import { ImportProjectButton } from "./import-project";
 import { ClassificationEditor } from "./classification-editor";
 import { DependencyMark } from "./dependency-mark";
 import { useStoredCollapsedGroups } from "./use-stored-collapsed-groups";
@@ -720,6 +721,7 @@ export function RegistryView({
           <button type="button" onClick={() => startBulk(analyzeAllProjects)} disabled={bulkBusy || rows.length === 0} title={m.analyzeAllHint} className={BUTTON}>
             {m.analyzeAll}
           </button>
+          <ImportProjectButton className={BUTTON} />
           <button
             type="button"
             aria-pressed={showForm}
