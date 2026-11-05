@@ -5,6 +5,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
+import { usePageLock } from "@/app/use-page-lock";
 import { useMessages } from "@/i18n/provider";
 import type { StateKind } from "@/lib/docker-state";
 import { StateGlyph } from "./state-badge";
@@ -271,20 +272,7 @@ export function TerminalPanel({
     void connect();
   }, [connectKey, connect]);
 
-  // The page behind stays where it is: only the terminal scrolls while the console is open.
-  useEffect(() => {
-    if (!standalone) return;
-    const root = document.documentElement;
-    const previous = { overflow: root.style.overflow, paddingRight: root.style.paddingRight };
-    // Without its scrollbar the page would grow wider and the content behind would jump.
-    const scrollbar = window.innerWidth - root.clientWidth;
-    root.style.overflow = "hidden";
-    if (scrollbar > 0) root.style.paddingRight = `${scrollbar}px`;
-    return () => {
-      root.style.overflow = previous.overflow;
-      root.style.paddingRight = previous.paddingRight;
-    };
-  }, [standalone]);
+  usePageLock(standalone);
 
   useEffect(() => {
     const onChange = () => {

@@ -7,6 +7,7 @@ import { DumpModal, LoadModal } from "@/app/dump-modals";
 import type { DumpRow } from "@/lib/dumps";
 import type { DatabaseTarget } from "@/server/dumps/containers";
 import { ConsolePanel } from "./console-panel";
+import { LogsPanel } from "./logs-panel";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
 import { useFlash } from "@/app/flash";
 import { useMessages } from "@/i18n/provider";
@@ -56,9 +57,21 @@ export function ContainerControls({
   const m = messages.dockerTab;
   const { pending, run } = useControl(projectId);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   const [dialog, setDialog] = useState<"dump" | "load" | null>(null);
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <button type="button" onClick={() => setLogsOpen(true)} className={BUTTON}>
+        {messages.logs.open}
+      </button>
+      {logsOpen ? (
+        <LogsPanel
+          projectId={projectId}
+          containerId={containerId}
+          containerName={containerName}
+          onClose={() => setLogsOpen(false)}
+        />
+      ) : null}
       {canOpenConsole ? (
         <button type="button" onClick={() => setConsoleOpen(true)} className={BUTTON}>
           {messages.console.open}

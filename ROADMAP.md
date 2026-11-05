@@ -48,6 +48,9 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 - [ ] Schéma et relations entre tables : clés étrangères (PostgreSQL, MySQL/MariaDB, SQLite), diagramme des tables liées, navigation d'une clé étrangère vers la ligne qu'elle désigne.
 - Écarté : comparaison de deux dumps.
 
+## 8. Logs de conteneur
+- [x] Bouton « Logs » sur chaque conteneur, même arrêté : 1000 dernières lignes puis la suite en direct, filtre, horodatage, stderr signalé. Rien n'est enregistré.
+
 ## Idées Git (à documenter, pas décidé de les faire)
 Les actions Git restent volontairement limitées (voir README). À rediscuter avant tout développement :
 - Diff, log, historique d'un fichier, blame.
@@ -57,4 +60,4 @@ Les actions Git restent volontairement limitées (voir README). À rediscuter av
 - Worktrees, submodules, tags et releases.
 
 ## Autres idées (liste du 2026-11-05, non retenues pour l'instant)
-Logs de conteneur en direct, erreurs Docker avec délai d'expiration, démarrage automatique de l'app, alertes sur l'accueil, recherche globale, export du journal, notifications, sauvegarde/export de la configuration, dépendances cargo/go/pip, comparaison `.env.example`/`.env`, budgets Claude.
+Erreurs Docker avec délai d'expiration, dépendances cargo/go/pip, comparaison `.env.example`/`.env`, budgets Claude.
