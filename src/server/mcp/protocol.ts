@@ -34,7 +34,7 @@ export async function handleMcpMessage<Context>(message: unknown, tools: McpTool
         capabilities: { tools: {} },
         serverInfo: { name: "project-manager", version: "1.0.0" },
         instructions:
-          "What PROject knows about the local projects, from outside any single folder: containers, addresses, ports, stored analyses, the user's status and notes, database structure. Read-only. Never holds environment values or database rows.",
+          "What PROJect knows about the local projects, from outside any single folder: containers, addresses, ports, stored analyses, the user's status and notes, database structure. Read-only. Never holds environment values or database rows.",
       });
     case "ping":
       return reply(id, {});

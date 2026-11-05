@@ -1,16 +1,14 @@
-/** App logo (same drawing as icon.svg) and wordmark: PRO in the accent colour, the rest in ink. */
+/** App logo (same drawing as icon.svg) and wordmark: PRO in the accent colour, Ject in ink. */
 export function Logo({ className = "size-6" }: { className?: string }) {
+  // A P whose stem turns into a J, for the PROJ of the name, and the block of a project beside it.
+  // Drawn in the page's background colour: dark on the light violet, white on the deep one.
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
-      <rect width="32" height="32" rx="7" className="fill-accent" />
-      <path
-        d="M10.5 25V7.5h7a4.75 4.75 0 0 1 0 9.5h-7"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="4"
-        strokeLinejoin="round"
-      />
-      <rect x="19" y="19" width="6.5" height="6.5" rx="1.2" fill="#fff" fillOpacity="0.7" />
+      <rect width="32" height="32" rx="4" className="fill-accent" />
+      <g transform="translate(1.5 0)" className="stroke-bg">
+        <path d="M14 7h5a5 5 0 0 1 0 10h-5M14 7v14a4.5 4.5 0 0 1-9 0" fill="none" strokeWidth="4" strokeLinejoin="miter" />
+        <rect x="20.5" y="21" width="5" height="5" stroke="none" className="fill-bg" fillOpacity="0.6" />
+      </g>
     </svg>
   );
 }
@@ -19,7 +17,7 @@ export function Wordmark() {
   return (
     <span className="font-bold tracking-tight">
       <span className="text-accent">PRO</span>
-      <span className="text-ink">ject</span>
+      <span className="text-ink">Ject</span>
     </span>
   );
 }

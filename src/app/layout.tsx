@@ -25,7 +25,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PROject",
+  title: "PROJect",
   description: "See and organize the projects on this machine",
 };
 
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <FlashProvider>
               <DumpActivityProvider>
               <header className="site-header flex min-h-12 flex-wrap items-center gap-x-5 px-4">
-                <Link href="/" aria-label="PROject" className="inline-flex items-center gap-2 text-[15px]">
+                <Link href="/" aria-label="PROJect" className="inline-flex items-center gap-2 text-[15px]">
                   <Logo />
                   <Wordmark />
                 </Link>

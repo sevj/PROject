@@ -1,4 +1,4 @@
-# PROject
+# PROJect
 
 Application locale pour visualiser et organiser les projets qu'on y ajoute : état git, Docker, taille, documentation et variables d'environnement, avec un classement par tags, statut et notes. Elle réunit aussi ce qui sert autour : bases de données, consoles, serveurs distants, VPN et outils du quotidien.
 
