@@ -10,7 +10,13 @@ export type Section = {
 
 /** The menu: a section with several pages shows them as tabs. */
 export const SECTIONS: Section[] = [
-  { label: "projects", pages: [{ href: "/", label: "projects" }] },
+  {
+    label: "projects",
+    pages: [
+      { href: "/", label: "projects" },
+      { href: "/versions", label: "versions" },
+    ],
+  },
   {
     label: "databases",
     pages: [

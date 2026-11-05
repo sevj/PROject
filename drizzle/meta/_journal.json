@@ -155,6 +155,13 @@
       "when": 1793915069264,
       "tag": "0021_vpn_routes",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1793919139191,
+      "tag": "0022_eol_releases",
+      "breakpoints": true
     }
   ]
 }

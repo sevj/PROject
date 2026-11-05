@@ -6,6 +6,7 @@ import { getRegistry } from "@/server/registry";
 import { isSizing } from "@/server/scan/jobs";
 import { LoadingFallback } from "./loading-fallback";
 import { RegistryView } from "./registry-view";
+import { SectionTabs } from "./section-tabs";
 
 async function Registry() {
   await connection();
@@ -24,8 +25,11 @@ async function Registry() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      <Registry />
-    </Suspense>
+    <>
+      <SectionTabs />
+      <Suspense fallback={<LoadingFallback />}>
+        <Registry />
+      </Suspense>
+    </>
   );
 }

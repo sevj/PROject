@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { ENGINES } from "../../lib/db-engines";
 import type { CommandAlias } from "../../lib/aliases";
 import type { JournalConfig } from "../../lib/journal";
+import type { Release } from "../../lib/versions";
 import {
   type AnySQLiteColumn,
   index,
@@ -378,3 +379,10 @@ export const environmentAccesses = sqliteTable(
   },
   (table) => [index("environment_accesses_environment").on(table.environmentId)],
 );
+
+/** The release lines of a product, as endoflife.date gave them, and when: read again after a day, or on demand. */
+export const eolReleases = sqliteTable("eol_releases", {
+  product: text("product").primaryKey(),
+  releases: text("releases", { mode: "json" }).$type<Release[]>().notNull(),
+  fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+});
