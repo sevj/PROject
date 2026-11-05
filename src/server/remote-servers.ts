@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -35,8 +34,12 @@ import {
   workloadSelector,
 } from "@/lib/remote-servers";
 import type { Db } from "./db/client";
-import { environmentAccesses, type EnvironmentUrl, projectEnvironments, projects, projectMeta, remoteServers } from "./db/schema";
+import { environmentAccesses, type EnvironmentUrl, projectEnvironments, projects, projectMeta, remoteServers, vpns } from "./db/schema";
+import { type CommandRunner, runCommand } from "./run-command";
 import { decryptSecret, encryptSecret } from "./secrets";
+import { downVpnName } from "./vpn";
+
+export { type CommandRunner, runCommand } from "./run-command";
 
 export type ServerKind = "ssh" | "kubernetes";
 
@@ -50,6 +53,7 @@ export type ServerInput = {
   keyPath: string | null;
   jumpHost: string | null;
   context: string | null;
+  vpnId?: number | null;
 };
 
 /** What leaves the server. The password stays behind: only whether one is kept. */
@@ -92,7 +96,8 @@ export type Problem =
   | "containerInvalid"
   | "environmentMissing"
   | "accessMissing"
-  | "projectMissing";
+  | "projectMissing"
+  | "vpnMissing";
 
 export type Saved = { id: number } | { problem: Problem };
 
@@ -155,6 +160,7 @@ export function listServers(db: Db): ServerView[] {
         keyPath: server.keyPath,
         jumpHost: server.jumpHost,
         context: server.context,
+        vpnId: server.vpnId,
         hasPassword: server.passwordSecret !== null,
         usedBy: usage
           .filter(({ serverId, projectId, environment }) => {
@@ -171,6 +177,9 @@ export function listServers(db: Db): ServerView[] {
 export function saveServer(db: Db, id: number | null, raw: ServerInput): Saved {
   const input = readServerInput(raw);
   if (typeof input === "string") return { problem: input };
+  const vpnId = raw.vpnId ?? null;
+  if (vpnId !== null && !db.select({ id: vpns.id }).from(vpns).where(eq(vpns.id, vpnId)).get()) return { problem: "vpnMissing" };
+  input.vpnId = vpnId;
   const taken = db.select({ id: remoteServers.id }).from(remoteServers).where(eq(remoteServers.name, input.name)).get();
   if (taken && taken.id !== id) return { problem: "nameTaken" };
   if (id === null) return { id: db.insert(remoteServers).values(input).returning({ id: remoteServers.id }).get().id };
@@ -316,42 +325,6 @@ export function deleteAccess(db: Db, projectId: number, environmentId: number, i
 
 export type Suggestions = { aliases: string[]; keys: string[]; contexts: string[] };
 
-export type Ran = { code: number | null; stdout: string; stderr: string; notInstalled: boolean };
-export type CommandRunner = (command: string, args: string[], password?: string) => Promise<Ran>;
-
-const TEST_TIMEOUT_MS = 20_000;
-/** Enough for the pods of a whole namespace as JSON: cut, they could not be read at all. */
-const OUTPUT_LIMIT = 16 * 1024 * 1024;
-
-/**
- * `sshpass -d 3` reads the password from a pipe of its own: on a command line or in the
- * environment, `ps` or /proc would show it. Nothing can be typed in: stdin is closed.
- */
-export const runCommand: CommandRunner = (command, args, password) =>
-  new Promise((resolve) => {
-    const child = spawn(command, args, {
-      stdio: password === undefined ? ["ignore", "pipe", "pipe"] : ["ignore", "pipe", "pipe", "pipe"],
-      timeout: TEST_TIMEOUT_MS,
-      env: { ...process.env, LC_ALL: "C" },
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.on("data", (chunk: Buffer) => { stdout = (stdout + chunk.toString()).slice(-OUTPUT_LIMIT); });
-    child.stderr?.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-OUTPUT_LIMIT); });
-    if (password !== undefined) {
-      const pipe = child.stdio[3] as NodeJS.WritableStream;
-      // The child may be gone before it reads: its exit code tells more than this error.
-      pipe.on("error", () => undefined);
-      pipe.end(`${password}\n`);
-    }
-    let notInstalled = false;
-    child.once("error", (error: NodeJS.ErrnoException) => {
-      notInstalled = error.code === "ENOENT";
-      if (notInstalled) resolve({ code: 127, stdout, stderr, notInstalled });
-    });
-    child.once("close", (code, signal) => resolve({ code: signal ? null : code, stdout, stderr, notInstalled }));
-  });
-
 export async function readSuggestions(run: CommandRunner = runCommand, home = homedir()): Promise<Suggestions> {
   const sshDir = join(home, ".ssh");
   const [config, files, contexts] = await Promise.all([
@@ -419,6 +392,9 @@ export async function testConnection(db: Db, request: TestRequest, run: CommandR
       .get();
     if (!access) return { ok: false, failure: "gone", detail: "" };
   }
+  // Without it the server only times out, which says nothing.
+  const down = await downVpnName(db, server.vpnId, run);
+  if (down) return { ok: false, failure: "vpnDown", detail: down };
 
   if (server.kind === "kubernetes") {
     const context = server.context ?? "";

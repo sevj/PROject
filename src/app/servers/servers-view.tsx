@@ -10,6 +10,8 @@ import { useFlash } from "../flash";
 import { PlusIcon } from "../icons";
 import { useConfirm } from "../modal";
 import { ServerFormModal } from "../server-form";
+import { VpnBadge } from "../vpn/vpn-controls";
+import type { VpnView } from "@/server/vpn";
 import { BADGE, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, DATA, LINK, SECTION_TITLE } from "../ui";
 
 export function serverSummary(server: ServerView): string {
@@ -18,7 +20,7 @@ export function serverSummary(server: ServerView): string {
   return `${server.username ? `${server.username}@` : ""}${server.host}${server.port ? `:${server.port}` : ""}${server.jumpHost ? ` via ${server.jumpHost}` : ""}`;
 }
 
-function ServerRow({ server, suggestions }: { server: ServerView; suggestions: Suggestions }) {
+function ServerRow({ server, suggestions, vpns }: { server: ServerView; suggestions: Suggestions; vpns: VpnView[] }) {
   const m = useMessages().servers;
   const flash = useFlash();
   const [editing, setEditing] = useState(false);
@@ -49,6 +51,7 @@ function ServerRow({ server, suggestions }: { server: ServerView; suggestions: S
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <VpnBadge vpnId={server.vpnId ?? null} vpns={vpns} />
           <TestButton serverId={server.id} serverName={server.name} />
           {server.hasPassword ? (
             <button type="button" disabled={pending} onClick={() => start(() => forgetServerPassword(server.id))} className={BUTTON_SMALL}>
@@ -78,13 +81,13 @@ function ServerRow({ server, suggestions }: { server: ServerView; suggestions: S
           ))}
         </p>
       ) : null}
-      {editing ? <ServerFormModal server={server} suggestions={suggestions} onClose={() => setEditing(false)} /> : null}
+      {editing ? <ServerFormModal server={server} suggestions={suggestions} vpns={vpns} onClose={() => setEditing(false)} /> : null}
       {confirmation}
     </li>
   );
 }
 
-export function ServersView({ servers, suggestions }: { servers: ServerView[]; suggestions: Suggestions }) {
+export function ServersView({ servers, suggestions, vpns }: { servers: ServerView[]; suggestions: Suggestions; vpns: VpnView[] }) {
   const m = useMessages().servers;
   const [adding, setAdding] = useState(false);
   return (
@@ -100,10 +103,10 @@ export function ServersView({ servers, suggestions }: { servers: ServerView[]; s
       {servers.length === 0 ? <p className="pt-3 text-mut">{m.none}</p> : null}
       <ul className="mt-2">
         {servers.map((server) => (
-          <ServerRow key={server.id} server={server} suggestions={suggestions} />
+          <ServerRow key={server.id} server={server} suggestions={suggestions} vpns={vpns} />
         ))}
       </ul>
-      {adding ? <ServerFormModal server={null} suggestions={suggestions} onClose={() => setAdding(false)} /> : null}
+      {adding ? <ServerFormModal server={null} suggestions={suggestions} vpns={vpns} onClose={() => setAdding(false)} /> : null}
     </section>
   );
 }

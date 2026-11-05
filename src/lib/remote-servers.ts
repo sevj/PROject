@@ -103,6 +103,7 @@ export type TestFailure =
   | "ambiguousTarget"
   | "containerMissing"
   | "timeout"
+  | "vpnDown"
   | "gone"
   | "unknown";
 

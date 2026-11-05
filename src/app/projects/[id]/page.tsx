@@ -20,6 +20,7 @@ import { serverMessages } from "@/server/i18n";
 import { listProjectFolder, readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
 import { listEnvironments, listServers, readSuggestions } from "@/server/remote-servers";
+import { listVpns } from "@/server/vpn";
 import { readGitDetails, readRecentCommits } from "@/server/scan/git";
 import { ClaudeConsoleButton } from "../../claude-console-button";
 import { LoadingFallback } from "../../loading-fallback";
@@ -295,6 +296,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               environments={listEnvironments(getDb(), projectId)}
               servers={listServers(getDb())}
               suggestions={await readSuggestions()}
+              vpns={await listVpns(getDb())}
               readOnly={row.abandoned}
             />
           ) : null}

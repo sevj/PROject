@@ -9,6 +9,7 @@ import { DumpActivityProvider } from "./dump-activity";
 import { FlashProvider } from "./flash";
 import { LocaleBoundary } from "./locale-boundary";
 import { NavLinks } from "./nav-links";
+import { VpnTopbar } from "./vpn/vpn-topbar";
 import "./globals.css";
 
 const schibsted = Schibsted_Grotesk({
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <Suspense>
                   <NavLinks />
                 </Suspense>
+                <VpnTopbar />
               </header>
               <ClaudeConsolesProvider>{children}</ClaudeConsolesProvider>
               </DumpActivityProvider>

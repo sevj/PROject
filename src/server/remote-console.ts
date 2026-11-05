@@ -5,8 +5,9 @@ import type { Db } from "./db/client";
 import { environmentAccesses, projectEnvironments, projects, remoteServers } from "./db/schema";
 import { type CommandRunner, resolveKubePod, runCommand } from "./remote-servers";
 import { decryptSecret } from "./secrets";
+import { downVpnName } from "./vpn";
 
-export type RemoteCommand = { program: "ssh" | "kubectl"; args: string[]; password?: string };
+export type RemoteCommand = { program: "ssh" | "kubectl" | "nordlayer"; args: string[]; password?: string };
 
 export type ConsoleFailure = TestFailure | "notConfirmed" | "noTarget";
 
@@ -37,6 +38,8 @@ export async function prepareRemoteConsole(
   if (!found || found.abandoned) return failed("gone");
   const { access, environment, server } = found;
   if (environment.protected && !confirmed) return failed("notConfirmed");
+  const down = await downVpnName(db, server.vpnId, run);
+  if (down) return failed("vpnDown", down);
 
   if (server.kind === "kubernetes") {
     if (!access.target) return failed("noTarget");

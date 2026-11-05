@@ -127,6 +127,20 @@
       "when": 1793881975169,
       "tag": "0017_remote_servers",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793886622622,
+      "tag": "0018_vpns",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1793890279388,
+      "tag": "0019_vpn_sudo",
+      "breakpoints": true
     }
   ]
 }

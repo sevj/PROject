@@ -278,6 +278,32 @@ export const activitySamples = sqliteTable(
   (table) => [primaryKey({ columns: [table.projectId, table.at] })],
 );
 
+export const VPN_KINDS = ["openvpn", "sudo_openvpn", "nordlayer"] as const;
+
+/**
+ * A VPN the user connects to from here. An OpenVPN file becomes a NetworkManager profile, which
+ * needs no sudo and outlives the app; a token is never kept.
+ */
+export const vpns = sqliteTable("vpns", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  kind: text("kind", { enum: VPN_KINDS }).notNull(),
+  /** OpenVPN: the file it was made from. */
+  configPath: text("config_path"),
+  /** OpenVPN: the profile in NetworkManager. */
+  connectionUuid: text("connection_uuid"),
+  username: text("username"),
+  /** Encrypted by `src/server/secrets.ts`. */
+  passwordSecret: text("password_secret"),
+  /** The server expects the password followed by a token from the phone. */
+  tokenAppended: integer("token_appended", { mode: "boolean" }).notNull().default(false),
+  /** With sudo: names its files, and stays when the VPN is renamed, since the sudo rule holds it. */
+  sudoSlug: text("sudo_slug"),
+  /** NordLayer: what `nordlayer connect` takes. */
+  gateway: text("gateway"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+});
+
 export const SERVER_KINDS = ["ssh", "kubernetes"] as const;
 export const SSH_AUTHS = ["alias", "agent", "key", "password"] as const;
 
@@ -303,6 +329,8 @@ export const remoteServers = sqliteTable("remote_servers", {
   context: text("context"),
   /** Encrypted by `src/server/secrets.ts`. Null means it is asked at each connection. */
   passwordSecret: text("password_secret"),
+  /** Out of reach without it. */
+  vpnId: integer("vpn_id").references(() => vpns.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
 });
 

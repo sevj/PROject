@@ -9,6 +9,8 @@ import { TestButton } from "../../connection-test";
 import { openRemoteConsole, removeAccess, removeEnvironment, submitAccess, submitEnvironment } from "../../environment-actions";
 import { CloseIcon, OpenIcon, PlusIcon } from "../../icons";
 import { Modal, useConfirm } from "../../modal";
+import { VpnBadge } from "../../vpn/vpn-controls";
+import type { VpnView } from "@/server/vpn";
 import { TerminalPanel } from "./terminal-panel";
 import { FormField, ServerFormModal } from "../../server-form";
 import { BADGE, BADGE_ALERT, BUTTON, BUTTON_ICON, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, LINK, SECTION_TITLE } from "../../ui";
@@ -111,6 +113,7 @@ function AccessFormModal({
   access,
   servers,
   suggestions,
+  vpns,
   onClose,
 }: {
   projectId: number;
@@ -118,6 +121,7 @@ function AccessFormModal({
   access: AccessView | null;
   servers: ServerView[];
   suggestions: Suggestions;
+  vpns: VpnView[];
   onClose: () => void;
 }) {
   const messages = useMessages();
@@ -192,7 +196,7 @@ function AccessFormModal({
           <button type="button" onClick={onClose} className={BUTTON}>{messages.common.cancel}</button>
         </div>
       </form>
-      {addingServer ? <ServerFormModal server={null} suggestions={suggestions} onClose={() => setAddingServer(false)} onSaved={setServerId} /> : null}
+      {addingServer ? <ServerFormModal server={null} suggestions={suggestions} vpns={vpns} onClose={() => setAddingServer(false)} onSaved={setServerId} /> : null}
     </Modal>
   );
 }
@@ -201,12 +205,13 @@ function accessSummary({ serverKind, path, namespace, target, container }: Acces
   return (serverKind === "ssh" ? [path] : [namespace, target, container]).filter(Boolean).join(" / ");
 }
 
-function AccessRow({ projectId, environment, access, servers, suggestions, readOnly }: {
+function AccessRow({ projectId, environment, access, servers, suggestions, vpns, readOnly }: {
   projectId: number;
   environment: EnvironmentView;
   access: AccessView;
   servers: ServerView[];
   suggestions: Suggestions;
+  vpns: VpnView[];
   readOnly: boolean;
 }) {
   const messages = useMessages();
@@ -245,6 +250,7 @@ function AccessRow({ projectId, environment, access, servers, suggestions, readO
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <VpnBadge vpnId={servers.find(({ id }) => id === access.serverId)?.vpnId ?? null} vpns={vpns} />
         {canOpen ? (
           <button type="button" onClick={askConsole} className={BUTTON_SMALL}>{m.console}</button>
         ) : null}
@@ -280,18 +286,19 @@ function AccessRow({ projectId, environment, access, servers, suggestions, readO
         />
       ) : null}
       {editing ? (
-        <AccessFormModal projectId={projectId} environmentId={environmentId} access={access} servers={servers} suggestions={suggestions} onClose={() => setEditing(false)} />
+        <AccessFormModal projectId={projectId} environmentId={environmentId} access={access} servers={servers} suggestions={suggestions} vpns={vpns} onClose={() => setEditing(false)} />
       ) : null}
       {confirmation}
     </li>
   );
 }
 
-function EnvironmentCard({ projectId, environment, servers, suggestions, readOnly }: {
+function EnvironmentCard({ projectId, environment, servers, suggestions, vpns, readOnly }: {
   projectId: number;
   environment: EnvironmentView;
   servers: ServerView[];
   suggestions: Suggestions;
+  vpns: VpnView[];
   readOnly: boolean;
 }) {
   const m = useMessages().environments;
@@ -346,7 +353,7 @@ function EnvironmentCard({ projectId, environment, servers, suggestions, readOnl
       {environment.accesses.length > 0 ? (
         <ul className="mt-2">
           {environment.accesses.map((access) => (
-            <AccessRow key={access.id} projectId={projectId} environment={environment} access={access} servers={servers} suggestions={suggestions} readOnly={readOnly} />
+            <AccessRow key={access.id} projectId={projectId} environment={environment} access={access} servers={servers} suggestions={suggestions} vpns={vpns} readOnly={readOnly} />
           ))}
         </ul>
       ) : null}
@@ -354,18 +361,19 @@ function EnvironmentCard({ projectId, environment, servers, suggestions, readOnl
 
       {editing ? <EnvironmentFormModal projectId={projectId} environment={environment} onClose={() => setEditing(false)} /> : null}
       {addingAccess ? (
-        <AccessFormModal projectId={projectId} environmentId={environment.id} access={null} servers={servers} suggestions={suggestions} onClose={() => setAddingAccess(false)} />
+        <AccessFormModal projectId={projectId} environmentId={environment.id} access={null} servers={servers} suggestions={suggestions} vpns={vpns} onClose={() => setAddingAccess(false)} />
       ) : null}
       {confirmation}
     </section>
   );
 }
 
-export function EnvironmentsTab({ projectId, environments, servers, suggestions, readOnly }: {
+export function EnvironmentsTab({ projectId, environments, servers, suggestions, vpns, readOnly }: {
   projectId: number;
   environments: EnvironmentView[];
   servers: ServerView[];
   suggestions: Suggestions;
+  vpns: VpnView[];
   readOnly: boolean;
 }) {
   const m = useMessages().environments;
@@ -388,7 +396,7 @@ export function EnvironmentsTab({ projectId, environments, servers, suggestions,
         {environments.length === 0 ? <p className="pt-3 text-mut">{m.none}</p> : null}
       </div>
       {environments.map((environment) => (
-        <EnvironmentCard key={environment.id} projectId={projectId} environment={environment} servers={servers} suggestions={suggestions} readOnly={readOnly} />
+        <EnvironmentCard key={environment.id} projectId={projectId} environment={environment} servers={servers} suggestions={suggestions} vpns={vpns} readOnly={readOnly} />
       ))}
       {adding ? <EnvironmentFormModal projectId={projectId} environment={null} onClose={() => setAdding(false)} /> : null}
     </div>

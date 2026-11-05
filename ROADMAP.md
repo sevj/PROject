@@ -71,6 +71,7 @@ Dans l'ordre. Rien n'écrit dans un projet sans bouton explicite.
 - [x] MCP de l'app en lecture seule pour ses consoles Claude : projets, conteneurs, ports, analyses, structure des bases. (ni valeurs `.env`, ni lignes de base)
 - [x] Serveurs distants : catalogue partagé (SSH, Kubernetes), environnements par projet avec adresses et accès, test de connexion sur demande. (mots de passe demandés, ou chiffrés si tu choisis de les mémoriser)
 - [x] Serveurs distants : ouvrir une console SSH ou kubectl dans l'app, avec confirmation sur un environnement protégé. (se ferme avec la page, comme une console Docker ; un Deployment n'ouvre que sur un pod qui lui appartient)
+- [x] VPN : OpenVPN par NetworkManager et NordLayer, connexion en un clic avec token éventuel, VPN requis par serveur. (jamais connecté tout seul)
 - [ ] Serveurs distants : logs, état des pods, version déployée.
 
 ## Écarté (review du 2026-11-05)

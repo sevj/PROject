@@ -5,6 +5,7 @@ import { type FormEvent, type ReactNode, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import type { SshAuth } from "@/lib/remote-servers";
 import type { ServerInput, ServerKind, ServerView, Suggestions } from "@/server/remote-servers";
+import type { VpnView } from "@/server/vpn";
 import { submitServer } from "./environment-actions";
 import { useFlash } from "./flash";
 import { Modal } from "./modal";
@@ -38,9 +39,11 @@ export function ServerFormModal({
   suggestions,
   onClose,
   onSaved,
+  vpns,
 }: {
   server: ServerView | null;
   suggestions: Suggestions;
+  vpns: VpnView[];
   onClose: () => void;
   onSaved?: (id: number) => void;
 }) {
@@ -56,6 +59,7 @@ export function ServerFormModal({
   const [jumpHost, setJumpHost] = useState(server?.jumpHost ?? "");
   const [context, setContext] = useState(server?.context ?? "");
   const [password, setPassword] = useState("");
+  const [vpnId, setVpnId] = useState(server?.vpnId ?? null);
   const flash = useFlash();
   const router = useRouter();
   const [problem, setProblem] = useState<string | null>(null);
@@ -74,6 +78,7 @@ export function ServerFormModal({
       keyPath,
       jumpHost,
       context,
+      vpnId,
     };
     start(async () => {
       const saved = await submitServer(server?.id ?? null, input);
@@ -170,6 +175,16 @@ export function ServerFormModal({
           </>
         )}
 
+        {vpns.length > 0 ? (
+          <FormField label={m.vpn}>
+            <select value={vpnId ?? ""} onChange={(event) => setVpnId(event.target.value === "" ? null : Number(event.target.value))} className={FIELD}>
+              <option value="">{m.noVpn}</option>
+              {vpns.map(({ id, name }) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+          </FormField>
+        ) : null}
         {problem ? <p role="alert" className="text-alert">{problem}</p> : null}
         <div className="mt-1 flex flex-wrap gap-2">
           <button type="submit" disabled={pending} className={BUTTON_PRIMARY}>
