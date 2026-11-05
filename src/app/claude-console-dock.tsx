@@ -7,6 +7,7 @@ import type { StateKind } from "@/lib/docker-state";
 import type { OpenConsole } from "./claude-consoles";
 import { ClaudeConsolePanel } from "./projects/[id]/claude-console-panel";
 import { StateGlyph } from "./projects/[id]/state-badge";
+import { useConfirm } from "./modal";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "./ui";
 
 function DockedConsole({
@@ -86,6 +87,7 @@ export function ClaudeConsoleDock({
   onHide,
   onNew,
   onEnd,
+  onEndAll,
   onConsole,
   onSession,
   onStatus,
@@ -99,12 +101,14 @@ export function ClaudeConsoleDock({
   onHide: () => void;
   onNew: () => void;
   onEnd: (key: number) => void;
+  onEndAll: () => void;
   onConsole: (key: number, consoleId: string) => void;
   onSession: (key: number, sessionId: string) => void;
   onStatus: (key: number, kind: StateKind) => void;
 }) {
   const m = useMessages().sheet.claudeConsole;
   const frame = useRef<HTMLElement>(null);
+  const { confirm, confirmation } = useConfirm();
 
   // The page behind stays where it is: only the terminal scrolls while the consoles are open.
   useEffect(() => {
@@ -185,6 +189,25 @@ export function ClaudeConsoleDock({
             </button>
           </div>
           {limitReached ? <span className={`${DATA} self-center text-alert`}>{m.tooMany(MAX_CLAUDE_CONSOLES)}</span> : null}
+          {consoles.length > 1 ? (
+            <button
+              type="button"
+              onClick={() =>
+                confirm({
+                  ...m.endAllConfirm(consoles.length),
+                  action: m.endAll,
+                  danger: true,
+                  onConfirm: () => {
+                    if (document.fullscreenElement) void document.exitFullscreen();
+                    onEndAll();
+                  },
+                })
+              }
+              className="shrink-0 self-center px-2 text-mut hover:text-alert"
+            >
+              {m.endAll}
+            </button>
+          ) : null}
         </div>
 
         {consoles.map((item) => (
@@ -201,6 +224,7 @@ export function ClaudeConsoleDock({
             onStatus={onStatus}
           />
         ))}
+        {confirmation}
       </section>
     </>
   );

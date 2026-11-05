@@ -1,7 +1,9 @@
 "use client";
 
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useConfirm } from "@/app/modal";
 import { usePageLock } from "@/app/use-page-lock";
+import { useMessages } from "@/i18n/provider";
 import type { StateKind } from "@/lib/docker-state";
 import { StateGlyph } from "./state-badge";
 
@@ -20,6 +22,7 @@ export function TabWindow({
   active,
   onActivate,
   onCloseTab,
+  onCloseAll,
   menu,
   children,
 }: {
@@ -31,13 +34,16 @@ export function TabWindow({
   active: number;
   onActivate: (key: number) => void;
   onCloseTab: (key: number) => void;
+  onCloseAll: () => void;
   /** What "+" offers; `done` closes the menu. */
   menu: (done: () => void) => ReactNode;
   /** One panel per tab, in the same order, each wrapped by `TabPanel`. */
   children: ReactNode;
 }) {
+  const m = useMessages().sheet.dockerWindow;
   const [adding, setAdding] = useState(false);
   const holder = useRef<HTMLDivElement>(null);
+  const { confirm, confirmation } = useConfirm();
 
   usePageLock();
 
@@ -88,6 +94,25 @@ export function TabWindow({
             );
           })}
         </div>
+        {tabs.length > 1 ? (
+          <button
+            type="button"
+            onClick={() =>
+              confirm({
+                ...m.closeAllConfirm(tabs.length),
+                action: m.closeAll,
+                danger: true,
+                onConfirm: () => {
+                  if (document.fullscreenElement) void document.exitFullscreen();
+                  onCloseAll();
+                },
+              })
+            }
+            className="shrink-0 border-l border-rule px-3 text-mut hover:text-alert"
+          >
+            {m.closeAll}
+          </button>
+        ) : null}
         <div ref={holder} className="relative flex shrink-0">
           <button
             type="button"
@@ -107,6 +132,7 @@ export function TabWindow({
         </div>
       </div>
       {children}
+      {confirmation}
     </section>
   );
 }

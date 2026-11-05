@@ -470,6 +470,8 @@ export const fr: Messages = {
       closeTab: (label) => `Fermer ${label}`,
       openLogs: "Logs",
       openLogsHint: "Les logs de ce conteneur, dans un nouvel onglet",
+      closeAll: "Tout fermer",
+      closeAllConfirm: (count) => ({ title: `Fermer les ${count} onglets ?`, body: "Leurs consoles sont coupées, comme en fermant la fenêtre." }),
     },
     dockerTab: {
       compose: { build: "Build", pull: "Pull" },
@@ -559,6 +561,8 @@ export const fr: Messages = {
       show: (count) => `Claude · ${count}`,
       endSession: "Terminer la session",
       endSessionOf: (name) => `Terminer la session ${name}`,
+      endAll: "Tout terminer",
+      endAllConfirm: (count) => ({ title: `Terminer les ${count} sessions ?`, body: "Claude s'arrête dans chacune. Leurs conversations restent, pour les reprendre plus tard." }),
       tooMany: (max) => `${max} consoles au maximum : terminez-en une pour en ouvrir une autre.`,
     },
     logs: {

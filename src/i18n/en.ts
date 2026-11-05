@@ -475,6 +475,8 @@ export const en = {
       closeTab: (label: string) => `Close ${label}`,
       openLogs: "Logs",
       openLogsHint: "The logs of this container, in a new tab",
+      closeAll: "Close all",
+      closeAllConfirm: (count: number) => ({ title: `Close the ${count} tabs?`, body: "Their consoles are cut, as when the window is closed." }),
     },
     dockerTab: {
       compose: { build: "Build", pull: "Pull" },
@@ -565,6 +567,8 @@ export const en = {
       show: (count: number) => `Claude · ${count}`,
       endSession: "End session",
       endSessionOf: (name: string) => `End the session ${name}`,
+      endAll: "End all",
+      endAllConfirm: (count: number) => ({ title: `End the ${count} sessions?`, body: "Claude stops in each of them. Their conversations stay, to be resumed later." }),
       tooMany: (max: number) => `${max} consoles at most: end one to open another.`,
     },
     logs: {

@@ -123,6 +123,15 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
+  const endAll = () => {
+    for (const item of consoles) void endClaudeConsole(item.consoleId);
+    setConsoles([]);
+    setLimitReached(false);
+    setActiveKey(null);
+    setVisible(false);
+    router.refresh();
+  };
+
   const onConsole = useCallback((key: number, consoleId: string) => {
     setConsoles((current) => current.map((item) => (item.key === key ? { ...item, consoleId } : item)));
   }, []);
@@ -154,6 +163,7 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
           }}
           onNew={() => active && open(active)}
           onEnd={end}
+          onEndAll={endAll}
           onConsole={onConsole}
           onSession={onSession}
           onStatus={onStatus}

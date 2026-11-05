@@ -56,6 +56,7 @@ export function RemoteWindow({ projectId, targets, first, onClose }: { projectId
         active={active}
         onActivate={setActive}
         onCloseTab={close}
+        onCloseAll={onClose}
         menu={(done) =>
           environments.map((environment) => (
             <div key={environment} className="grid">

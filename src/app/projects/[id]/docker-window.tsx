@@ -47,6 +47,7 @@ export function DockerWindow({ projectId, targets, first, onClose }: { projectId
       active={active}
       onActivate={setActive}
       onCloseTab={close}
+      onCloseAll={onClose}
       menu={(done) => (
         <>
           <p className={MENU_HEADING}>{m.consoles}</p>
