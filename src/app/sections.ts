@@ -21,6 +21,7 @@ export const SECTIONS: Section[] = [
   {
     label: "docker",
     pages: [
+      { href: "/docker", label: "containers" },
       { href: "/resources", label: "resources" },
       { href: "/ports", label: "ports" },
       { href: "/map", label: "map", wide: true },
