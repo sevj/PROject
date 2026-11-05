@@ -11,6 +11,7 @@ import { CloseIcon, OpenIcon, PlusIcon } from "../../icons";
 import { Modal, useConfirm } from "../../modal";
 import { VpnBadge } from "../../vpn/vpn-controls";
 import type { VpnView } from "@/server/vpn";
+import { ConfigShare } from "./config-share";
 import { type RemoteTarget, RemoteWindow } from "./remote-window";
 import { FormField, ServerFormModal } from "../../server-form";
 import { BADGE, BADGE_ALERT, BUTTON, BUTTON_ICON, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, LINK, SECTION_TITLE } from "../../ui";
@@ -391,12 +392,15 @@ export function EnvironmentsTab({ projectId, environments, servers, suggestions,
         <p className="pt-1 pb-3 text-[12px] text-mut">
           {m.hint} <Link href="/servers" className={LINK}>{m.catalogue}</Link>
         </p>
-        {readOnly ? null : (
-          <button type="button" onClick={() => setAdding(true)} className={BUTTON_PRIMARY}>
-            <PlusIcon />
-            {m.add}
-          </button>
-        )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {readOnly ? <span /> : (
+            <button type="button" onClick={() => setAdding(true)} className={BUTTON_PRIMARY}>
+              <PlusIcon />
+              {m.add}
+            </button>
+          )}
+          <ConfigShare projectId={projectId} readOnly={readOnly} />
+        </div>
         {environments.length === 0 ? <p className="pt-3 text-mut">{m.none}</p> : null}
       </div>
       {environments.map((environment) => (
