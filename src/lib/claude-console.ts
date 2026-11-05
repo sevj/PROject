@@ -22,7 +22,18 @@ export function sessionHookSettings(file: string): string {
   });
 }
 
-/** A browser tab holds no more than the console server takes. */
+export type ClaudeConsoleGrant = { port: number; token: string; sessionId: string; consoleId: string };
+
+/** A console the server is keeping, whichever page opened it. */
+export type RunningClaudeConsole = {
+  consoleId: string;
+  projectId: number;
+  projectName: string;
+  sessionId: string;
+  startedAt: number;
+};
+
+/** No more than the console server takes, all pages together. */
 export const MAX_CLAUDE_CONSOLES = 8;
 
 /**
@@ -42,6 +53,8 @@ const OF_THE_SERVER_EXACT = new Set([
   // Started from inside a Claude session, the app must not make this one look nested.
   "CLAUDECODE",
   "CLAUDE_CODE_ENTRYPOINT",
+  // It would turn off the transcripts, which resuming a conversation and the costs depend on.
+  "CLAUDE_CODE_CHILD_SESSION",
 ]);
 
 export function claudeEnvironment(from: Record<string, string | undefined>): Record<string, string> {

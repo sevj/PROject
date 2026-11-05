@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Messages } from "@/i18n";
 import { classify, countStates, STATE_ORDER, type StateKind, TONE } from "@/lib/docker-state";
 import { formatAge, type RegistryRow } from "@/lib/registry";
+import type { ComposeJob } from "@/server/compose-jobs";
 import type { ContainerDetail, ProjectContainers } from "@/server/docker-containers";
 import type { DockerStack } from "@/server/docker-stack";
 import { CARD, DATA, LINK, SECTION_TITLE } from "../../ui";
@@ -241,6 +242,7 @@ export function DockerTab({
   stack,
   dumps,
   jobs,
+  composeJob,
   messages,
 }: {
   row: RegistryRow;
@@ -250,6 +252,7 @@ export function DockerTab({
   stack: DockerStack | null;
   dumps: DumpRow[];
   jobs: JobView[];
+  composeJob: ComposeJob | null;
   messages: Messages;
 }) {
   const m = messages.sheet.dockerTab;
@@ -273,6 +276,8 @@ export function DockerTab({
             running={running}
             total={containers.length}
             canCreate={error === null && ((stack?.components.length ?? 0) > 0 || row.hasCompose)}
+            hasCompose={error === null && row.hasCompose}
+            composeJob={composeJob}
           />
         </div>
         {containers.length > 0 ? (

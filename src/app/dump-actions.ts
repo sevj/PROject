@@ -6,7 +6,7 @@ import { getDb } from "@/server/db/client";
 import { type DatabaseTarget, listDatabaseContainers, publicTarget } from "@/server/dumps/containers";
 import { runQuick } from "@/server/dumps/docker-run";
 import { type CredentialOverride, listDatabasesCommand, parseDatabases, readCredentials } from "@/server/dumps/engines";
-import { cancelJob, dismissJob, type JobError, listJobs, startDump, startRestore } from "@/server/dumps/jobs";
+import { cancelJob, dismissJob, type JobError, listJobs, startDump, startRestore, startRestoreAfterDump } from "@/server/dumps/jobs";
 import { getDump, removeDump, setDumpNote, stashDir } from "@/server/dumps/store";
 import { serverMessages } from "@/server/i18n";
 
@@ -92,6 +92,8 @@ export async function startLoadJob(input: {
   containerId: string;
   database: string | null;
   confirmed: boolean;
+  /** Dump what is there first, and load only if that worked. */
+  keepCopy?: boolean;
   login?: Login;
 }): Promise<{ jobId: string } | { error: string }> {
   const db = getDb();
@@ -107,12 +109,12 @@ export async function startLoadJob(input: {
   // A dump of every database can only be loaded as it is, and one database into one.
   if ((dump.database === null) !== (database === null)) return { error: m.invalidDatabase };
 
-  const result = startRestore({
-    dump,
-    target: { id: container.id, name: container.name, engine: container.engine, projectId: container.projectId, projectName: container.projectName, info: container.info },
-    database,
-    override: cleanLogin(input.login),
-  });
+  const target = { id: container.id, name: container.name, engine: container.engine, projectId: container.projectId, projectName: container.projectName, info: container.info };
+  const override = cleanLogin(input.login);
+  const result =
+    input.keepCopy === true
+      ? startRestoreAfterDump(db, { dump, target, database, override, note: serverMessages(db).dumps.keptBeforeLoading(dump.fileName) })
+      : startRestore({ dump, target, database, override });
   return "error" in result ? { error: jobMessage(result.error, m) } : result;
 }
 

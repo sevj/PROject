@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import {
   countTags,
@@ -20,7 +20,8 @@ import {
   STATUSES,
 } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
-import { markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
+import type { BulkJob } from "@/server/bulk-jobs";
+import { analyzeAllProjects, fetchAllProjects, markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
 import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ClassificationEditor } from "./classification-editor";
 import { DependencyMark } from "./dependency-mark";
@@ -464,6 +465,7 @@ export function RegistryView({
   lastScan,
   now,
   sizing,
+  bulk,
   knownTags,
 }: {
   rows: RegistryRow[];
@@ -471,6 +473,7 @@ export function RegistryView({
   lastScan: { status: string; at: number; error: string | null; warning: string | null } | null;
   now: number;
   sizing: boolean;
+  bulk: BulkJob | null;
 }) {
   const messages = useMessages();
   const m = messages.registry;
@@ -486,6 +489,8 @@ export function RegistryView({
   const [adding, setAdding] = useState(false);
   const flash = useFlash();
   const [refreshing, startRefresh] = useTransition();
+  const [bulkRequested, startBulkRequest] = useTransition();
+  const bulkBusy = bulkRequested || bulk?.running === true;
 
   const refresh = () => {
     startRefresh(async () => {
@@ -493,6 +498,29 @@ export function RegistryView({
       if (failure) flash("error", m.refreshFailed(failure));
     });
   };
+
+  const startBulk = (start: () => Promise<boolean>) => {
+    startBulkRequest(async () => {
+      if (!(await start())) flash("error", m.bulkBusy);
+      router.refresh();
+    });
+  };
+
+  // Told once, by the page that saw it running: not by every page opened afterwards.
+  const followedJob = useRef<number | null>(null);
+  useEffect(() => {
+    if (!bulk) return;
+    if (bulk.running) {
+      followedJob.current = bulk.id;
+      const timer = setInterval(() => router.refresh(), 2000);
+      return () => clearInterval(timer);
+    }
+    if (followedJob.current !== bulk.id) return;
+    followedJob.current = null;
+    const failures = bulk.failures.map(({ name, message }) => `${name} : ${message.split("\n")[0]}`).join(" · ");
+    if (failures) flash("error", m.bulkFailed(bulk.kind, bulk.failures.length, bulk.total, failures));
+    else flash("success", m.bulkDone(bulk.kind, bulk.total));
+  }, [bulk, router, flash, m]);
 
   // Sizes arrive after the facts: new values appear as they are measured.
   useEffect(() => {
@@ -669,7 +697,9 @@ export function RegistryView({
 
         <div className="flex items-center gap-3">
           <span className={`${DATA} text-mut`} role="status">
-            {refreshing
+            {bulk?.running
+              ? m.bulkRunning(bulk.kind, bulk.done, bulk.total)
+              : refreshing
               ? m.refreshing
               : sizing
                 ? m.sizing
@@ -679,6 +709,12 @@ export function RegistryView({
           </span>
           <button type="button" onClick={refresh} disabled={refreshing || rows.length === 0} className={BUTTON}>
             {m.refresh}
+          </button>
+          <button type="button" onClick={() => startBulk(fetchAllProjects)} disabled={bulkBusy || rows.length === 0} title={m.fetchAllHint} className={BUTTON}>
+            {m.fetchAll}
+          </button>
+          <button type="button" onClick={() => startBulk(analyzeAllProjects)} disabled={bulkBusy || rows.length === 0} title={m.analyzeAllHint} className={BUTTON}>
+            {m.analyzeAll}
           </button>
           <button
             type="button"

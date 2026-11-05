@@ -329,7 +329,14 @@ async function runRestore(entry: Live, dump: DumpRecord, root: string, target: J
 
 export function startDump(
   db: Db,
-  input: { target: JobTarget; database: string | null; note?: string | null; override?: CredentialOverride; root?: string },
+  input: {
+    target: JobTarget;
+    database: string | null;
+    note?: string | null;
+    override?: CredentialOverride;
+    root?: string;
+    onFinished?: (job: JobView) => void;
+  },
 ): { jobId: string } | { error: JobError } {
   const { target, database } = input;
   if (database !== null && !isValidDatabaseName(database)) return { error: "invalidDatabase" };
@@ -357,7 +364,7 @@ export function startDump(
     target,
     dumpCommand(target.engine, credentials, database),
     estimateCommand(target.engine, credentials, database),
-  );
+  ).then(() => input.onFinished?.(entry.job));
   return { jobId: entry.job.id };
 }
 
@@ -384,4 +391,32 @@ export function startRestore(
     database === null ? null : ensureDatabaseCommand(target.engine, credentials, database),
   );
   return { jobId: entry.job.id };
+}
+
+/**
+ * Loading replaces what is there, with no way back: this keeps a copy first, and loads nothing
+ * unless the copy was made. The job shown is the dump, then the load in its own right.
+ */
+export function startRestoreAfterDump(
+  db: Db,
+  input: { dump: DumpRecord; target: JobTarget; database: string | null; note: string; override?: CredentialOverride; root?: string },
+): { jobId: string } | { error: JobError } {
+  const { dump, target, database, note, override, root } = input;
+  if (dump.status !== "done") return { error: "notFinished" };
+  if (!dumpPath(root ?? stashDir(), dump.fileName)) return { error: "fileMissing" };
+  return startDump(db, {
+    target,
+    database,
+    note,
+    override,
+    root,
+    onFinished: (safety) => {
+      if (safety.status !== "done") {
+        safety.detail = "Nothing was loaded: this copy of the database could not be made.";
+        return;
+      }
+      const started = startRestore({ dump, target, database, override, root });
+      if ("error" in started) safety.detail = `The dump was not loaded: ${started.error}.`;
+    },
+  });
 }

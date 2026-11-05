@@ -13,9 +13,12 @@ export function ClaudeConsolePanel({
   projectId,
   projectName,
   resumeId,
+  consoleId,
+  since,
   shown,
   frame,
   controls,
+  onConsole,
   onSession,
   onStatusChange,
   onClose,
@@ -23,9 +26,13 @@ export function ClaudeConsolePanel({
   projectId: number;
   projectName: string;
   resumeId?: string;
+  /** Set when this console was already running on the server: it is joined, not started. */
+  consoleId?: string;
+  since?: number;
   shown: boolean;
   frame: RefObject<HTMLElement | null>;
   controls: React.ReactNode;
+  onConsole: (consoleId: string) => void;
   onSession: (sessionId: string) => void;
   onStatusChange: (kind: StateKind) => void;
   onClose: () => void;
@@ -34,7 +41,8 @@ export function ClaudeConsolePanel({
   const m = messages.sheet.claudeConsole;
   // Connecting again goes back to the conversation that was open, rather than starting another.
   const session = useRef(resumeId ?? null);
-  const [openedAt] = useState(() => Date.now());
+  const running = useRef(consoleId ?? null);
+  const [openedAt] = useState(() => since ?? Date.now());
   const [usage, setUsage] = useState({ costInDollars: 0, calls: 0 });
 
   // Only the console being looked at asks: a request of the app waits for the one before it.
@@ -64,10 +72,12 @@ export function ClaudeConsolePanel({
     <TerminalPanel
       title={m.title(projectName)}
       open={async () => {
-        const grant = await openClaudeConsole(projectId, session.current);
+        const grant = await openClaudeConsole(projectId, session.current, running.current);
         if ("sessionId" in grant) {
           session.current = grant.sessionId;
+          running.current = grant.consoleId;
           onSession(grant.sessionId);
+          onConsole(grant.consoleId);
         }
         return grant;
       }}

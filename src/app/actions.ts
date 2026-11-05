@@ -22,7 +22,7 @@ import type { ProjectStatus } from "@/server/db/schema";
 import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
 import { randomUUID } from "node:crypto";
-import { isSessionId } from "@/lib/claude-console";
+import { type ClaudeConsoleGrant, isSessionId, MAX_CLAUDE_CONSOLES, type RunningClaudeConsole } from "@/lib/claude-console";
 import { getFetchRemote, setFetchRemote } from "@/server/classification";
 import { readRemotes } from "@/server/scan/git";
 import { parseConsoleOptions } from "@/lib/console-options";
@@ -30,7 +30,11 @@ import { findSessionStart, readClaudeUsage } from "@/server/claude-usage/report"
 import { syncClaudeUsageNow } from "@/server/claude-usage/scheduler";
 import { isSessionOpen, sessionsOfConsole } from "@/server/console/claude-sessions";
 import { ensureConsoleServer } from "@/server/console/server";
+import { startBulkJob } from "@/server/bulk-jobs";
+import { analyzeDependencies } from "@/server/dependencies";
+import { dismissComposeJob, startComposeJob } from "@/server/compose-jobs";
 import { issueGrant } from "@/server/console/grants";
+import { listLiveConsoles, liveConsoleCount, stopLiveConsole } from "@/server/console/live-consoles";
 import { listProjectContainers } from "@/server/docker-containers";
 import {
   checkOutAllRemoteBranches,
@@ -45,8 +49,8 @@ import {
 import { type CommitFile, type CommitPage, type CommitView, readCommits, readCommitView, readStashView, readWorkingDiff } from "@/server/scan/git";
 import { type ContainerAction, composeDirectories, launch, runCompose, runContainers } from "@/server/project-actions";
 import { declareEnvVariable, restoreEnvValue, saveEnvValue } from "@/server/env-vars";
-import { type EnvEntry, listProjectFolder, readEnvFile, type TreeListing } from "@/server/project-files";
-import { getProject } from "@/server/registry";
+import { type EnvEntry, listProjectFolder, readEnvFile, readFolderSizes, type TreeListing } from "@/server/project-files";
+import { getProject, getRegistry } from "@/server/registry";
 import {
   changeDirectory,
   type ProjectInput,
@@ -113,6 +117,11 @@ export async function refreshProject(projectId: number): Promise<void> {
   if (exists) startSizing([projectId]);
   revalidatePath("/");
   revalidatePath(`/projects/${projectId}`);
+}
+
+export async function listFolderSizes(projectId: number, relative: string): Promise<Record<string, number> | null> {
+  const project = getProject(getDb(), projectId);
+  return project && !project.row.missing ? readFolderSizes(project.absolutePath, String(relative)) : null;
 }
 
 /** The path comes from the browser: only what is inside this project can be listed. */
@@ -296,14 +305,16 @@ export async function openConsole(
 }
 
 /**
- * Claude in the folder of the project. A session to resume is honoured only if it is known
- * to be of this project: otherwise a new conversation starts, as it does when a console
- * that was never spoken to is reopened.
+ * Claude in the folder of the project. A console still running is joined again, and so is
+ * the one already on the session to resume. Otherwise, a session is honoured only if it is
+ * known to be of this project, and a new conversation starts if it is not, as it does when a
+ * console that was never spoken to is reopened.
  */
 export async function openClaudeConsole(
   projectId: number,
   resumeId: unknown,
-): Promise<{ port: number; token: string; sessionId: string } | { error: string }> {
+  consoleId?: unknown,
+): Promise<ClaudeConsoleGrant | { error: string }> {
   const db = getDb();
   const m = serverMessages(db).errors;
   const project = launchable(projectId);
@@ -313,22 +324,48 @@ export async function openClaudeConsole(
   const appHost = (await headers()).get("host");
   if (!appHost) return { error: m.consoleUnavailable("no host") };
 
+  const listed = listLiveConsoles().filter((live) => live.projectId === projectId);
+  const running =
+    listed.find(({ id }) => id === consoleId) ??
+    (isSessionId(resumeId) ? listed.find(({ sessionId }) => sessionsOfConsole(sessionId).at(-1) === resumeId) : undefined);
+
   let resumeFrom: string | null = null;
-  if (isSessionId(resumeId)) {
-    if (isSessionOpen(resumeId)) return { error: m.claudeSessionOpen };
-    // What was said a moment ago in this console may not have been read yet.
-    await syncClaudeUsageNow();
-    resumeFrom = findSessionStart(db, projectId, resumeId);
+  if (!running) {
+    if (liveConsoleCount() >= MAX_CLAUDE_CONSOLES) return { error: m.tooManyConsoles(MAX_CLAUDE_CONSOLES) };
+    if (isSessionId(resumeId)) {
+      if (isSessionOpen(resumeId)) return { error: m.claudeSessionOpen };
+      // What was said a moment ago in this console may not have been read yet.
+      await syncClaudeUsageNow();
+      resumeFrom = findSessionStart(db, projectId, resumeId);
+    }
   }
   const resume = resumeFrom !== null;
-  const sessionId = resume ? (resumeId as string) : randomUUID();
+  const sessionId = running ? sessionsOfConsole(running.sessionId).at(-1) ?? running.sessionId : resume ? (resumeId as string) : randomUUID();
+  const id = running?.id ?? randomUUID();
+  const startedAt = running?.startedAt ?? Date.now();
   try {
     const port = await ensureConsoleServer();
     const cwd = resumeFrom ?? project.absolutePath;
-    return { port, sessionId, token: issueGrant({ kind: "claude", cwd, sessionId, resume, appHost }) };
+    const token = issueGrant({ kind: "claude", consoleId: id, projectId, projectName: project.row.name, startedAt, cwd, sessionId, resume, appHost });
+    return { port, sessionId, consoleId: id, token };
   } catch (error) {
     return { error: m.consoleUnavailable(error instanceof Error ? error.message : String(error)) };
   }
+}
+
+/** What is still running from before this page was opened, or in another tab. */
+export async function listClaudeConsoles(): Promise<RunningClaudeConsole[]> {
+  return listLiveConsoles().map(({ id, projectId, projectName, sessionId, startedAt }) => ({
+    consoleId: id,
+    projectId,
+    projectName,
+    sessionId: sessionsOfConsole(sessionId).at(-1) ?? sessionId,
+    startedAt,
+  }));
+}
+
+export async function endClaudeConsole(consoleId: unknown): Promise<void> {
+  if (typeof consoleId === "string") stopLiveConsole(consoleId);
 }
 
 /** What one console has consumed since it was opened, and the session it is on by now. */
@@ -507,4 +544,61 @@ export async function loadWorkingDiff(projectId: number): Promise<CommitFile[] |
 export async function loadStashView(projectId: number, ref: string): Promise<CommitFile[] | null> {
   const target = gitTarget(projectId);
   return "error" in target ? null : readStashView(target.path, ref);
+}
+
+const FETCH_CONCURRENCY = 4;
+const ANALYZE_CONCURRENCY = 2;
+
+/** Asked for by a button. Each project reads the remote chosen for it, as its own Fetch does. */
+export async function fetchAllProjects(): Promise<boolean> {
+  const db = getDb();
+  const targets = getRegistry(db).rows.filter(
+    ({ missing, abandoned, hasGit, remoteCount }) => !missing && !abandoned && hasGit && remoteCount !== 0,
+  );
+  const ids = targets.map(({ id }) => id);
+  return startBulkJob(
+    "fetch",
+    targets,
+    FETCH_CONCURRENCY,
+    async ({ id }) => {
+      const project = launchable(id);
+      return project ? fetchRemotes(project.absolutePath, getFetchRemote(db, id), serverMessages(db).gitTab) : null;
+    },
+    // What is behind or not pushed can only be told after this.
+    () => refreshProjects(db, ids),
+  );
+}
+
+export async function analyzeAllProjects(): Promise<boolean> {
+  const db = getDb();
+  const targets = getRegistry(db).rows.filter(({ missing, abandoned }) => !missing && !abandoned);
+  return startBulkJob("analyze", targets, ANALYZE_CONCURRENCY, async ({ id }) => {
+    const project = launchable(id);
+    if (!project) return null;
+    const outcome = await analyzeDependencies(db, id, project.absolutePath);
+    return "error" in outcome && outcome.error === "busy" ? serverMessages(db).dependencies.busy : null;
+  });
+}
+
+/** Asked for by a button, after a confirmation: changed images replace running containers. */
+export async function startCompose(projectId: number, action: unknown): Promise<string | null> {
+  const db = getDb();
+  const m = serverMessages(db).errors;
+  if (action !== "build" && action !== "pull") return m.unknownAction;
+  const project = launchable(projectId);
+  if (!project) return m.projectGone;
+  if (project.row.abandoned) return m.abandonedProject;
+  const { hasCompose, containers } = project.compose;
+  const directories = composeDirectories("up", project.absolutePath, hasCompose, containers);
+  if (directories.length === 0) return m.noCompose;
+  const started = startComposeJob(projectId, action, directories, async () => {
+    await rescanProject(db, projectId);
+  });
+  revalidatePath(`/projects/${projectId}`);
+  return started ? null : m.composeBusy;
+}
+
+export async function dismissCompose(projectId: number): Promise<void> {
+  dismissComposeJob(projectId);
+  revalidatePath(`/projects/${projectId}`);
 }

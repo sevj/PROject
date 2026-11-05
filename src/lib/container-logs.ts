@@ -2,7 +2,10 @@ export type LogStreamName = "out" | "err";
 
 /** One line of NDJSON each: the lines as Docker gives them, then how it ended. */
 export type LogEvent =
-  | { stream: LogStreamName; line: string }
+  /** `source` names the container, when several are followed together. */
+  | { stream: LogStreamName; line: string; source?: string }
+  /** Its container has stopped, and is watched until it starts again. */
+  | { waiting: boolean }
   | { end: true; code: number | null; error?: string };
 
 export type LogLine = { time: string | null; text: string };

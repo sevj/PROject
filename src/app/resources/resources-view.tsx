@@ -7,6 +7,7 @@ import { useMessages } from "@/i18n/provider";
 import { formatSize } from "@/lib/registry";
 import type { DiskReport, VolumeRow } from "@/server/resources";
 import { useFlash } from "../flash";
+import { ProjectCleanup } from "../project-cleanup";
 import { Modal } from "../modal";
 import {
   BADGE,
@@ -306,6 +307,7 @@ export function ResourcesView({ disk }: { disk: DiskReport }) {
         <>
           <DiskSection disk={disk} />
           <CleanupSection disk={disk} />
+          <ProjectCleanup />
           <VolumesSection disk={disk} />
         </>
       )}

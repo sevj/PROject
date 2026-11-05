@@ -1,15 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { controlContainers } from "@/app/actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { controlContainers, dismissCompose, startCompose } from "@/app/actions";
 import { DumpModal, LoadModal } from "@/app/dump-modals";
 import type { DumpRow } from "@/lib/dumps";
 import type { DatabaseTarget } from "@/server/dumps/containers";
 import { ConsolePanel } from "./console-panel";
 import { LogsPanel } from "./logs-panel";
-import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
+import { BUTTON, BUTTON_PRIMARY, BUTTON_SMALL, DATA } from "@/app/ui";
 import { useFlash } from "@/app/flash";
+import { useConfirm } from "@/app/modal";
+import type { ComposeAction, ComposeJob } from "@/server/compose-jobs";
 import { useMessages } from "@/i18n/provider";
 import type { ContainerAction } from "@/server/project-actions";
 
@@ -123,18 +125,72 @@ export function ProjectControls({
   running,
   total,
   canCreate,
+  hasCompose,
+  composeJob,
 }: {
   projectId: number;
   running: number;
   total: number;
   /** A Compose file exists to create the containers from. */
   canCreate: boolean;
+  /** One is here in the project, which is what building and pulling read. */
+  hasCompose: boolean;
+  composeJob: ComposeJob | null;
 }) {
   const m = useMessages().sheet.dockerTab;
   const router = useRouter();
+  const flash = useFlash();
   const { pending, run } = useControl(projectId);
+  const [asking, startAsking] = useTransition();
+  const { confirm, confirmation } = useConfirm();
+  const composing = composeJob?.running === true;
+  const [logsOpen, setLogsOpen] = useState(false);
+  const sheet = useMessages().sheet;
+
+  const ask = (action: ComposeAction) =>
+    confirm({
+      ...m.confirmCompose[action],
+      action: m.compose[action],
+      onConfirm: () =>
+        startAsking(async () => {
+          const error = await startCompose(projectId, action);
+          if (error) flash("error", error);
+          router.refresh();
+        }),
+    });
+
+  const followed = useRef<number | null>(null);
+  useEffect(() => {
+    if (!composeJob) return;
+    if (composeJob.running) {
+      followed.current = composeJob.id;
+      const timer = setInterval(() => router.refresh(), 2000);
+      return () => clearInterval(timer);
+    }
+    if (followed.current !== composeJob.id) return;
+    followed.current = null;
+    if (!composeJob.error) flash("success", m.composeDone[composeJob.action]);
+  }, [composeJob, router, flash, m]);
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid w-full justify-items-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {total > 1 ? (
+        <button type="button" onClick={() => setLogsOpen(true)} className={BUTTON}>
+          {sheet.logs.openAll}
+        </button>
+      ) : null}
+      {logsOpen ? <LogsPanel projectId={projectId} containerName={sheet.logs.allContainers} onClose={() => setLogsOpen(false)} /> : null}
+      {hasCompose ? (
+        <>
+          <button type="button" disabled={pending || asking || composing} onClick={() => ask("build")} title={m.composeHint.build} className={BUTTON}>
+            {m.compose.build}
+          </button>
+          <button type="button" disabled={pending || asking || composing} onClick={() => ask("pull")} title={m.composeHint.pull} className={BUTTON}>
+            {m.compose.pull}
+          </button>
+        </>
+      ) : null}
       {total === 0 ? (
         canCreate ? (
           <button type="button" disabled={pending} onClick={() => run("start")} className={BUTTON_PRIMARY}>
@@ -164,6 +220,25 @@ export function ProjectControls({
         {m.refresh}
       </button>
       <Feedback pending={pending} />
+    </div>
+    {composeJob && (composeJob.running || composeJob.error) ? (
+      <div className="grid w-full gap-2 border border-rule p-2.5 text-left">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span role="status" className={`${DATA} ${composeJob.error ? "text-alert" : ""}`}>
+            {composeJob.error ? m.composeFailed[composeJob.action] : m.composeRunning[composeJob.action]}
+          </span>
+          {composeJob.error ? (
+            <button type="button" onClick={() => void dismissCompose(projectId)} className={BUTTON_SMALL}>
+              {m.composeDismiss}
+            </button>
+          ) : null}
+        </div>
+        <pre className={`${DATA} max-h-[240px] overflow-auto bg-field p-2.5 break-words whitespace-pre-wrap`}>
+          {composeJob.output.slice(-40).join("\n") || composeJob.error}
+        </pre>
+      </div>
+    ) : null}
+    {confirmation}
     </div>
   );
 }

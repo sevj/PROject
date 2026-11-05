@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import { type EnvEntry, parseEnv } from "@/lib/env-file";
@@ -40,6 +41,7 @@ export async function readEnvFile(projectPath: string, fileName: string): Promis
 /** Regenerable or internal folders: shown so that they are known to exist, never opened. */
 const OPAQUE_DIRECTORIES = new Set([".git", "node_modules", "vendor", "target"]);
 const MAX_TREE_ENTRIES = 500;
+const SIZE_TIMEOUT_MS = 60_000;
 
 export type TreeEntry = {
   name: string;
@@ -81,6 +83,36 @@ export async function listProjectFolder(projectPath: string, relative: string): 
       }),
     );
     return { entries, hiddenCount: sorted.length - shown.length };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What each entry of a folder weighs on disk, folders included. Null when it takes too long or
+ * cannot be read: the listing is still right without it. The path was checked like a listing's.
+ */
+export async function readFolderSizes(projectPath: string, relative: string): Promise<Record<string, number> | null> {
+  if (!isInside(relative)) return null;
+  const folder = join(projectPath, normalize(relative));
+  try {
+    const [realRoot, realFolder] = await Promise.all([realpath(projectPath), realpath(folder)]);
+    if (realFolder !== realRoot && !realFolder.startsWith(`${realRoot}/`)) return null;
+    const output = await new Promise<string>((resolve, reject) => {
+      // Exits with 1 on a root-owned subfolder (Docker volumes), and still prints the rest.
+      execFile("du", ["-x", "--block-size=1", "--all", "--max-depth=1", "--", realFolder], { timeout: SIZE_TIMEOUT_MS, maxBuffer: 16 << 20 }, (error, stdout) => {
+        if (error?.killed) reject(error);
+        else resolve(stdout);
+      });
+    });
+    const sizes: Record<string, number> = {};
+    for (const line of output.split("\n")) {
+      const tab = line.indexOf("\t");
+      if (tab === -1) continue;
+      const path = line.slice(tab + 1);
+      if (path.startsWith(`${realFolder}/`)) sizes[path.slice(realFolder.length + 1)] = Number(line.slice(0, tab));
+    }
+    return sizes;
   } catch {
     return null;
   }

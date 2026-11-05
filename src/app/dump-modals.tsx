@@ -180,6 +180,7 @@ export function LoadModal({
   const [database, setDatabase] = useState(() => finished.find((item) => item.id === dumpId)?.database ?? "");
   const [existing, setExisting] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState(false);
+  const [keepCopy, setKeepCopy] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -213,6 +214,8 @@ export function LoadModal({
 
   const everyDatabase = dump !== null && dump.database === null;
   const ready = dump !== null && target !== null && confirmed && (everyDatabase || database.trim() !== "");
+  // A database that does not exist yet has nothing to lose, and dumping it would only fail.
+  const canKeepCopy = everyDatabase || existing.includes(database.trim());
 
   const start = async () => {
     if (!dump || !target) return;
@@ -223,6 +226,7 @@ export function LoadModal({
       containerId: target.id,
       database: everyDatabase ? null : database.trim(),
       confirmed: true,
+      keepCopy: canKeepCopy && keepCopy,
     });
     setPending(false);
     if ("error" in result) setError(result.error);
@@ -290,6 +294,12 @@ export function LoadModal({
       )}
 
       <p className="border border-alert px-3 py-2 text-alert">{m.replaces}</p>
+      {canKeepCopy ? (
+        <label className="flex cursor-pointer items-start gap-2">
+          <input type="checkbox" checked={keepCopy} onChange={(event) => setKeepCopy(event.target.checked)} className="mt-1 size-4" />
+          <span>{m.keepCopy}</span>
+        </label>
+      ) : null}
       <label className="flex cursor-pointer items-start gap-2">
         <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1 size-4 accent-[var(--alert)]" />
         <span>{m.understood}</span>

@@ -4,8 +4,21 @@ import type { Terminal } from "./terminal";
 const clamp = (value: unknown, min: number, max: number, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
 
-const toBuffer = (data: RawData): Buffer =>
+export const toBuffer = (data: RawData): Buffer =>
   Buffer.isBuffer(data) ? data : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data);
+
+/** The new size when this control message asks for one. */
+export function parseTerminalMessage(data: RawData, size: { cols: number; rows: number }): { cols: number; rows: number } | null {
+  let message: { type?: string; cols?: unknown; rows?: unknown };
+  try {
+    message = JSON.parse(toBuffer(data).toString());
+  } catch {
+    return null;
+  }
+  return message?.type === "resize"
+    ? { cols: clamp(message.cols, 2, 500, size.cols), rows: clamp(message.rows, 1, 200, size.rows) }
+    : null;
+}
 
 /** How much unread output may pile up before the program is asked to slow down. */
 const HIGH_WATER = 1 << 20;
@@ -29,14 +42,9 @@ export function startSession(ws: WebSocket, open: () => Promise<Terminal>): void
       terminal?.write(toBuffer(data));
       return;
     }
-    let message: { type?: string; cols?: unknown; rows?: unknown };
-    try {
-      message = JSON.parse(toBuffer(data).toString());
-    } catch {
-      return;
-    }
-    if (message?.type === "resize") {
-      size = { cols: clamp(message.cols, 2, 500, size.cols), rows: clamp(message.rows, 1, 200, size.rows) };
+    const resized = parseTerminalMessage(data, size);
+    if (resized) {
+      size = resized;
       terminal?.resize(size.cols, size.rows);
     }
   };

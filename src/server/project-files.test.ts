@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listProjectFolder, parseEnv, readEnvFile, readProjectDoc } from "./project-files";
+import { listProjectFolder, parseEnv, readEnvFile, readFolderSizes, readProjectDoc } from "./project-files";
 
 let base: string;
 let project: string;
@@ -84,6 +84,28 @@ describe("readProjectDoc", () => {
   it("refuses a symlink leaving the project", async () => {
     symlinkSync(join(base, "secret.txt"), join(project, "README.md"));
     expect(await readProjectDoc(project, "README.md")).toBeNull();
+  });
+});
+
+describe("readFolderSizes", () => {
+  it("weighs the folders and the files of one level", async () => {
+    const root = join(base, "sized");
+    mkdirSync(join(root, "var", "cache"), { recursive: true });
+    writeFileSync(join(root, "var", "cache", "big"), "x".repeat(200_000));
+    writeFileSync(join(root, "small.txt"), "x");
+    const sizes = await readFolderSizes(root, ".");
+    expect(Object.keys(sizes ?? {}).sort()).toEqual(["small.txt", "var"]);
+    expect(sizes?.var).toBeGreaterThanOrEqual(200_000);
+    expect(Object.keys((await readFolderSizes(root, "var")) ?? {})).toEqual(["cache"]);
+  });
+
+  it("does not go out of the project", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "pm-outside-"));
+    symlinkSync(outside, join(base, "link"));
+    expect(await readFolderSizes(base, "..")).toBeNull();
+    expect(await readFolderSizes(base, "link")).toBeNull();
+    expect(await readFolderSizes(base, "/etc")).toBeNull();
+    rmSync(outside, { recursive: true, force: true });
   });
 });
 

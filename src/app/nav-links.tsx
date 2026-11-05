@@ -19,6 +19,7 @@ export function NavLinks() {
     { href: "/databases", label: m.databases },
     { href: "/journal", label: m.journal },
     { href: "/map", label: m.map },
+    { href: "/claude", label: m.claude },
     { href: "/settings", label: m.settings },
   ];
   return (

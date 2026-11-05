@@ -2,6 +2,7 @@ import http from "node:http";
 import { type WebSocket, WebSocketServer } from "ws";
 import { openDockerTerminal } from "./docker-terminal";
 import { authorizeUpgrade, type Grant } from "./grants";
+import { joinLiveConsole } from "./live-consoles";
 import { startSession } from "./session";
 import type { Terminal } from "./terminal";
 
@@ -10,11 +11,20 @@ const PING_MS = 30_000;
 
 type ConsoleServer = { port: number };
 
-async function openTerminal(grant: Grant): Promise<Terminal> {
-  if (grant.kind === "docker") return openDockerTerminal(grant.containerId, grant.options);
+async function openClaude(grant: Extract<Grant, { kind: "claude" }>): Promise<Terminal> {
   // Loaded when needed: a native module that failed to build must not take Docker consoles with it.
   const { openClaudeTerminal } = await import("./claude-terminal");
   return openClaudeTerminal(grant);
+}
+
+/** A shell ends with its connection. Claude may be in the middle of something, so it goes on. */
+function serve(ws: WebSocket, grant: Grant): void {
+  if (grant.kind === "docker") {
+    startSession(ws, () => openDockerTerminal(grant.containerId, grant.options));
+    return;
+  }
+  const { consoleId: id, projectId, projectName, sessionId, startedAt } = grant;
+  joinLiveConsole(ws, { id, projectId, projectName, sessionId, startedAt }, () => openClaude(grant));
 }
 
 // Kept on globalThis so that a hot reload in dev does not open a second server.
@@ -41,11 +51,11 @@ async function start(): Promise<ConsoleServer> {
     wss.handleUpgrade(req, socket, head, (ws) => {
       alive.add(ws);
       ws.on("pong", () => alive.add(ws));
-      startSession(ws, () => openTerminal(grant));
+      serve(ws, grant);
     });
   });
 
-  // A tab closed without a goodbye must not leave a shell running.
+  // A tab closed without a goodbye must not leave a shell running, or a console taken.
   const heartbeat = setInterval(() => {
     for (const ws of wss.clients) {
       if (!alive.has(ws)) {

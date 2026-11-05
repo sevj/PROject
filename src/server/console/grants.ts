@@ -4,7 +4,17 @@ import { hostnameOf, LOOPBACK_HOSTNAMES } from "@/lib/local-request";
 
 export type GrantTarget =
   | { kind: "docker"; containerId: string; options: ConsoleOptions }
-  | { kind: "claude"; cwd: string; sessionId: string; resume: boolean };
+  | {
+      kind: "claude";
+      /** What a page connects to again. A console already running ignores the rest. */
+      consoleId: string;
+      projectId: number;
+      projectName: string;
+      startedAt: number;
+      cwd: string;
+      sessionId: string;
+      resume: boolean;
+    };
 
 export type Grant = GrantTarget & {
   /** `Host` of the page that asked, which the WebSocket's `Origin` must match. */

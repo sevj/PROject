@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "../db/client";
-import { claudeApiCalls, claudeTranscripts, projects } from "../db/schema";
-import { findSessionStart, readClaudeUsage, USAGE_DAYS, USAGE_WEEKS } from "./report";
+import { claudeApiCalls, claudeTranscripts, projectMeta, projects } from "../db/schema";
+import { findSessionStart, readClaudeUsage, readGlobalClaudeUsage, USAGE_DAYS, USAGE_WEEKS } from "./report";
 
 const NOW = new Date("2026-11-04T12:00:00Z").getTime();
 const DAY = 24 * 3600 * 1000;
@@ -46,6 +46,32 @@ const usage = (id = projectId) => {
 beforeEach(() => {
   db = openDb(":memory:");
   projectId = addProject("/work/app");
+});
+
+describe("readGlobalClaudeUsage", () => {
+  it("has nothing to say without any call", () => {
+    expect(readGlobalClaudeUsage(db, NOW)).toBeNull();
+  });
+
+  it("adds every project up, the calls outside any included, the most expensive first", () => {
+    const other = addProject("/work/other");
+    db.insert(projectMeta).values({ projectId: other, displayName: "Shown name" }).run();
+    addCall({ outputTokens: MILLION });
+    addCall({ outputTokens: MILLION, sessionId: "session-2" });
+    addCall({ projectId: other, outputTokens: 3 * MILLION, sessionId: "session-3" });
+    addCall({ projectId: null, cwd: "/elsewhere", outputTokens: MILLION, sessionId: "session-4" });
+
+    const all = readGlobalClaudeUsage(db, NOW);
+    expect(all?.calls).toBe(4);
+    expect(all?.projects.map(({ projectId, name, calls, sessions }) => ({ projectId, name, calls, sessions }))).toEqual([
+      { projectId: other, name: "Shown name", calls: 1, sessions: 1 },
+      { projectId, name: "/work/app", calls: 2, sessions: 2 },
+      { projectId: null, name: null, calls: 1, sessions: 1 },
+    ]);
+    const sum = all?.projects.reduce((total, project) => total + project.costInDollars, 0) ?? 0;
+    expect(sum).toBeCloseTo(all?.costInDollars ?? 0);
+    expect(readClaudeUsage(db, projectId, NOW)?.costInDollars).toBeCloseTo(all?.projects[1].costInDollars ?? 0);
+  });
 });
 
 describe("findSessionStart", () => {

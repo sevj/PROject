@@ -1,6 +1,6 @@
 "use client";
 
-import { type RefObject, useCallback, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useMessages } from "@/i18n/provider";
 import { MAX_CLAUDE_CONSOLES } from "@/lib/claude-console";
 import type { StateKind } from "@/lib/docker-state";
@@ -16,6 +16,7 @@ function DockedConsole({
   frame,
   onHide,
   onEnd,
+  onConsole,
   onSession,
   onStatus,
 }: {
@@ -25,11 +26,16 @@ function DockedConsole({
   frame: RefObject<HTMLElement | null>;
   onHide: () => void;
   onEnd: (key: number) => void;
+  onConsole: (key: number, consoleId: string) => void;
   onSession: (key: number, sessionId: string) => void;
   onStatus: (key: number, kind: StateKind) => void;
 }) {
   const m = useMessages().sheet.claudeConsole;
   const { key } = item;
+  // Found running after a reload: connecting would take it from a tab that may be using it.
+  const [joined, setJoined] = useState(item.since === undefined);
+  if (shown && !joined) setJoined(true);
+  const onConsoleOf = useCallback((consoleId: string) => onConsole(key, consoleId), [key, onConsole]);
   // Stable, since the terminal watches them.
   const session = useCallback((sessionId: string) => onSession(key, sessionId), [key, onSession]);
   const status = useCallback((kind: StateKind) => onStatus(key, kind), [key, onStatus]);
@@ -41,28 +47,33 @@ function DockedConsole({
       aria-labelledby={`claude-tab-${key}`}
       className={active ? "flex min-h-0 flex-1 flex-col" : "hidden"}
     >
-      <ClaudeConsolePanel
-        projectId={item.projectId}
-        projectName={item.projectName}
-        resumeId={item.resumeId}
-        shown={shown}
-        frame={frame}
-        controls={
-          <button type="button" onClick={onHide} className={BUTTON}>
-            {m.minimize}
-          </button>
-        }
-        onSession={session}
-        onStatusChange={status}
-        onClose={() => onEnd(key)}
-      />
+      {joined ? (
+        <ClaudeConsolePanel
+          projectId={item.projectId}
+          projectName={item.projectName}
+          resumeId={item.resumeId}
+          consoleId={item.consoleId}
+          since={item.since}
+          shown={shown}
+          frame={frame}
+          controls={
+            <button type="button" onClick={onHide} className={BUTTON}>
+              {m.minimize}
+            </button>
+          }
+          onConsole={onConsoleOf}
+          onSession={session}
+          onStatusChange={status}
+          onClose={() => onEnd(key)}
+        />
+      ) : null}
     </div>
   );
 }
 
 /**
- * The consoles of this browser tab, on top of the page or reduced to a button. Everything
- * stays mounted either way: unmounting a terminal would hang up on what runs in it.
+ * The consoles, on top of the page or reduced to a button. What runs in them belongs to the
+ * server, and everything stays mounted either way so that each keeps what it has on screen.
  */
 export function ClaudeConsoleDock({
   consoles,
@@ -74,6 +85,7 @@ export function ClaudeConsoleDock({
   onHide,
   onNew,
   onEnd,
+  onConsole,
   onSession,
   onStatus,
 }: {
@@ -86,6 +98,7 @@ export function ClaudeConsoleDock({
   onHide: () => void;
   onNew: () => void;
   onEnd: (key: number) => void;
+  onConsole: (key: number, consoleId: string) => void;
   onSession: (key: number, sessionId: string) => void;
   onStatus: (key: number, kind: StateKind) => void;
 }) {
@@ -182,6 +195,7 @@ export function ClaudeConsoleDock({
             frame={frame}
             onHide={hide}
             onEnd={onEnd}
+            onConsole={onConsole}
             onSession={onSession}
             onStatus={onStatus}
           />

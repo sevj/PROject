@@ -95,6 +95,8 @@ export function TerminalPanel({
   const socket = useRef<WebSocket | null>(null);
   const opener = useRef(open);
   const connectedKey = useRef(connectKey);
+  // Old output replayed holds questions to the terminal, whose answers must not reach the program.
+  const replaying = useRef(false);
   const [status, setStatus] = useState<Status>("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
@@ -127,6 +129,7 @@ export function TerminalPanel({
     setStatus("connecting");
     setDetail(null);
     setExitCode(null);
+    replaying.current = false;
     term.reset();
 
     const grant = await opener.current();
@@ -154,7 +157,15 @@ export function TerminalPanel({
         return;
       }
       const message = JSON.parse(event.data) as { type: string; code?: number | null; message?: string };
-      if (message.type === "exit") {
+      if (message.type === "replay-start") {
+        replaying.current = true;
+      } else if (message.type === "replay-end") {
+        term.write("", () => {
+          if (current()) replaying.current = false;
+        });
+      } else if (message.type === "replaced") {
+        setDetail(m.replaced);
+      } else if (message.type === "exit") {
         setExitCode(message.code ?? null);
         setStatus("exited");
       } else if (message.type === "error") {
@@ -170,7 +181,7 @@ export function TerminalPanel({
     ws.onclose = () => {
       if (current()) setStatus((status) => (status === "connected" || status === "connecting" ? "closed" : status));
     };
-  }, [m.unreachable]);
+  }, [m.replaced, m.unreachable]);
 
   useEffect(() => {
     let disposed = false;
@@ -219,7 +230,7 @@ export function TerminalPanel({
 
       const send = (data: Uint8Array<ArrayBuffer>) => {
         const ws = socket.current;
-        if (ws?.readyState === WebSocket.OPEN) ws.send(data);
+        if (ws?.readyState === WebSocket.OPEN && !replaying.current) ws.send(data);
       };
       term.onData((data) => send(encoder.encode(data)));
       // Mouse reports for programs such as htop or vim are bytes, not text.

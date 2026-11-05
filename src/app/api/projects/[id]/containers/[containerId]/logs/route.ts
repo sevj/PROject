@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { streamContainerLogs } from "@/server/container-logs";
+import { LOG_RESUME_MS, streamContainerLogs } from "@/server/container-logs";
 import { getDb } from "@/server/db/client";
 import { listProjectContainers } from "@/server/docker-containers";
 
@@ -15,7 +15,7 @@ export async function GET(request: Request, context: RouteContext<"/api/projects
   const container = live.containers.find((candidate) => candidate.id === containerId);
   if (!container) return new Response("Not found", { status: 404 });
 
-  return new Response(streamContainerLogs(container.id, { signal: request.signal }), {
+  return new Response(streamContainerLogs(container.id, { signal: request.signal, resumeMs: LOG_RESUME_MS }), {
     headers: {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       // Compressing would hold lines back until there are enough of them.

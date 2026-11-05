@@ -15,10 +15,10 @@ import {
 import type { StateKind } from "@/lib/docker-state";
 import { StateGlyph } from "./state-badge";
 
-type Status = "connecting" | "live" | "ended" | "failed";
-type Row = { id: number; at: string; stream: LogStreamName; time: string | null; text: string };
+type Status = "connecting" | "live" | "waiting" | "ended" | "failed";
+type Row = { id: number; at: string; stream: LogStreamName; source?: string; time: string | null; text: string };
 
-const GLYPH: Record<Status, StateKind> = { connecting: "starting", live: "running", ended: "stopped", failed: "failed" };
+const GLYPH: Record<Status, StateKind> = { connecting: "starting", live: "running", waiting: "stopped", ended: "stopped", failed: "failed" };
 
 /** What the browser keeps: the oldest lines go first. */
 const MAX_LINES = 5000;
@@ -65,10 +65,12 @@ function useContainerLogs(url: string, connectKey: number, unreachable: string) 
               // A code other than 0 is explained by the last line, which Docker wrote on stderr.
               if (event.code !== 0) outcome = "failed";
               if (event.error) setDetail(event.error);
+            } else if ("waiting" in event) {
+              setStatus(event.waiting ? "waiting" : "live");
             } else {
               const parsed = parseLogLine(event.line);
               lastTime = parsed.time ?? lastTime;
-              waiting.push({ id: nextId++, at: lastTime, stream: event.stream, ...parsed });
+              waiting.push({ id: nextId++, at: lastTime, stream: event.stream, source: event.source, ...parsed });
             }
           }
         }
@@ -103,6 +105,7 @@ const LogRow = memo(function LogRow({ row, showTime, errLabel }: { row: Row; sho
       className={`flex gap-3 border-l-2 px-2 ${row.stream === "err" ? "border-alert/50" : "border-transparent"}`}
     >
       {showTime && row.time ? <time dateTime={row.time} className="shrink-0 text-mut">{formatLogTime(row.time)}</time> : null}
+      {row.source ? <span title={row.source} className="w-[120px] shrink-0 truncate text-accent">{row.source}</span> : null}
       <span className="min-h-[1lh] min-w-0 break-all whitespace-pre-wrap">{row.text}</span>
     </div>
   );
@@ -116,14 +119,15 @@ export function LogsPanel({
   onClose,
 }: {
   projectId: number;
-  containerId: string;
+  /** Without it, all the containers of the project together. */
+  containerId?: string;
   containerName: string;
   onClose: () => void;
 }) {
   const sheet = useMessages().sheet;
   const m = sheet.logs;
   const [connectKey, setConnectKey] = useState(0);
-  const url = `/api/projects/${projectId}/containers/${containerId}/logs`;
+  const url = containerId ? `/api/projects/${projectId}/containers/${containerId}/logs` : `/api/projects/${projectId}/logs`;
   const { rows, status, detail, reset } = useContainerLogs(url, connectKey, m.unreachable);
   const [filter, setFilter] = useState("");
   const [showTime, setShowTime] = useState(true);
@@ -142,7 +146,7 @@ export function LogsPanel({
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    return needle === "" ? rows : rows.filter(({ text }) => text.toLowerCase().includes(needle));
+    return needle === "" ? rows : rows.filter(({ text, source }) => text.toLowerCase().includes(needle) || source?.toLowerCase().includes(needle));
   }, [rows, filter]);
 
   useLayoutEffect(() => {
@@ -150,8 +154,8 @@ export function LogsPanel({
   }, [shown, following, showTime]);
 
   const label =
-    status === "connecting" ? m.connecting : status === "live" ? m.live : status === "ended" ? m.ended : m.failed;
-  const empty = rows.length === 0 && (status === "live" || status === "ended");
+    status === "connecting" ? m.connecting : status === "live" ? m.live : status === "waiting" ? m.waiting : status === "ended" ? m.ended : m.failed;
+  const empty = rows.length === 0 && (status === "live" || status === "waiting" || status === "ended");
 
   return (
     <section

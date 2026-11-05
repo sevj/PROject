@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { MAX_CLAUDE_CONSOLES } from "@/lib/claude-console";
+import { endClaudeConsole, listClaudeConsoles } from "./actions";
 import type { StateKind } from "@/lib/docker-state";
 
 type Project = { projectId: number; projectName: string };
@@ -14,6 +15,10 @@ export type OpenConsole = Project & {
   resumeId?: string;
   /** The conversation it is on, known once it has connected. */
   sessionId?: string;
+  /** What the server knows it by, known once it has connected. */
+  consoleId?: string;
+  /** Set when it was found running rather than opened here: it connects when first shown. */
+  since?: number;
   status: StateKind;
 };
 
@@ -72,8 +77,40 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
     [consoles],
   );
 
+  // What was left running before this page was loaded comes back, reduced to the button.
+  useEffect(() => {
+    let current = true;
+    listClaudeConsoles().then((running) => {
+      if (!current || running.length === 0) return;
+      const found = running.map(({ consoleId, projectId, projectName, sessionId, startedAt }): OpenConsole => {
+        const number = (openedByProject.current.get(projectId) ?? 0) + 1;
+        openedByProject.current.set(projectId, number);
+        const key = nextKey.current;
+        nextKey.current += 1;
+        return {
+          key,
+          projectId,
+          projectName,
+          consoleId,
+          sessionId,
+          resumeId: sessionId,
+          since: startedAt,
+          label: number === 1 ? projectName : `${projectName} ${number}`,
+          status: "running",
+        };
+      });
+      setConsoles((known) => [...known, ...found.filter(({ consoleId }) => !known.some((item) => item.consoleId === consoleId))]);
+      setActiveKey((key) => key ?? found[0].key);
+    }, () => undefined);
+    return () => {
+      current = false;
+    };
+  }, []);
+
   const end = (key: number) => {
     const index = consoles.findIndex((item) => item.key === key);
+    // Closing the terminal only lets go of it: ending the session is what stops Claude.
+    void endClaudeConsole(consoles[index]?.consoleId);
     const rest = consoles.filter((item) => item.key !== key);
     setConsoles(rest);
     setLimitReached(false);
@@ -83,6 +120,9 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
+  const onConsole = useCallback((key: number, consoleId: string) => {
+    setConsoles((current) => current.map((item) => (item.key === key ? { ...item, consoleId } : item)));
+  }, []);
   const onSession = useCallback((key: number, sessionId: string) => {
     setConsoles((current) => current.map((item) => (item.key === key ? { ...item, sessionId } : item)));
   }, []);
@@ -91,14 +131,6 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const anyOpen = consoles.length > 0;
-  // Leaving the page ends what runs in the consoles: the browser asks first.
-  useEffect(() => {
-    if (!anyOpen) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [anyOpen]);
-
   const value = useMemo(() => ({ open }), [open]);
   const active = consoles.find((item) => item.key === activeKey);
 
@@ -119,6 +151,7 @@ export function ClaudeConsolesProvider({ children }: { children: ReactNode }) {
           }}
           onNew={() => active && open(active)}
           onEnd={end}
+          onConsole={onConsole}
           onSession={onSession}
           onStatus={onStatus}
         />

@@ -5,9 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_CONSOLE_OPTIONS } from "@/lib/console-options";
 import { issueGrant } from "./grants";
+import { listLiveConsoles, stopLiveConsole } from "./live-consoles";
 import { ensureConsoleServer } from "./server";
 
 let dir: string;
@@ -248,8 +249,23 @@ done
     beforeEach(() => {
       SESSION = randomUUID();
     });
-    const claudeGrant = (resume = false) =>
-      issueGrant({ kind: "claude", cwd: dir, sessionId: SESSION, resume, appHost: "127.0.0.1:4300" });
+    // Claude outlives its connection: nothing else would stop these between two tests.
+    afterEach(() => {
+      for (const { id } of listLiveConsoles()) stopLiveConsole(id);
+    });
+    const issueClaude = (sessionId: string, resume: boolean, consoleId: string = randomUUID()) =>
+      issueGrant({
+        kind: "claude",
+        consoleId,
+        projectId: 1,
+        projectName: "project",
+        startedAt: 1,
+        cwd: dir,
+        sessionId,
+        resume,
+        appHost: "127.0.0.1:4300",
+      });
+    const claudeGrant = (resume = false) => issueClaude(SESSION, resume);
     const output = (frames: Frame[]) =>
       frames
         .filter(({ binary }) => binary)
@@ -284,13 +300,25 @@ done
       expect(frames.at(-1)).toEqual({ binary: false, text: JSON.stringify({ type: "exit", code: 7 }) });
     });
 
-    it("hangs up on it when the browser goes away", async () => {
-      const ws = connect(claudeGrant());
-      const { frames, until } = collect(ws);
+    it("goes on when the browser goes away, and hangs up when the console is ended", async () => {
+      const consoleId = randomUUID();
+      const ws = connect(issueClaude(SESSION, false, consoleId));
+      const { frames, closed, until } = collect(ws);
       await until((all) => /pid=\d+/.test(output(all)));
       const pid = Number(/pid=(\d+)/.exec(output(frames))?.[1]);
-      expect(() => process.kill(pid, 0)).not.toThrow();
       ws.close();
+      await closed;
+      await new Promise((r) => setTimeout(r, 100));
+      expect(() => process.kill(pid, 0)).not.toThrow();
+
+      // The same conversation, the same program: what it said is shown again, and it still listens.
+      const back = connect(issueClaude(SESSION, false, consoleId));
+      const again = collect(back);
+      await again.until((all) => output(all).includes(`pid=${pid}`));
+      back.send(Buffer.from("still here\n"), { binary: true });
+      await again.until((all) => output(all).includes("got=still here"));
+
+      stopLiveConsole(consoleId);
       const isGone = () => {
         try {
           process.kill(pid, 0);
@@ -306,7 +334,7 @@ done
     it("runs several at once, each with its own session", async () => {
       const other = "11111111-2222-4333-8444-555555555555";
       const first = connect(claudeGrant());
-      const second = connect(issueGrant({ kind: "claude", cwd: dir, sessionId: other, resume: false, appHost: "127.0.0.1:4300" }));
+      const second = connect(issueClaude(other, false));
       const one = collect(first);
       const two = collect(second);
       await one.until((all) => output(all).includes("pid="));
@@ -324,7 +352,7 @@ done
 
     it("refuses a second program on a conversation already open", async () => {
       const shared = "aaaaaaaa-2222-4333-8444-555555555555";
-      const grantFor = () => issueGrant({ kind: "claude", cwd: dir, sessionId: shared, resume: true, appHost: "127.0.0.1:4300" });
+      const grantFor = () => issueClaude(shared, true);
       const first = connect(grantFor());
       const one = collect(first);
       await one.until((all) => output(all).includes("pid="));

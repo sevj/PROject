@@ -8,6 +8,7 @@ import type { Messages } from "@/i18n";
 import { readClaudeUsage, SESSIONS_SHOWN } from "@/server/claude-usage/report";
 import { readSessionTitles } from "@/server/claude-usage/session-titles";
 import { getFetchRemote } from "@/server/classification";
+import { currentComposeJob } from "@/server/compose-jobs";
 import { getDb } from "@/server/db/client";
 import { readEnvView } from "@/server/env-vars";
 import { listProjectContainers } from "@/server/docker-containers";
@@ -24,6 +25,7 @@ import { ProjectDescription } from "../../project-description";
 import { ProjectDirectory } from "../../project-directory";
 import { ProjectFacts } from "../../project-facts";
 import { ProjectName } from "../../project-name";
+import { ProjectCleanup } from "../../project-cleanup";
 import { ProjectOrganizer } from "../../project-organizer";
 import { BackIcon } from "../../icons";
 import { BUTTON_SMALL, CARD, DATA, SECTION_TITLE } from "../../ui";
@@ -257,6 +259,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               stack={dockerStack}
               dumps={tab === "docker" ? listDumps(getDb()).map(toDumpRow) : []}
               jobs={tab === "docker" ? listJobs() : []}
+              composeJob={currentComposeJob(projectId)}
               messages={messages}
             />
           ) : null}
@@ -276,9 +279,12 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
           ) : null}
 
           {tab === "structure" ? (
-            <section className={CARD}>
-              {tree ? <ProjectTree projectId={row.id} listing={tree} /> : <p className="text-mut">{m.unreadableFolder}</p>}
-            </section>
+            <div className="grid gap-4">
+              <section className={CARD}>
+                {tree ? <ProjectTree projectId={row.id} listing={tree} /> : <p className="text-mut">{m.unreadableFolder}</p>}
+              </section>
+              {tree && row.hasGit && !row.abandoned ? <ProjectCleanup projectId={row.id} /> : null}
+            </div>
           ) : null}
 
           {tab === "documentation" ? (

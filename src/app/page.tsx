@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { currentBulkJob } from "@/server/bulk-jobs";
 import { getDb } from "@/server/db/client";
 import { getRegistry } from "@/server/registry";
 import { isSizing } from "@/server/scan/jobs";
@@ -15,6 +16,7 @@ async function Registry() {
       lastScan={lastScan}
       now={now}
       sizing={isSizing()}
+      bulk={currentBulkJob()}
       knownTags={knownTags}
     />
   );

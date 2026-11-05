@@ -6,15 +6,15 @@ import { ClaudeConsoleButton } from "../../claude-console-button";
 import { CARD, DATA, LABEL, SECTION_TITLE } from "../../ui";
 import { CostBars, type UsageMessages, usageFormats } from "./claude-usage";
 
-const CELL = "border-b border-rule py-2 pr-4 align-top";
-const NUMBER = `${CELL} ${DATA} text-right`;
+export const CELL = "border-b border-rule py-2 pr-4 align-top";
+export const NUMBER = `${CELL} ${DATA} text-right`;
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 
 /** The name of a model is enough once its maker is known. */
 const shortModel = (model: string) => model.replace(/^claude-/, "");
 
-function Table({ headers, minWidth, children }: { headers: string[]; minWidth: number; children: ReactNode }) {
+export function Table({ headers, minWidth, children }: { headers: string[]; minWidth: number; children: ReactNode }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left" style={{ minWidth }}>

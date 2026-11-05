@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDb } from "../db/client";
-import { type JobTarget, cancelJob, dismissJob, listJobs, startDump, startRestore } from "./jobs";
+import { type JobTarget, cancelJob, dismissJob, listJobs, startDump, startRestore, startRestoreAfterDump } from "./jobs";
 import { createDump, dumpPath, finishDump, getDump } from "./store";
 
 /** Stands in for `docker exec`: dumps are 100 kB lines, and a restore reads what it is given. */
@@ -197,6 +197,30 @@ describe("a dump", () => {
 });
 
 describe("a load", () => {
+  it("keeps a copy of the database, then loads the dump over it", async () => {
+    process.env.FAKE_LOG = join(dir, "log-safety.jsonl");
+    rmSync(process.env.FAKE_LOG, { force: true });
+    process.env.FAKE_CHUNKS = "2";
+    const dump = storedDump(gzipSync(Buffer.from("SELECT 1;\n")));
+    const safety = await finished(started(startRestoreAfterDump(db, { dump, target, database: "shop", note: "Before loading", root })));
+    expect(safety).toMatchObject({ kind: "dump", status: "done", detail: null });
+    expect(getDump(db, safety.dumpId)).toMatchObject({ status: "done", note: "Before loading", database: "shop" });
+    for (let attempt = 0; attempt < 250 && !listJobs().some(({ kind, status }) => kind === "restore" && status === "done"); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(listJobs().find(({ kind }) => kind === "restore")).toMatchObject({ status: "done", dumpId: dump.id });
+  });
+
+  it("loads nothing when the copy could not be made", async () => {
+    process.env.FAKE_MODE = "fail";
+    const dump = storedDump(gzipSync(Buffer.from("SELECT 1;\n")));
+    const safety = await finished(started(startRestoreAfterDump(db, { dump, target, database: "shop", note: "Before loading", root })));
+    expect(safety.status).toBe("failed");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(listJobs().some(({ kind }) => kind === "restore")).toBe(false);
+    expect(listJobs()[0].detail).toContain("Nothing was loaded");
+  });
+
   it("creates the database first, then feeds the file, and counts what it has read of it", async () => {
     process.env.FAKE_LOG = join(dir, "log-load.jsonl");
     rmSync(process.env.FAKE_LOG, { force: true });

@@ -1,7 +1,7 @@
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, type SQL, sql } from "drizzle-orm";
 import { type CostBreakdown, costBreakdown, LONG_PROMPT_TOKENS } from "@/lib/claude-pricing";
 import type { Db } from "../db/client";
-import { claudeApiCalls, claudeTranscripts, projects } from "../db/schema";
+import { claudeApiCalls, claudeTranscripts, projectMeta, projects } from "../db/schema";
 
 export const USAGE_WEEKS = 26;
 export const USAGE_DAYS = 30;
@@ -99,6 +99,39 @@ export function readClaudeUsage(
   now = Date.now(),
   only?: { since: number; sessionIds: string[] },
 ): ClaudeUsage | null {
+  return summarize(
+    db,
+    now,
+    and(
+      inArray(claudeApiCalls.projectId, withSubProjects(db, projectId)),
+      only && gte(claudeApiCalls.calledAt, new Date(only.since)),
+      only && inArray(claudeApiCalls.sessionId, only.sessionIds),
+    ),
+  )?.usage ?? null;
+}
+
+/** Null for the calls made outside every project of the list. */
+export type ProjectUsage = UsageGroup & { projectId: number | null; name: string | null; sessions: number; lastCallAt: number };
+
+/** Everything, whichever project it was for. Most expensive project first. */
+export function readGlobalClaudeUsage(db: Db, now = Date.now()): (ClaudeUsage & { projects: ProjectUsage[] }) | null {
+  const summary = summarize(db, now);
+  if (!summary) return null;
+  const names = new Map(db.select({ id: projects.id, name: projects.name }).from(projects).all().map(({ id, name }) => [id, name]));
+  const meta = new Map(db.select({ id: projectMeta.projectId, name: projectMeta.displayName }).from(projectMeta).all().map(({ id, name }) => [id, name]));
+  return {
+    ...summary.usage,
+    projects: [...summary.byProject.values()]
+      .map(({ sessionIds, ...group }) => ({
+        ...group,
+        name: group.projectId === null ? null : (meta.get(group.projectId) ?? names.get(group.projectId) ?? null),
+        sessions: sessionIds.size,
+      }))
+      .sort(byCost),
+  };
+}
+
+function summarize(db: Db, now: number, condition?: SQL) {
   const nowSeconds = Math.floor(now / 1000);
   const promptTokens = sql`${claudeApiCalls.inputTokens} + ${claudeApiCalls.cacheReadTokens} + ${claudeApiCalls.cacheWrite5mTokens} + ${claudeApiCalls.cacheWrite1hTokens}`;
   // Numbers are bound as floats, which would make this a fraction of a day without the cast.
@@ -115,6 +148,7 @@ export function readClaudeUsage(
       isSidechain: claudeApiCalls.isSidechain,
       sessionId: claudeApiCalls.sessionId,
       cwd: claudeApiCalls.cwd,
+      projectId: claudeApiCalls.projectId,
       isLongPrompt,
       daysAgo,
       calls: sql<number>`count(*)`,
@@ -128,19 +162,14 @@ export function readClaudeUsage(
       webSearchRequests: sql<number>`sum(${claudeApiCalls.webSearchRequests})`,
     })
     .from(claudeApiCalls)
-    .where(
-      and(
-        inArray(claudeApiCalls.projectId, withSubProjects(db, projectId)),
-        only && gte(claudeApiCalls.calledAt, new Date(only.since)),
-        only && inArray(claudeApiCalls.sessionId, only.sessionIds),
-      ),
-    )
+    .where(condition)
     .groupBy(
       claudeApiCalls.model,
       claudeApiCalls.speed,
       claudeApiCalls.isSidechain,
       claudeApiCalls.sessionId,
       claudeApiCalls.cwd,
+      claudeApiCalls.projectId,
       isLongPrompt,
       daysAgo,
     )
@@ -164,6 +193,7 @@ export function readClaudeUsage(
   const models = new Map<string, ModelUsage>();
   const sessions = new Map<string, SessionUsage>();
   const folders = new Map<string, FolderUsage>();
+  const byProject = new Map<string, UsageGroup & { projectId: number | null; lastCallAt: number; sessionIds: Set<string> }>();
 
   for (const bucket of buckets) {
     const parts = costBreakdown(bucket, bucket.isLongPrompt ? LONG_PROMPT_TOKENS + 1 : 0);
@@ -177,9 +207,19 @@ export function readClaudeUsage(
       subagentCostInDollars: 0,
     }));
 
+    const project = entry(byProject, String(bucket.projectId), () => ({
+      ...emptyGroup(),
+      projectId: bucket.projectId,
+      lastCallAt: 0,
+      sessionIds: new Set<string>(),
+    }));
+    project.sessionIds.add(bucket.sessionId);
+    project.lastCallAt = Math.max(project.lastCallAt, bucket.lastCallAt * 1000);
+
     const groups: UsageGroup[] = [
       usage,
       session,
+      project,
       entry(models, bucket.model, () => ({ ...emptyGroup(), model: bucket.model })),
       entry(folders, bucket.cwd, () => ({ ...emptyGroup(), cwd: bucket.cwd })),
     ];
@@ -216,7 +256,7 @@ export function readClaudeUsage(
   usage.models = [...models.values()].sort(byCost);
   usage.folders = [...folders.values()].sort(byCost);
   usage.sessions = [...sessions.values()].sort((a, b) => b.lastCallAt - a.lastCallAt);
-  return usage;
+  return { usage, byProject };
 }
 
 function unreadableLines(db: Db): number {
