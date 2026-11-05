@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectEngine, isCompatible, isValidDatabaseName } from "./db-engines";
+import { detectEngine, isCompatible, isRedis, isValidDatabaseName } from "./db-engines";
 
 describe("detectEngine", () => {
   it.each([
@@ -58,5 +58,22 @@ describe("isValidDatabaseName", () => {
   it("lets through names that need no quoting care", () => {
     for (const name of ["app", "my_db", "db-1", "shop.v2", "a$b"]) expect(isValidDatabaseName(name)).toBe(true);
     for (const name of ["", "-x", "a b", 'a"b', "a;b", "a`b", "x".repeat(64), "é"]) expect(isValidDatabaseName(name)).toBe(false);
+  });
+});
+
+describe("isRedis", () => {
+  it("recognises Redis and its forks, not the tools around it", () => {
+    expect(isRedis({ image: "redis:7-alpine" })).toBe(true);
+    expect(isRedis({ image: "valkey/valkey:8" })).toBe(true);
+    expect(isRedis({ image: "bitnami/redis" })).toBe(true);
+    expect(isRedis({ image: "oliver006/redis_exporter" })).toBe(false);
+    expect(isRedis({ image: "rediscommander/redis-commander" })).toBe(false);
+    expect(isRedis({ image: "redis/redisinsight" })).toBe(false);
+    expect(isRedis({ image: "postgres:16" })).toBe(false);
+  });
+
+  it("accepts a custom image only when it is called like Redis and carries its variables", () => {
+    expect(isRedis({ image: "acme/cache", service: "redis", envKeys: ["REDIS_PASSWORD"] })).toBe(true);
+    expect(isRedis({ image: "acme/app", service: "app", envKeys: ["REDIS_URL"] })).toBe(false);
   });
 });

@@ -2,16 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMessages } from "@/i18n/provider";
-import { ENGINE_LABELS } from "@/lib/db-engines";
+import { BROWSABLE_LABELS } from "@/lib/db-engines";
 import { formatAge } from "@/lib/registry";
 import type { QueryResult } from "@/lib/sql-result";
 import type { ColumnInfo, TableInfo } from "@/server/databases";
-import type { DatabaseTarget } from "@/server/dumps/containers";
+import type { DatabaseTarget as ServerTarget, RedisContainer } from "@/server/dumps/containers";
+import type { SqliteTarget } from "@/server/sqlite";
 import type { HistoryEntry } from "@/server/query-history";
-import { BADGE, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, DATA, FIELD, LABEL, SECTION_TITLE } from "../ui";
+import type { Plan } from "@/lib/explain";
+import { BADGE, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, LABEL, SECTION_TITLE } from "../ui";
 import {
   clearProjectHistory,
   executeFilter,
+  explainSql,
   executeSql,
   loadColumns,
   loadDatabases,
@@ -19,9 +22,12 @@ import {
   loadPage,
   loadTables,
 } from "./actions";
+import { PlanView } from "./plan-view";
+import { RedisBrowser } from "./redis-browser";
 
 type Tab = "browse" | "query";
 type Output = { result: QueryResult; elapsedMs: number; hasMore: boolean };
+type DatabaseTarget = ServerTarget | SqliteTarget | RedisContainer;
 type TableKey = { schema: string | null; name: string };
 
 function ResultTable({ result }: { result: QueryResult }) {
@@ -90,6 +96,8 @@ export function DatabasesView({
   const [tab, setTab] = useState<Tab>("browse");
   const [page, setPage] = useState(0);
   const [output, setOutput] = useState<Output | null>(null);
+  const [plan, setPlan] = useState<{ plan: Plan; elapsedMs: number } | null>(null);
+  const [analyze, setAnalyze] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -98,6 +106,7 @@ export function DatabasesView({
 
   const target = targets.find(({ id }) => id === containerId) ?? null;
   const mongo = target?.engine === "mongodb";
+  const redis = target?.engine === "redis";
   const entries = target ? (history[target.projectId] ?? []) : [];
 
   const groups = useMemo(() => {
@@ -173,6 +182,7 @@ export function DatabasesView({
     if (!containerId || !database) return;
     fail(null);
     setBusy("query");
+    setPlan(null);
     setPage(pageNumber);
     const result = mongo
       ? await executeFilter(containerId, database, selected?.name ?? "", text, pageNumber)
@@ -187,6 +197,18 @@ export function DatabasesView({
     void refreshHistory();
   };
 
+  const explain = async () => {
+    if (!containerId || !database) return;
+    fail(null);
+    setBusy("explain");
+    setOutput(null);
+    setPlan(null);
+    const result = await explainSql(containerId, database, text, analyze);
+    setBusy(null);
+    if ("error" in result) fail(result.error);
+    else setPlan(result);
+  };
+
   // The page can be opened on a given container, from a link.
   const opener = useRef(pickContainer);
   useEffect(() => {
@@ -196,7 +218,8 @@ export function DatabasesView({
     if (initialContainer) void opener.current(initialContainer);
   }, [initialContainer]);
 
-  if (error) return <p className="text-alert">{messages.errors.dockerUnavailable(error)}</p>;
+  // SQLite files do not need Docker: when it is down, they are still there to open.
+  if (error && targets.length === 0) return <p className="text-alert">{messages.errors.dockerUnavailable(error)}</p>;
 
   const statements = text.trim();
   return (
@@ -205,6 +228,7 @@ export function DatabasesView({
         <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
         <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
         <p className="mt-1 max-w-2xl text-[12px] text-mut">{m.readOnly}</p>
+        {error ? <p className="mt-2 text-alert">{messages.errors.dockerUnavailable(error)}</p> : null}
       </header>
 
       {targets.length === 0 ? (
@@ -219,7 +243,7 @@ export function DatabasesView({
                 <optgroup key={project} label={project}>
                   {items.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.name} · {ENGINE_LABELS[item.engine]}
+                      {item.name} · {BROWSABLE_LABELS[item.engine]}
                     </option>
                   ))}
                 </optgroup>
@@ -252,7 +276,8 @@ export function DatabasesView({
       ) : null}
       {containerId && databases.length === 0 && busy === null && !failure ? <p className="text-mut">{m.noDatabases}</p> : null}
 
-      {database ? (
+      {database && redis && containerId ? <RedisBrowser key={`${containerId}/${database}`} containerId={containerId} database={database} onError={fail} /> : null}
+      {database && !redis ? (
         <div className="grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
           <section className={`${CARD} grid gap-2`}>
             <h2 className={SECTION_TITLE}>{mongo ? m.collections : m.tables}</h2>
@@ -358,8 +383,27 @@ export function DatabasesView({
                   >
                     {busy === "query" ? m.running : m.run}
                   </button>
+                  {mongo ? null : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy !== null || statements === ""}
+                        onClick={() => void explain()}
+                        className={BUTTON_SMALL}
+                      >
+                        {busy === "explain" ? m.explaining : m.explain}
+                      </button>
+                      {target?.engine === "postgres" ? (
+                        <label className="flex items-center gap-1.5 text-[12px]" title={m.analyzeHint}>
+                          <input type="checkbox" className={CHECKBOX} checked={analyze} onChange={(event) => setAnalyze(event.target.checked)} />
+                          {m.analyze}
+                        </label>
+                      ) : null}
+                    </>
+                  )}
                   <span className="text-[12px] text-mut">{m.shortcut}</span>
                 </div>
+                {plan && busy !== "explain" ? <PlanView plan={plan.plan} elapsedMs={plan.elapsedMs} /> : null}
                 {output && busy !== "query" ? (
                   <>
                     <Summary output={output} limit={1000} />

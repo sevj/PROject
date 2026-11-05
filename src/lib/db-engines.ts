@@ -8,6 +8,11 @@ export const ENGINE_LABELS: Record<Engine, string> = {
   mongodb: "MongoDB",
 };
 
+/** What the Databases page can open: the servers above, Redis (browsed, not dumped) and SQLite files that sit in a project. */
+export type BrowsableEngine = Engine | "sqlite" | "redis";
+
+export const BROWSABLE_LABELS: Record<BrowsableEngine, string> = { ...ENGINE_LABELS, sqlite: "SQLite", redis: "Redis" };
+
 /** Tools that talk to a database, rather than being one: their image name says "postgres" too. */
 const NOT_A_SERVER = /exporter|admin|backup|proxy|bouncer|client|operator|dump|express|compass|migrate|init/;
 
@@ -66,3 +71,15 @@ export const DUMP_EXTENSION: Record<Engine, string> = {
   mariadb: "sql",
   mongodb: "archive",
 };
+
+/** Redis and its forks. Kept out of `Engine`: there is no dump for it, only a browser. */
+const REDIS_IMAGE = /redis|valkey|keydb|dragonfly|redict/;
+const NOT_A_REDIS_SERVER = /exporter|commander|insight|sentinel|backup|proxy|operator|dump|migrate|init|client|admin|ui\b|gui/;
+
+export function isRedis({ image, service = "", envKeys = [] }: { image: string; service?: string; envKeys?: string[] }): boolean {
+  const name = image.toLowerCase().split("@")[0].replace(/:[^/:]*$/, "");
+  if (NOT_A_REDIS_SERVER.test(name)) return false;
+  if (REDIS_IMAGE.test(name)) return true;
+  // An image built on top of Redis: the container is called like one and carries its variables.
+  return /(^|[-_.])(redis|valkey|cache)([-_.\d]|$)/i.test(service) && envKeys.some((key) => /^REDIS_/.test(key));
+}

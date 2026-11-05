@@ -40,3 +40,20 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 
 ## Reste à faire hors chantiers
 - Fait : `env-files.tsx` orphelin et clés `environment` / `noEnv` supprimés. La ligne « .env files » de `project-facts.tsx` est gardée : elle sert encore dans le panneau latéral de la liste.
+
+## 7. Explorateur de bases : suite (retenu)
+- [x] EXPLAIN visuel (PostgreSQL, MySQL, MariaDB ; SQLite avec son explorateur) : plan d'exécution en arbre avec coût, lignes estimées/réelles et nœuds lents mis en évidence (PostgreSQL `EXPLAIN (FORMAT JSON)`, MySQL/MariaDB `EXPLAIN FORMAT=JSON`, SQLite `EXPLAIN QUERY PLAN`). Lecture seule : pas d'`ANALYZE` sur une requête qui écrit.
+- [x] SQLite : fichiers `.db`/`.sqlite` détectés dans le projet, ouverts en lecture seule.
+- [x] Redis : clés paginées (`SCAN`), type et TTL, valeur affichée selon le type, commandes de lecture uniquement. (aucun champ de commande libre ; scripts de lecture fixes, non essayés sur un vrai Redis)
+- [ ] À voir ensuite : schéma et relations entre tables (clés étrangères), comparaison de deux dumps.
+
+## Idées Git (à documenter, pas décidé de les faire)
+Les actions Git restent volontairement limitées (voir README). À rediscuter avant tout développement :
+- Diff, log, historique d'un fichier, blame.
+- Commit, push, merge, rebase, actions sur les stashes.
+- État des PR et de la CI (GitHub/GitLab) avec lien direct.
+- Alertes : travail non poussé, branches obsolètes, dépôt sale depuis longtemps.
+- Worktrees, submodules, tags et releases.
+
+## Autres idées (liste du 2026-11-05, non retenues pour l'instant)
+Logs de conteneur en direct, erreurs Docker avec délai d'expiration, démarrage automatique de l'app, alertes sur l'accueil, recherche globale, export du journal, notifications, sauvegarde/export de la configuration, dépendances cargo/go/pip, comparaison `.env.example`/`.env`, budgets Claude.

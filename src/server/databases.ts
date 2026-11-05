@@ -1,4 +1,5 @@
 import type { Engine } from "@/lib/db-engines";
+import { type Plan, parseMysqlPlan, parsePostgresPlan } from "@/lib/explain";
 import { checkMongoFilter, quoteTable } from "@/lib/sql-guard";
 import { PG_NULL, type QueryResult, parseMongoDocuments, parseMysqlBatch, parsePgCsv } from "@/lib/sql-result";
 import { runQuick } from "./dumps/docker-run";
@@ -62,6 +63,26 @@ async function run(conn: Conn, command: Command, parse: (stdout: string) => Quer
 /** The statement has already been through `checkReadOnlySql`. */
 export function runSql(conn: Conn, sql: string): Promise<RunOutcome> {
   return run(conn, sqlCommand(conn, sql), conn.engine === "postgres" ? parsePgCsv : parseMysqlBatch);
+}
+
+export type ExplainOutcome = { ok: true; plan: Plan; elapsedMs: number } | { ok: false; error: string };
+
+/**
+ * The plan of a statement that has already been through `checkExplainableSql`.
+ * ANALYZE (PostgreSQL only) really runs it: in the read-only session, with the time limit.
+ */
+export async function runExplain(conn: Conn, statement: string, analyze: boolean): Promise<ExplainOutcome> {
+  if (conn.engine === "mongodb") return { ok: false, error: "unsupported" };
+  const postgres = conn.engine === "postgres";
+  const sql = postgres
+    ? `EXPLAIN (${analyze ? "ANALYZE, BUFFERS, " : ""}FORMAT JSON) ${statement}`
+    : `EXPLAIN FORMAT=JSON ${statement}`;
+  const outcome = await runSql(conn, sql);
+  if (!outcome.ok) return outcome;
+  // One cell holds the whole plan, as JSON.
+  const cell = outcome.result.rows[0]?.[0] ?? "";
+  const plan = postgres ? parsePostgresPlan(cell) : parseMysqlPlan(cell);
+  return plan ? { ok: true, plan, elapsedMs: outcome.elapsedMs } : { ok: false, error: "unreadable" };
 }
 
 const mongoCommand = (conn: Conn, script: string): Command => ({ args: mongoEval(conn.credentials, script) });

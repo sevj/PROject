@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkMongoFilter, checkReadOnlySql, quoteIdentifier, quoteTable } from "./sql-guard";
+import { checkExplainableSql, checkMongoFilter, checkReadOnlySql, quoteIdentifier, quoteTable } from "./sql-guard";
 
 const pg = (sql: string) => checkReadOnlySql(sql, "postgres");
 const my = (sql: string) => checkReadOnlySql(sql, "mysql");
@@ -80,5 +80,16 @@ describe("checkMongoFilter", () => {
     expect(checkMongoFilter("[1]")).toEqual({ ok: false, reason: "invalid" });
     expect(checkMongoFilter("{a:")).toEqual({ ok: false, reason: "invalid" });
     expect(checkMongoFilter('{"$where": "sleep(1)"}')).toEqual({ ok: false, reason: "script" });
+  });
+});
+
+describe("checkExplainableSql", () => {
+  it("accepts a plain read and refuses what EXPLAIN cannot describe", () => {
+    expect(checkExplainableSql("SELECT 1;", "postgres")).toEqual({ ok: true, statement: "SELECT 1" });
+    expect(checkExplainableSql("-- note\nWITH a AS (SELECT 1) SELECT * FROM a", "mysql").ok).toBe(true);
+    expect(checkExplainableSql("EXPLAIN SELECT 1", "postgres")).toEqual({ ok: false, reason: "notReadOnly" });
+    expect(checkExplainableSql("SHOW TABLES", "mysql")).toEqual({ ok: false, reason: "notReadOnly" });
+    expect(checkExplainableSql("SELECT 1; DROP TABLE a", "postgres")).toEqual({ ok: false, reason: "multiple" });
+    expect(checkExplainableSql("SELECT * INTO t FROM a", "postgres")).toEqual({ ok: false, reason: "into" });
   });
 });

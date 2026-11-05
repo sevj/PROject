@@ -1,7 +1,8 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { getDb } from "@/server/db/client";
-import { listDatabaseContainers, publicTarget } from "@/server/dumps/containers";
+import { listDatabaseServers, publicTarget, redisTarget } from "@/server/dumps/containers";
+import { listSqliteTargets } from "@/server/sqlite";
 import { readHistories } from "@/server/query-history";
 import { LoadingFallback } from "../loading-fallback";
 import { DatabasesView } from "./databases-view";
@@ -9,8 +10,8 @@ import { DatabasesView } from "./databases-view";
 async function Databases({ searchParams }: { searchParams: Promise<{ container?: string }> }) {
   await connection();
   const { container } = await searchParams;
-  const { containers, error } = await listDatabaseContainers(getDb());
-  const targets = containers.map(publicTarget);
+  const { containers, redis, error } = await listDatabaseServers(getDb());
+  const targets = [...containers.map(publicTarget), ...redis.map(redisTarget), ...listSqliteTargets(getDb())];
   const initial = targets.find(({ name }) => name === container)?.id ?? null;
   const { histories, now } = readHistories(getDb(), targets.map(({ projectId }) => projectId));
   return (

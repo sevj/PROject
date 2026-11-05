@@ -1,4 +1,4 @@
-import type { Engine } from "./db-engines";
+import type { BrowsableEngine, Engine } from "./db-engines";
 
 /**
  * The first line of defense of the SQL editor. The database enforces read-only itself
@@ -14,7 +14,7 @@ type Token = { kind: "word" | "other"; text: string };
  * Splits a statement into words, with strings, quoted names and comments taken out so that
  * a keyword inside them is not mistaken for one. Returns null when something is left open.
  */
-function tokenize(sql: string, engine: Engine): { tokens: Token[]; semicolons: number[] } | null {
+function tokenize(sql: string, engine: BrowsableEngine): { tokens: Token[]; semicolons: number[] } | null {
   const mysql = engine === "mysql" || engine === "mariadb";
   const tokens: Token[] = [];
   const semicolons: number[] = [];
@@ -29,11 +29,11 @@ function tokenize(sql: string, engine: Engine): { tokens: Token[]; semicolons: n
       const end = sql.indexOf("\n", i);
       i = end === -1 ? sql.length : end + 1;
     } else if (char === "/" && next === "*") {
-      // PostgreSQL comments nest; MySQL's do not.
+      // PostgreSQL comments nest; those of MySQL and SQLite do not.
       let depth = 1;
       i += 2;
       while (i < sql.length && depth > 0) {
-        if (!mysql && sql[i] === "/" && sql[i + 1] === "*") {
+        if (engine === "postgres" && sql[i] === "/" && sql[i + 1] === "*") {
           depth += 1;
           i += 2;
         } else if (sql[i] === "*" && sql[i + 1] === "/") {
@@ -87,7 +87,13 @@ function tokenize(sql: string, engine: Engine): { tokens: Token[]; semicolons: n
   return { tokens, semicolons };
 }
 
-export function checkReadOnlySql(sql: string, engine: Engine): GuardResult {
+/** SQLite has no SHOW or DESCRIBE; PRAGMA is left out because some of them write. */
+const SQLITE_FIRST = new Set(["select", "with", "values", "explain"]);
+
+/** What EXPLAIN can describe: a plan for a statement that is itself a plain read. */
+const EXPLAINABLE_FIRST = new Set(["select", "with", "table", "values"]);
+
+export function checkReadOnlySql(sql: string, engine: BrowsableEngine, allowed: ReadonlySet<string> = ALLOWED_FIRST): GuardResult {
   const scanned = tokenize(sql, engine);
   if (!scanned) return { ok: false, reason: "unterminated" };
   // A single trailing semicolon is only a way to end the statement.
@@ -96,7 +102,7 @@ export function checkReadOnlySql(sql: string, engine: Engine): GuardResult {
   if (tokens.length === 0) return { ok: false, reason: "empty" };
   if (tokens.some((token) => token.text === ";")) return { ok: false, reason: "multiple" };
   const first = tokens[0];
-  if (first.kind !== "word" || !ALLOWED_FIRST.has(first.text)) return { ok: false, reason: "notReadOnly" };
+  if (first.kind !== "word" || !allowed.has(first.text)) return { ok: false, reason: "notReadOnly" };
   // `SELECT ... INTO OUTFILE` writes a file, `SELECT ... INTO table` creates one.
   if (tokens.some((token) => token.kind === "word" && token.text === "into")) return { ok: false, reason: "into" };
   return { ok: true, statement: sql.trim().replace(/[;\s]+$/, "") };
@@ -128,4 +134,14 @@ export function checkMongoFilter(text: string): MongoFilter {
   } catch {
     return { ok: false, reason: "invalid" };
   }
+}
+
+/** The statement to put after EXPLAIN. Stricter than the editor: no SHOW, no EXPLAIN of an EXPLAIN. */
+export function checkExplainableSql(sql: string, engine: BrowsableEngine): GuardResult {
+  return checkReadOnlySql(sql, engine, EXPLAINABLE_FIRST);
+}
+
+/** The SQL editor on a SQLite file. */
+export function checkSqliteSql(sql: string): GuardResult {
+  return checkReadOnlySql(sql, "sqlite", SQLITE_FIRST);
 }
