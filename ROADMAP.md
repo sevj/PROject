@@ -5,9 +5,9 @@ Six chantiers choisis, dans l'ordre. Cocher au fur et à mesure.
 Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Carte) regroupées sous « Outils » ; rien ne modifie un projet sans bouton explicite ; nouvelles migrations.
 
 ## 0. Socle commun
-- [ ] Parseur compose étendu : ports, réseaux, volumes, depends_on.
-- [ ] API Docker étendue : stats, réseaux, volumes, `system df`.
-- [ ] Table générique d'analyses en cache (résultats datés).
+- [ ] Parseur compose étendu : ports et depends_on faits ; réseaux et volumes pas lus, rien n'en a besoin pour l'instant.
+- [ ] API Docker étendue : stats, volumes et `system df` faits ; réseaux seulement par conteneur (`docker inspect`), pas de `docker network`.
+- [x] Table générique d'analyses en cache (résultats datés).
 
 ## 1. Ressources (entrée de menu + section dans l'onglet Docker)
 - [x] `docker stats` CPU/mémoire toutes les 2 s tant que la page est ouverte.
