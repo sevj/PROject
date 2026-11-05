@@ -35,6 +35,7 @@ import { EnvTab } from "./env-tab";
 import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
 import { readDependencies } from "@/server/dependencies";
+import { ProjectSites } from "./project-sites";
 import { ProjectTree } from "./project-tree";
 import { SecurityTab } from "./security-tab";
 
@@ -142,8 +143,11 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             <ProjectDescription projectId={row.id} description={row.description} detected={row.manifestDescription} />
           </div>
           {!row.missing && !row.abandoned ? (
-            <div className="mt-3">
+            <div className="mt-3 flex flex-wrap gap-2">
               <ClaudeConsoleButton projectId={row.id} projectName={row.name} />
+              <Suspense fallback={null}>
+                <ProjectSites projectId={row.id} />
+              </Suspense>
             </div>
           ) : null}
         </div>

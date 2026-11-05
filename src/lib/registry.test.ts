@@ -40,6 +40,8 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     commitCount: 1,
     branchCount: 1,
     stashCount: 0,
+    unpushedCount: 0,
+    remoteCount: 0,
     firstCommitAt: null,
     lastCommitAuthor: null,
     lastCommitAt: NOW - DAY,

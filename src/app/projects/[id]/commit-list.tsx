@@ -23,9 +23,10 @@ function changesOf(patch: string): string {
   return firstHunk === -1 ? patch.slice(patch.indexOf("\n") + 1) : patch.slice(firstHunk + 1);
 }
 
-function CommitFiles({ files }: { files: CommitFile[] }) {
+/** `first` is the path to open on, the first file when it is not among them. */
+export function CommitFiles({ files, first }: { files: CommitFile[]; first?: string }) {
   const m = useMessages().gitTab;
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState(() => Math.max(0, files.findIndex(({ path }) => path === first)));
   const file = files[selected];
   return (
     <div className="grid items-start gap-3 md:grid-cols-[260px_minmax(0,1fr)]">

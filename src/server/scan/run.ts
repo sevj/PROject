@@ -48,6 +48,8 @@ function saveFacts(db: Db, projectId: number, { folder, git, error }: Scanned, n
     commitCount: git?.commitCount ?? null,
     branchCount: git?.branchCount ?? null,
     stashCount: git?.stashCount ?? null,
+    unpushedCount: git?.unpushedCount ?? null,
+    remoteCount: git?.remoteCount ?? null,
     firstCommitAt: git?.firstCommitAt ?? null,
     lastCommitAuthor: git?.lastCommitAuthor ?? null,
     lastCommitAt: git?.lastCommitAt ?? null,

@@ -65,6 +65,10 @@ export const fr: Messages = {
     selectGroup: (name) => `Sélectionner les projets de ${name}`,
     expand: (name) => `Déplier ${name}`,
     collapse: (name) => `Replier ${name}`,
+    unpushed: (count, noRemote) =>
+      noRemote
+        ? `${plural(count, "commit")} sans dépôt distant : aucune copie ailleurs`
+        : `${plural(count, "commit")} absent${count > 1 ? "s" : ""} des dépôts distants`,
     repositoryCount: (count) => plural(count, "dépôt"),
     favorite: "Favori",
     notFound: "introuvable",
@@ -182,6 +186,8 @@ export const fr: Messages = {
     remote: "Dépôt distant",
     gap: "Écart",
     noUpstream: "pas de suivi distant",
+    unpushed: "Non poussés",
+    unpushedNoRemote: (count) => `${count} · aucun dépôt distant`,
     changedFiles: "Fichiers modifiés",
     commits: "Commits",
     localBranches: "Branches locales",
@@ -272,6 +278,11 @@ export const fr: Messages = {
     branchNameInvalid: (name) => `« ${name} » n'est pas un nom de branche valide.`,
     compare: (base, ahead, behind) => `vs ${base} +${ahead} −${behind}`,
     changes: (count) => `Fichiers modifiés · ${count}`,
+    workingDiff: "Modifications non commitées",
+    openDiff: (path) => `Voir les modifications de ${path}`,
+    openStash: (ref) => `Voir le contenu de ${ref}`,
+    diffUnreadable: "Ces modifications n'ont pas pu être lues.",
+    diffEmpty: "Plus aucune différence : la liste date de l'ouverture de l'onglet.",
     changeStates: {
       modified: "modifié",
       added: "ajouté",
@@ -281,6 +292,10 @@ export const fr: Messages = {
       conflict: "conflit",
     },
     moreChanges: (count) => (count > 1 ? `et ${count} autres fichiers` : "et 1 autre fichier"),
+    unpushed: (count) => `Commits non poussés · ${count}`,
+    unpushedHint: "Absents de tous les dépôts distants, d'après le dernier Fetch.",
+    unpushedNoRemote: "Ce dépôt n'a aucun dépôt distant : ces commits n'existent qu'ici.",
+    moreUnpushed: (count) => (count > 1 ? `et ${count} autres commits` : "et 1 autre commit"),
     stashes: (count) => `Stashes · ${count}`,
     remoteBranches: (count) => `Branches distantes · ${count}`,
     remoteBranchesHint: "Sur le dépôt distant, sans branche locale. Fais un Fetch pour mettre à jour cette liste.",
@@ -395,6 +410,8 @@ export const fr: Messages = {
     },
     docker: "Docker",
     dockerTab: {
+      addresses: "Adresses",
+      openSite: (url, service) => `Ouvrir ${url} (${service})`,
       summary: (running, total) => `${running} sur ${total} lancé${running > 1 ? "s" : ""}`,
       start: "Démarrer",
       stop: "Arrêter",

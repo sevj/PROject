@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { mapLimit } from "./limit";
 
 const run = promisify(execFile);
 
@@ -20,6 +21,10 @@ export type GitFacts = {
   firstCommitAt: Date | null;
   branchCount: number;
   stashCount: number;
+  /** Commits of the local branches that no known remote branch has. Null when it cannot be told. */
+  unpushedCount: number | null;
+  /** Null when it cannot be told. */
+  remoteCount: number | null;
   weeklyCommits: number[];
 };
 
@@ -111,7 +116,7 @@ export async function readGitFacts(path: string, now = new Date()): Promise<GitF
   const nowSeconds = Math.floor(now.getTime() / 1000);
   const status = parseStatus(await git(path, ["status", "--porcelain=v2", "--branch"]));
 
-  const [last, count, remote, recent, roots, branches, stashes] = await Promise.all([
+  const [last, count, remote, recent, roots, branches, stashes, unpushed, remotes] = await Promise.all([
     gitOptional(path, ["log", "-1", "--format=%ct%x00%an%x00%s"]),
     gitOptional(path, ["rev-list", "--count", "HEAD"]),
     gitOptional(path, ["remote", "get-url", "origin"]),
@@ -120,6 +125,9 @@ export async function readGitFacts(path: string, now = new Date()): Promise<GitF
     gitOptional(path, ["log", "--max-parents=0", "--format=%ct", "HEAD"]),
     gitOptional(path, ["for-each-ref", "--format=%(refname)", "refs/heads"]),
     gitOptional(path, ["stash", "list"]),
+    // The gap with the upstream says nothing of a branch without one, or of the other branches.
+    gitOptional(path, ["rev-list", "--count", "--branches", "--not", "--remotes"]),
+    gitOptional(path, ["remote"]),
   ]);
 
   const [lastTimestamp, lastAuthor, lastSubject] = last?.trimEnd().split("\0") ?? [];
@@ -135,6 +143,8 @@ export async function readGitFacts(path: string, now = new Date()): Promise<GitF
     firstCommitAt: rootTimestamps.length > 0 ? new Date(Math.min(...rootTimestamps) * 1000) : null,
     branchCount: countLines(branches),
     stashCount: countLines(stashes),
+    unpushedCount: unpushed === undefined ? null : Number(unpushed.trim()),
+    remoteCount: remotes === undefined ? null : countLines(remotes),
     weeklyCommits: bucketWeeks(
       (recent ?? "").split("\n").filter(Boolean).map(Number),
       nowSeconds,
@@ -248,6 +258,11 @@ export type TagDetail = { name: string; hash: string; at: number | null; subject
 /** What is known without comparing any file, so at once. */
 export type AuthorCommits = Pick<AuthorHistory, "name" | "people" | "commits">;
 
+export type UnpushedCommit = { hash: string; at: number | null; subject: string };
+export type UnpushedBranch = { branch: string; commits: UnpushedCommit[] };
+/** `total` also counts the commits beyond the ones listed. */
+export type Unpushed = { total: number; branches: UnpushedBranch[] };
+
 export type GitDetails = {
   authors: AuthorCommits[];
   /** Comparing a year of commits takes seconds on some repositories: it must not hold the page. */
@@ -261,6 +276,7 @@ export type GitDetails = {
   changes: ChangedFile[];
   stashes: StashEntry[];
   remotes: string[];
+  unpushed: Unpushed;
   /** On a remote, without any local branch for them. */
   remoteBranches: RemoteBranch[];
   remoteBranchCount: number;
@@ -454,6 +470,29 @@ export function parseChanges(output: string): ChangedFile[] {
   return files;
 }
 
+const UNPUSHED_LIMIT = 100;
+
+/** For a `git log --source`, which names one branch per commit even when several hold it. */
+export function parseUnpushed(output: string): UnpushedBranch[] {
+  const branches = new Map<string, UnpushedCommit[]>();
+  for (const line of output.split("\n").filter(Boolean)) {
+    const [source, hash, timestamp, subject] = line.split("\0");
+    const branch = source.replace(/^refs\/heads\//, "");
+    const commit = { hash, at: timestamp ? Number(timestamp) * 1000 : null, subject: subject ?? "" };
+    branches.set(branch, [...(branches.get(branch) ?? []), commit]);
+  }
+  return [...branches].map(([branch, commits]) => ({ branch, commits }));
+}
+
+async function readUnpushed(path: string): Promise<Unpushed> {
+  const range = ["--branches", "--not", "--remotes"];
+  const [count, log] = await Promise.all([
+    gitOptional(path, ["rev-list", "--count", ...range]),
+    gitOptional(path, ["log", "--source", `--max-count=${UNPUSHED_LIMIT}`, "--format=%S%x00%h%x00%ct%x00%s", ...range]),
+  ]);
+  return { total: Number(count?.trim() ?? 0), branches: parseUnpushed(log ?? "") };
+}
+
 /** `On main: message`, or `WIP on main: abc123 subject` when no message was given. */
 export function parseStashes(output: string): StashEntry[] {
   return output
@@ -575,16 +614,68 @@ export function attachPatches(
   });
 }
 
+// What a repository configures to transform its files must not run because a page was opened.
+const DIFF_OPTIONS = ["--no-color", "--no-ext-diff", "--no-textconv"];
+const QUOTING = ["-c", "core.quotePath=false"];
+
+const UNTRACKED_PATCH_LIMIT = 30;
+const UNTRACKED_CONCURRENCY = 8;
+
+/** Git has nothing to compare an untracked file with, so it is compared with nothing. */
+async function readUntrackedFile(cwd: string, file: string, showPatch: boolean): Promise<CommitFile> {
+  const unread = { path: file, insertions: 0, deletions: 0, patch: null, truncated: false };
+  if (!showPatch) return unread;
+  let patch: string;
+  try {
+    patch = await git(cwd, [...QUOTING, "diff", "--no-index", ...DIFF_OPTIONS, "--patch", "--", "/dev/null", file]);
+  } catch (error) {
+    // Finding differences is what this command exits with 1 for.
+    const { code, stdout } = error as { code?: number; stdout?: string };
+    if (code !== 1 || stdout === undefined) return unread;
+    patch = stdout;
+  }
+  const firstHunk = patch.indexOf("\n@@ ");
+  const added = firstHunk === -1 ? [] : patch.slice(firstHunk + 1).split("\n").filter((line) => line.startsWith("+"));
+  const binary = firstHunk === -1 && patch.includes("\nBinary files ");
+  return attachPatches([{ path: file, insertions: binary ? null : added.length, deletions: binary ? null : 0 }], patch)[0];
+}
+
+/** What differs from the last commit, untracked files included. Null when it cannot be read. */
+export async function readWorkingDiff(path: string): Promise<CommitFile[] | null> {
+  const [numstat, patch, others] = await Promise.all([
+    // Fails before the first commit, when only untracked files can exist.
+    gitOptional(path, [...QUOTING, "diff", ...DIFF_OPTIONS, "--numstat", "HEAD"]),
+    gitOptional(path, [...QUOTING, "diff", ...DIFF_OPTIONS, "--patch", "HEAD"]),
+    gitOptional(path, ["ls-files", "--others", "--exclude-standard", "-z"]),
+  ]);
+  if (others === undefined) return null;
+  const listed = others.split("\0").filter(Boolean).map((file, index) => ({ file, showPatch: index < UNTRACKED_PATCH_LIMIT }));
+  const untracked = await mapLimit(listed, UNTRACKED_CONCURRENCY, ({ file, showPatch }) => readUntrackedFile(path, file, showPatch));
+  return [...attachPatches(parseNumstat(numstat ?? ""), patch), ...untracked];
+}
+
+/** A reference comes from the browser: it must not be able to read as an option or a range. */
+const STASH_REF = /^stash@\{\d{1,6}\}$/;
+
+/** What a stash holds, which stays in place. Null when this is not one of this repository. */
+export async function readStashView(path: string, ref: string): Promise<CommitFile[] | null> {
+  if (!STASH_REF.test(ref)) return null;
+  const show = [...QUOTING, "stash", "show", ...DIFF_OPTIONS, "--include-untracked"];
+  const [numstat, patch] = await Promise.all([
+    gitOptional(path, [...show, "--numstat", ref]),
+    gitOptional(path, [...show, "--patch", ref]),
+  ]);
+  return numstat === undefined ? null : attachPatches(parseNumstat(numstat), patch);
+}
+
 /** Null when this is not a commit of this repository. */
 export async function readCommitView(path: string, hash: string): Promise<CommitView | null> {
   if (!COMMIT_HASH.test(hash)) return null;
-  // What a repository configures to transform its files must not run because a page was opened.
-  const diff = ["--no-color", "--no-ext-diff", "--no-textconv", "--diff-merges=first-parent", "--format="];
-  const quoting = ["-c", "core.quotePath=false"];
+  const diff = [...DIFF_OPTIONS, "--diff-merges=first-parent", "--format="];
   const [meta, numstat, patch] = await Promise.all([
     gitOptional(path, ["log", "-1", "--format=%h%x00%ct%x00%aN%x00%p%x00%s%x00%b", hash]),
-    gitOptional(path, [...quoting, "show", ...diff, "--numstat", hash]),
-    gitOptional(path, [...quoting, "show", ...diff, "--patch", hash]),
+    gitOptional(path, [...QUOTING, "show", ...diff, "--numstat", hash]),
+    gitOptional(path, [...QUOTING, "show", ...diff, "--patch", hash]),
   ]);
   if (meta === undefined) return null;
   const [short, timestamp, author, parents, subject, body] = meta.split("\0");
@@ -667,7 +758,11 @@ export async function readGitDetails(path: string, now = new Date()): Promise<Gi
     gitOptional(path, ["status", "--porcelain=v1", "-z"]),
     gitOptional(path, ["stash", "list", "--format=%gd%x00%ct%x00%gs"]),
   ]);
-  const [allRemote, remotes] = await Promise.all([readRemoteBranches(path, allBranches), readRemotes(path)]);
+  const [allRemote, remotes, unpushed] = await Promise.all([
+    readRemoteBranches(path, allBranches),
+    readRemotes(path),
+    readUnpushed(path),
+  ]);
 
   const allTags = parseTags(tags ?? "");
   const changes = parseChanges(status ?? "");
@@ -689,6 +784,7 @@ export async function readGitDetails(path: string, now = new Date()): Promise<Gi
     changes: changes.slice(0, CHANGE_LIMIT),
     stashes: parseStashes(stashes ?? ""),
     remotes,
+    unpushed,
     remoteBranches: allRemote.slice(0, BRANCH_LIMIT),
     remoteBranchCount: allRemote.length,
     tags: allTags.slice(0, TAG_LIMIT),

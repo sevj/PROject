@@ -31,6 +31,9 @@ export type RegistryRow = {
   commitCount: number | null;
   branchCount: number | null;
   stashCount: number | null;
+  /** Commits of the local branches that no known remote branch has, at the last refresh. */
+  unpushedCount: number | null;
+  remoteCount: number | null;
   firstCommitAt: number | null;
   lastCommitAuthor: string | null;
   lastCommitAt: number | null;

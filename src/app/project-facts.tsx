@@ -54,6 +54,11 @@ export function GitFacts({ row, now, card = false }: { row: RegistryRow; now: nu
         )}
       </Fact>
       <Fact label={m.gap}>{row.upstream ? `+${row.ahead ?? 0} −${row.behind ?? 0}` : m.noUpstream}</Fact>
+      {row.unpushedCount === null ? null : (
+        <Fact label={m.unpushed} alert={row.unpushedCount > 0}>
+          {row.remoteCount === 0 ? m.unpushedNoRemote(row.unpushedCount) : String(row.unpushedCount)}
+        </Fact>
+      )}
       <Fact label={m.changedFiles} alert={(row.dirtyCount ?? 0) > 0}>
         {String(row.dirtyCount ?? 0)}
       </Fact>

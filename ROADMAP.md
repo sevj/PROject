@@ -51,6 +51,34 @@ Choix par défaut : nouvelles entrées de menu (Ressources, Ports, Journal, Cart
 ## 8. Logs de conteneur
 - [x] Bouton « Logs » sur chaque conteneur, même arrêté : 1000 dernières lignes puis la suite en direct, filtre, horodatage, stderr signalé. Rien n'est enregistré.
 
+## 9. Améliorations de l'existant (retenu, review du 2026-11-05)
+Dans l'ordre. Rien n'écrit dans un projet sans bouton explicite.
+- [x] Git : commits non poussés, tous remotes confondus, et mention « aucun remote ». (compte aussi d'anciens commits de branches locales que le dépôt distant n'a plus)
+- [x] Git : diff des fichiers modifiés et contenu des stashes, en lecture seule. (au plus 30 fichiers non suivis avec leur contenu)
+- [x] Docker : bouton « Ouvrir le site » depuis Traefik et les ports publiés. (ports web usuels seulement, Traefik supposé sur 80 et 443)
+- [ ] Console Claude : sessions gardées côté serveur et rattachées après un rechargement.
+- [ ] Git : bouton explicite « Fetch tous les projets ».
+- [ ] Docker : boutons `build` et `pull` explicites.
+- [ ] Logs : logs de tout le projet fusionnés, et reprise après un redémarrage.
+- [ ] Dumps : dump de sécurité proposé avant un chargement.
+- [ ] Sécurité : bouton « Analyser tous les projets ».
+- [ ] Structure : taille des dossiers.
+
+## 10. Ajouts (retenu)
+- [ ] Page Claude globale : coût par projet, jour et modèle.
+- [ ] Nettoyage des projets : dossiers régénérables (`var/`, `node_modules`…), avec aperçu et confirmation.
+- [ ] Config Claude par projet : `CLAUDE.md`, hooks, serveurs MCP. Le contenu reste à étayer ensemble avant de développer.
+- [ ] Serveurs distants d'un projet (intégration, production…) : les déclarer. À développer plus tard, le détail reste à définir.
+
+## Écarté (review du 2026-11-05)
+- Copier ou télécharger un résultat de requête.
+- Commandes du projet : la console Docker et le terminal externe couvrent déjà le besoin.
+
+## Pas encore décidé (review du 2026-11-05)
+- Versions et fin de support : tableau comparant les projets.
+- Merge requests et CI (GitLab d'abord) : demande un token et des appels réseau.
+- Fiabilité et ménage : tester `next build` et un mode production local, passer `pm.db` en `600`, renommer le README, menu « Outils ».
+
 ## Idées Git (à documenter, pas décidé de les faire)
 Les actions Git restent volontairement limitées (voir README). À rediscuter avant tout développement :
 - Diff, log, historique d'un fichier, blame.

@@ -8,6 +8,7 @@ import { BADGE, CARD, DATA, SECTION_TITLE } from "../../ui";
 import { CheckOutAllRemotes, CheckOutRemote, CleanUpBranches, FetchControl, NewBranch, PullButton, SwitchBranch } from "./branch-actions";
 import { CommitChart } from "./commit-chart";
 import { CommitList } from "./commit-list";
+import { StashDiffLink, WorkingDiffLink } from "./diff-links";
 
 const COLUMNS = "grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]";
 
@@ -18,7 +19,7 @@ const LIST = "max-h-[420px] overflow-y-auto";
 const currentBranchLabel = (details: GitDetails, row: RegistryRow, messages: Messages) =>
   details.branches.find((branch) => branch.current)?.name ?? row.branch ?? messages.facts.detachedHead;
 
-function Changes({ details, messages }: { details: GitDetails; messages: Messages }) {
+function Changes({ details, projectId, messages }: { details: GitDetails; projectId: number; messages: Messages }) {
   const m = messages.gitTab;
   return (
     <section className={CARD}>
@@ -26,10 +27,7 @@ function Changes({ details, messages }: { details: GitDetails; messages: Message
       <div className={LIST}>
         {details.changes.map((file) => (
           <div key={`${file.path}${file.from}`} className="flex items-baseline justify-between gap-3 border-b border-rule py-1.5 last:border-b-0">
-            <span className={`${DATA} min-w-0 break-all`}>
-              {file.from ? `${file.from} → ` : ""}
-              {file.path}
-            </span>
+            <WorkingDiffLink projectId={projectId} path={file.path} from={file.from} />
             <span className={`${DATA} shrink-0 ${file.state === "conflict" ? "text-alert" : "text-mut"}`}>
               {m.changeStates[file.state]}
             </span>
@@ -43,7 +41,39 @@ function Changes({ details, messages }: { details: GitDetails; messages: Message
   );
 }
 
-function Stashes({ details, now, messages }: { details: GitDetails; now: number; messages: Messages }) {
+function Unpushed({ details, now, messages }: { details: GitDetails; now: number; messages: Messages }) {
+  const m = messages.gitTab;
+  const { total, branches } = details.unpushed;
+  const listed = branches.reduce((sum, { commits }) => sum + commits.length, 0);
+  return (
+    <section className={CARD}>
+      <h2 className={`${SECTION_TITLE} mb-1`}>{m.unpushed(total)}</h2>
+      <p className={`${DATA} pt-2 ${details.remotes.length === 0 ? "text-alert" : "text-mut"}`}>
+        {details.remotes.length === 0 ? m.unpushedNoRemote : m.unpushedHint}
+      </p>
+      <div className={LIST}>
+        {branches.map(({ branch, commits }) => (
+          <div key={branch} className="border-b border-rule py-[7px] last:border-b-0">
+            <div className={`${DATA} font-medium break-words`}>
+              {branch} · {commits.length}
+            </div>
+            {commits.map((commit) => (
+              <div key={commit.hash} className="flex items-baseline justify-between gap-3 pt-1">
+                <span className="min-w-0 truncate" title={commit.subject}>
+                  <span className={`${DATA} text-mut`}>{commit.hash}</span> {commit.subject}
+                </span>
+                <span className={`${DATA} shrink-0 text-mut`}>{commit.at === null ? "" : formatAge(commit.at, now, messages.age)}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      {total > listed ? <p className={`${DATA} pt-2 text-mut`}>{m.moreUnpushed(total - listed)}</p> : null}
+    </section>
+  );
+}
+
+function Stashes({ details, projectId, now, messages }: { details: GitDetails; projectId: number; now: number; messages: Messages }) {
   return (
     <section className={CARD}>
       <h2 className={`${SECTION_TITLE} mb-1`}>{messages.gitTab.stashes(details.stashes.length)}</h2>
@@ -51,7 +81,7 @@ function Stashes({ details, now, messages }: { details: GitDetails; now: number;
         {details.stashes.map((stash) => (
           <div key={stash.ref} className="border-b border-rule py-[7px] last:border-b-0">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 break-words">{stash.message}</span>
+              <StashDiffLink projectId={projectId} stashRef={stash.ref} message={stash.message} />
               <span className={`${DATA} shrink-0 text-mut`}>{stash.at === null ? "" : formatAge(stash.at, now, messages.age)}</span>
             </div>
             <div className={`${DATA} text-mut`}>
@@ -248,8 +278,9 @@ export function GitTab({
         </section>
         <div className="grid min-w-0 gap-4">
           <GitFacts row={row} now={now} card />
-          {details !== null && details.dirtyCount > 0 ? <Changes details={details} messages={messages} /> : null}
-          {details !== null && details.stashes.length > 0 ? <Stashes details={details} now={now} messages={messages} /> : null}
+          {details !== null && details.unpushed.total > 0 ? <Unpushed details={details} now={now} messages={messages} /> : null}
+          {details !== null && details.dirtyCount > 0 ? <Changes details={details} projectId={row.id} messages={messages} /> : null}
+          {details !== null && details.stashes.length > 0 ? <Stashes details={details} projectId={row.id} now={now} messages={messages} /> : null}
         </div>
       </div>
       {details !== null ? (

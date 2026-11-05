@@ -94,6 +94,8 @@ function toRow(
     commitCount: facts.commitCount,
     branchCount: facts.branchCount,
     stashCount: facts.stashCount,
+    unpushedCount: facts.unpushedCount,
+    remoteCount: facts.remoteCount,
     firstCommitAt: facts.firstCommitAt?.getTime() ?? null,
     lastCommitAuthor: facts.lastCommitAuthor,
     lastCommitAt: facts.lastCommitAt?.getTime() ?? null,

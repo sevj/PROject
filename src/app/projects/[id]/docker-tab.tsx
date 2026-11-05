@@ -184,6 +184,21 @@ function ContainerCard({
                 </div>
               ))}
         </Row>
+        {container.urls.length === 0 ? null : (
+          <Row label={m.addresses}>
+            {container.urls.map(({ url, label }) =>
+              container.running ? (
+                <div key={url}>
+                  <a href={url} target="_blank" rel="noreferrer" className={LINK}>
+                    {label}
+                  </a>
+                </div>
+              ) : (
+                <div key={url}>{label}</div>
+              ),
+            )}
+          </Row>
+        )}
         <Row label={m.networks}>
           {container.networks.length === 0
             ? m.none

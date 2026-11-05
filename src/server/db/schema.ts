@@ -62,6 +62,8 @@ export const projectFacts = sqliteTable("project_facts", {
   commitCount: integer("commit_count"),
   branchCount: integer("branch_count"),
   stashCount: integer("stash_count"),
+  unpushedCount: integer("unpushed_count"),
+  remoteCount: integer("remote_count"),
   firstCommitAt: integer("first_commit_at", { mode: "timestamp" }),
   lastCommitAuthor: text("last_commit_author"),
   lastCommitAt: integer("last_commit_at", { mode: "timestamp" }),

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { and, eq } from "drizzle-orm";
+import { containerUrls, type ContainerUrl } from "@/lib/container-urls";
 import { detectEngine, type Engine } from "@/lib/db-engines";
 import type { Db } from "./db/client";
 import { projects } from "./db/schema";
@@ -32,6 +33,8 @@ export type ContainerDetail = {
   restartPolicy: string;
   restartCount: number;
   ports: ContainerPort[];
+  /** Where it answers, from its Traefik labels or else its published web ports. */
+  urls: ContainerUrl[];
   networks: { name: string; address: string }[];
   mounts: ContainerMount[];
   composeProject: string | null;
@@ -98,6 +101,7 @@ export function toContainerDetail(raw: Raw, status = ""): ContainerDetail {
   const labels = raw.Config?.Labels ?? {};
   const state = raw.State ?? {};
   const policy = raw.HostConfig?.RestartPolicy;
+  const ports = toPorts(raw.NetworkSettings?.Ports);
   return {
     id: raw.Id ?? "",
     name: (raw.Name ?? "").replace(/^\//, ""),
@@ -121,7 +125,8 @@ export function toContainerDetail(raw: Raw, status = ""): ContainerDetail {
           ? `on-failure:${policy.MaximumRetryCount}`
           : policy.Name,
     restartCount: raw.RestartCount ?? 0,
-    ports: toPorts(raw.NetworkSettings?.Ports),
+    ports,
+    urls: containerUrls(labels, ports),
     networks: Object.entries(raw.NetworkSettings?.Networks ?? {}).map(([name, { IPAddress = "" }]) => ({
       name,
       address: IPAddress,

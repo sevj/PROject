@@ -591,8 +591,14 @@ export function RegistryView({
         ) : (
           <span className={`${DATA} truncate text-mut`}>{row.stacks.join(" + ") || "—"}</span>
         )}
-        <span className={`${DATA} truncate ${row.hasGit ? "" : "text-mut"}`}>
-          {row.hasGit ? (row.branch ?? m.detached) : m.noGit}
+        <span className={`${DATA} flex min-w-0 items-baseline gap-1.5 ${row.hasGit ? "" : "text-mut"}`}>
+          <span className="truncate">{row.hasGit ? (row.branch ?? m.detached) : m.noGit}</span>
+          {row.unpushedCount ? (
+            <span title={m.unpushed(row.unpushedCount, row.remoteCount === 0)} className="shrink-0 font-medium text-alert">
+              <span aria-hidden="true">↑{row.unpushedCount}</span>
+              <span className="sr-only">{m.unpushed(row.unpushedCount, row.remoteCount === 0)}</span>
+            </span>
+          ) : null}
         </span>
         <span className={`${DATA} text-right ${(row.dirtyCount ?? 0) > 0 ? "font-medium text-alert" : "text-mut"}`}>
           {row.dirtyCount || "—"}

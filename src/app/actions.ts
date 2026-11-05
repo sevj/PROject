@@ -42,7 +42,7 @@ import {
   pullFastForward,
   switchBranch,
 } from "@/server/git-actions";
-import { type CommitPage, type CommitView, readCommits, readCommitView } from "@/server/scan/git";
+import { type CommitFile, type CommitPage, type CommitView, readCommits, readCommitView, readStashView, readWorkingDiff } from "@/server/scan/git";
 import { type ContainerAction, composeDirectories, launch, runCompose, runContainers } from "@/server/project-actions";
 import { declareEnvVariable, restoreEnvValue, saveEnvValue } from "@/server/env-vars";
 import { type EnvEntry, listProjectFolder, readEnvFile, type TreeListing } from "@/server/project-files";
@@ -497,4 +497,14 @@ export async function loadProjectCommits(projectId: number, from: string, skip: 
 export async function loadCommitView(projectId: number, hash: string): Promise<CommitView | null> {
   const target = gitTarget(projectId);
   return "error" in target ? null : readCommitView(target.path, hash);
+}
+
+export async function loadWorkingDiff(projectId: number): Promise<CommitFile[] | null> {
+  const target = gitTarget(projectId);
+  return "error" in target ? null : readWorkingDiff(target.path);
+}
+
+export async function loadStashView(projectId: number, ref: string): Promise<CommitFile[] | null> {
+  const target = gitTarget(projectId);
+  return "error" in target ? null : readStashView(target.path, ref);
 }

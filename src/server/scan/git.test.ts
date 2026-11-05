@@ -16,6 +16,9 @@ import {
   parseNumstat,
   parseRemoteBranches,
   parseStashes,
+  parseUnpushed,
+  readStashView,
+  readWorkingDiff,
   pickCompareBase,
   readCommits,
   readCommitView,
@@ -225,6 +228,7 @@ describe("readGitDetails", () => {
       changes: [],
       stashes: [],
       remotes: [],
+      unpushed: { total: 0, branches: [] },
       remoteBranches: [],
       remoteBranchCount: 0,
       commits: [],
@@ -495,6 +499,99 @@ describe("readCommitView", () => {
   });
 });
 
+describe("readWorkingDiff", () => {
+  it("shows changed and untracked files, and leaves ignored ones out", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    commit(dir, ".gitignore", "ignore");
+    writeFileSync(join(dir, ".gitignore"), "secret\n");
+    git(dir, "add", ".gitignore");
+    git(dir, "commit", "-q", "-m", "ignore the secret");
+    writeFileSync(join(dir, "a.txt"), "changed\n");
+    writeFileSync(join(dir, "new.txt"), "one\ntwo\n");
+    writeFileSync(join(dir, "secret"), "hidden\n");
+    const files = await readWorkingDiff(dir);
+    expect(files?.map(({ path }) => path)).toEqual(["a.txt", "new.txt"]);
+    expect(files?.[1]).toMatchObject({ path: "new.txt", insertions: 2, deletions: 0, truncated: false });
+    expect(files?.[1].patch).toContain("+two");
+    expect(files?.[0].patch).toContain("+changed");
+  });
+
+  it("tells a binary file without showing it", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    writeFileSync(join(dir, "new.bin"), Buffer.from([0, 1, 2, 0, 255]));
+    expect((await readWorkingDiff(dir))?.[0]).toMatchObject({ path: "new.bin", insertions: null });
+  });
+
+  it("works before the first commit", async () => {
+    const dir = tempRepo();
+    writeFileSync(join(dir, "new.txt"), "one\n");
+    expect((await readWorkingDiff(dir))?.map(({ path }) => path)).toEqual(["new.txt"]);
+  });
+
+  it("is null outside a repository", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pm-git-"));
+    dirs.push(dir);
+    expect(await readWorkingDiff(dir)).toBeNull();
+  });
+});
+
+describe("readStashView", () => {
+  it("shows what a stash holds, untracked files included, and leaves it in place", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    writeFileSync(join(dir, "a.txt"), "changed\n");
+    writeFileSync(join(dir, "new.txt"), "one\n");
+    git(dir, "stash", "push", "-q", "--include-untracked");
+    const files = await readStashView(dir, "stash@{0}");
+    expect(files?.map(({ path }) => path).sort()).toEqual(["a.txt", "new.txt"]);
+    expect(files?.every(({ patch }) => patch !== null)).toBe(true);
+    expect(git(dir, "stash", "list")).toContain("stash@{0}");
+  });
+
+  it("refuses what is not a stash of this repository", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    for (const ref of ["stash@{0}", "stash@{7}", "--all", "HEAD", "stash@{0} --output=x", "main"]) {
+      expect(await readStashView(dir, ref)).toBeNull();
+    }
+  });
+});
+
+describe("parseUnpushed", () => {
+  it("groups the commits by branch, with or without the prefix of the ref", () => {
+    const output = [
+      ["main", "abc", "100", "One"],
+      ["refs/heads/side", "def", "200", "Two"],
+      ["main", "ghi", "", ""],
+    ]
+      .map((fields) => fields.join("\0"))
+      .join("\n");
+    expect(parseUnpushed(`${output}\n`)).toEqual([
+      {
+        branch: "main",
+        commits: [
+          { hash: "abc", at: 100_000, subject: "One" },
+          { hash: "ghi", at: null, subject: "" },
+        ],
+      },
+      { branch: "side", commits: [{ hash: "def", at: 200_000, subject: "Two" }] },
+    ]);
+  });
+});
+
+describe("readGitDetails unpushed commits", () => {
+  it("names the branch that holds them", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    const { unpushed, remotes } = await readGitDetails(dir);
+    expect(remotes).toEqual([]);
+    expect(unpushed.total).toBe(1);
+    expect(unpushed.branches).toMatchObject([{ branch: "main", commits: [{ subject: "first" }] }]);
+  });
+});
+
 describe("readGitDetails line counts", () => {
   it("follows HEAD", async () => {
     const dir = tempRepo();
@@ -556,6 +653,27 @@ describe("readGitFacts", () => {
     writeFileSync(join(dir, "a.txt"), "changed");
     git(dir, "stash", "push", "-q");
     expect(await readGitFacts(dir)).toMatchObject({ branchCount: 2, stashCount: 1 });
+  });
+
+  it("counts what no remote has, on a branch without upstream too", async () => {
+    const remote = tempRepo();
+    commit(remote, "a.txt", "first");
+    const dir = mkdtempSync(join(tmpdir(), "pm-git-"));
+    dirs.push(dir);
+    execFileSync("git", ["clone", "-q", remote, dir]);
+    expect(await readGitFacts(dir)).toMatchObject({ unpushedCount: 0, remoteCount: 1 });
+
+    git(dir, "switch", "-q", "-c", "local-only");
+    commit(dir, "b.txt", "on the side");
+    git(dir, "switch", "-q", "main");
+    expect(await readGitFacts(dir)).toMatchObject({ ahead: 0, unpushedCount: 1, remoteCount: 1 });
+  });
+
+  it("counts every commit of a repository without a remote", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    commit(dir, "b.txt", "second");
+    expect(await readGitFacts(dir)).toMatchObject({ unpushedCount: 2, remoteCount: 0 });
   });
 
   it("has no dates for a repository without commits", async () => {
