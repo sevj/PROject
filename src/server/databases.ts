@@ -1,6 +1,7 @@
 import type { Engine } from "@/lib/db-engines";
+import { type ForeignKey, groupForeignKeys, type RowFilter } from "@/lib/db-schema";
 import { type Plan, parseMysqlPlan, parsePostgresPlan } from "@/lib/explain";
-import { checkMongoFilter, quoteTable } from "@/lib/sql-guard";
+import { checkMongoFilter, quoteIdentifier, quoteTable } from "@/lib/sql-guard";
 import { PG_NULL, type QueryResult, parseMongoDocuments, parseMysqlBatch, parsePgCsv } from "@/lib/sql-result";
 import { runQuick } from "./dumps/docker-run";
 import { type Command, type Credentials, mongoEval, mysqlTool, secretsFor } from "./dumps/engines";
@@ -153,7 +154,7 @@ export async function listColumns(conn: Conn, schema: string | null, table: stri
       : `table_schema = ${sqlLiteral(conn.database, conn.engine)} AND table_name = ${sqlLiteral(table, conn.engine)}`;
   const sql =
     conn.engine === "postgres"
-      ? `SELECT column_name, data_type, is_nullable, column_default, NULL FROM information_schema.columns WHERE ${where} ORDER BY ordinal_position`
+      ? `SELECT column_name, data_type, is_nullable, column_default, CASE WHEN EXISTS (SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey) WHERE i.indisprimary AND i.indrelid = format('%I.%I', c.table_schema, c.table_name)::regclass AND a.attname = c.column_name) THEN 'PRI' END FROM information_schema.columns c WHERE ${where} ORDER BY ordinal_position`
       : `SELECT column_name, column_type, is_nullable, column_default, column_key FROM information_schema.columns WHERE ${where} ORDER BY ordinal_position`;
   const outcome = await runSql(conn, sql);
   if (!outcome.ok) return outcome;
@@ -172,13 +173,42 @@ export const PAGE_SIZE = 50;
 
 export type Page = { result: QueryResult; hasMore: boolean; elapsedMs: number };
 
+/** The columns are names and the values text: each is quoted for what it is, whatever it holds. */
+export function filterClause(filter: RowFilter | null | undefined, engine: Engine): string {
+  if (!filter || filter.length === 0) return "";
+  return ` WHERE ${filter.map(({ column, value }) => `${quoteIdentifier(column, engine)} = ${sqlLiteral(value, engine)}`).join(" AND ")}`;
+}
+
+/** One row per column of each key, in the order `groupForeignKeys` reads. */
+export function foreignKeysSql(conn: Pick<Conn, "engine" | "database">): string {
+  if (conn.engine === "postgres") {
+    // A partition repeats the keys of its table: only the table's own are worth showing.
+    return "SELECT con.conname, n.nspname, c.relname, a.attname, fn.nspname, fc.relname, fa.attname FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_class fc ON fc.oid = con.confrelid JOIN pg_namespace fn ON fn.oid = fc.relnamespace CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(col, fcol, ord) JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.col JOIN pg_attribute fa ON fa.attrelid = con.confrelid AND fa.attnum = k.fcol WHERE con.contype = 'f' AND con.conparentid = 0 AND n.nspname NOT IN ('pg_catalog', 'information_schema') ORDER BY n.nspname, c.relname, con.conname, k.ord";
+  }
+  // A key to another database leads to a table that cannot be opened from this one.
+  const database = sqlLiteral(conn.database, conn.engine);
+  return `SELECT constraint_name, NULL, table_name, column_name, NULL, referenced_table_name, referenced_column_name FROM information_schema.key_column_usage WHERE table_schema = ${database} AND referenced_table_schema = ${database} AND referenced_table_name IS NOT NULL ORDER BY table_name, constraint_name, ordinal_position`;
+}
+
+export async function listForeignKeys(conn: Conn): Promise<{ foreignKeys: ForeignKey[] } | { error: string }> {
+  if (conn.engine === "mongodb") return { foreignKeys: [] };
+  const outcome = await runSql(conn, foreignKeysSql(conn));
+  return outcome.ok ? { foreignKeys: groupForeignKeys(outcome.result.rows) } : outcome;
+}
+
 /** One more row than the page holds, to know whether there is a next page without counting. */
-export async function browseTable(conn: Conn, schema: string | null, table: string, page: number): Promise<Page | { error: string }> {
+export async function browseTable(
+  conn: Conn,
+  schema: string | null,
+  table: string,
+  page: number,
+  filter?: RowFilter | null,
+): Promise<Page | { error: string }> {
   const offset = Math.max(0, Math.floor(page)) * PAGE_SIZE;
   const outcome =
     conn.engine === "mongodb"
       ? await runMongoFind(conn, table, "{}", offset, PAGE_SIZE + 1)
-      : await runSql(conn, `SELECT * FROM ${quoteTable(schema, table, conn.engine)} LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`);
+      : await runSql(conn, `SELECT * FROM ${quoteTable(schema, table, conn.engine)}${filterClause(filter, conn.engine)} LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`);
   if (!outcome.ok) return outcome;
   const hasMore = outcome.result.rows.length > PAGE_SIZE;
   return { result: { ...outcome.result, rows: outcome.result.rows.slice(0, PAGE_SIZE) }, hasMore, elapsedMs: outcome.elapsedMs };

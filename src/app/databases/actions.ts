@@ -1,11 +1,12 @@
 "use server";
 
 import { isValidDatabaseName } from "@/lib/db-engines";
+import { type ForeignKey, parseRowFilter, type RowFilter } from "@/lib/db-schema";
 import type { Plan } from "@/lib/explain";
 import { checkExplainableSql, checkReadOnlySql, checkSqliteSql } from "@/lib/sql-guard";
 import { listContainerDatabases } from "@/app/dump-actions";
 import { getDb } from "@/server/db/client";
-import { browseTable, runExplain, type ColumnInfo, type Conn, listColumns, listTables, type Page, runMongoFind, runSql, type TableInfo } from "@/server/databases";
+import { browseTable, runExplain, type ColumnInfo, type Conn, listColumns, listForeignKeys, listTables, type Page, runMongoFind, runSql, type TableInfo } from "@/server/databases";
 import { type DatabaseContainer, listDatabaseContainers } from "@/server/dumps/containers";
 import { readCredentials } from "@/server/dumps/engines";
 import { serverMessages } from "@/server/i18n";
@@ -15,6 +16,7 @@ import {
   explainSqlite,
   isSqliteId,
   listSqliteColumns,
+  listSqliteForeignKeys,
   listSqliteTables,
   resolveSqlite,
   runSqlite,
@@ -109,18 +111,37 @@ export async function loadColumns(
   }
 }
 
+/** The keys of a whole database: the rows need them for their links, and the diagram draws them. */
+export async function loadForeignKeys(containerId: string, database: string): Promise<{ foreignKeys: ForeignKey[] } | Fail> {
+  if (typeof containerId === "string" && containerId.startsWith("redis:")) return { foreignKeys: [] };
+  if (isSqliteId(containerId)) {
+    const opened = sqliteFile(containerId);
+    if ("error" in opened) return opened;
+    const result = await listSqliteForeignKeys(opened.file.file);
+    return "error" in result ? failed(opened.m, result.error) : result;
+  }
+  const connected = await connect(containerId, database);
+  if ("error" in connected) return connected;
+  const result = await listForeignKeys(connected.conn);
+  return "error" in result ? failed(connected.m, result.error) : result;
+}
+
+/** With a filter: the rows a foreign key designates. Run like any other page, in the read-only session. */
 export async function loadPage(
   containerId: string,
   database: string,
   schema: string | null,
   table: string,
   page: number,
+  rowFilter?: RowFilter | null,
 ): Promise<Page | Fail> {
+  const filter = rowFilter === undefined || rowFilter === null ? null : parseRowFilter(rowFilter);
   if (isSqliteId(containerId)) {
     const opened = sqliteFile(containerId);
     if ("error" in opened) return opened;
+    if (rowFilter && !filter) return { error: opened.m.invalidName };
     try {
-      const result = await browseSqliteTable(opened.file.file, String(table), Number(page) || 0);
+      const result = await browseSqliteTable(opened.file.file, String(table), Number(page) || 0, filter);
       return result.ok ? { result: result.result, hasMore: result.hasMore, elapsedMs: result.elapsedMs } : failed(opened.m, result.error);
     } catch {
       return { error: opened.m.invalidName };
@@ -128,8 +149,9 @@ export async function loadPage(
   }
   const connected = await connect(containerId, database);
   if ("error" in connected) return connected;
+  if (rowFilter && (!filter || connected.conn.engine === "mongodb")) return { error: connected.m.invalidName };
   try {
-    const result = await browseTable(connected.conn, schema, String(table), Number(page) || 0);
+    const result = await browseTable(connected.conn, schema, String(table), Number(page) || 0, filter);
     return "error" in result ? failed(connected.m, result.error) : result;
   } catch {
     return { error: connected.m.invalidName };

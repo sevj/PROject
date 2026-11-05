@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { browseSqliteTable, explainSqlite, findSqliteFiles, listSqliteColumns, listSqliteTables, runSqlite } from "./sqlite";
+import { browseSqliteTable, explainSqlite, findSqliteFiles, listSqliteColumns, listSqliteForeignKeys, listSqliteTables, runSqlite } from "./sqlite";
 
 let root: string;
 let file: string;
@@ -31,9 +31,59 @@ beforeAll(() => {
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+describe("foreign keys", () => {
+  let keyed: string;
+
+  beforeAll(() => {
+    keyed = join(root, "keyed.sqlite");
+    const db = new Database(keyed);
+    db.exec(`
+      CREATE TABLE teams (id INTEGER PRIMARY KEY, label TEXT);
+      CREATE TABLE people (
+        id INTEGER PRIMARY KEY,
+        team_id INTEGER REFERENCES TEAMS,
+        boss_id INTEGER REFERENCES people (id),
+        nick TEXT
+      );
+      CREATE TABLE stock (shop INTEGER, sku TEXT, PRIMARY KEY (shop, sku));
+      CREATE TABLE lines (id INTEGER PRIMARY KEY, shop INTEGER, sku TEXT, FOREIGN KEY (shop, sku) REFERENCES stock);
+      INSERT INTO teams VALUES (1, 'core'), (2, 'o''hara');
+      INSERT INTO people VALUES (1, 2, NULL, 'x');
+    `);
+    db.close();
+  });
+
+  it("reads them with real names, an implicit target and composite keys", async () => {
+    const result = await listSqliteForeignKeys(keyed);
+    if ("error" in result) throw new Error(result.error);
+    const summary = result.foreignKeys.map(({ from, columns, to, refColumns }) => `${from.name}(${columns}) -> ${to.name}(${refColumns})`);
+    expect(summary.sort()).toEqual([
+      "lines(shop,sku) -> stock(shop,sku)",
+      "people(boss_id) -> people(id)",
+      "people(team_id) -> teams(id)",
+    ]);
+  });
+
+  it("finds the designated row, whatever its value holds", async () => {
+    const found = await browseSqliteTable(keyed, "teams", 0, [{ column: "id", value: "2" }]);
+    expect(found).toMatchObject({ ok: true, hasMore: false });
+    if (found.ok) expect(found.result.rows).toEqual([["2", "o'hara"]]);
+
+    const quoted = await browseSqliteTable(keyed, "teams", 0, [{ column: "label", value: "o'hara" }]);
+    if (quoted.ok) expect(quoted.result.rows).toHaveLength(1);
+
+    const injected = await browseSqliteTable(keyed, "teams", 0, [{ column: "label", value: "x' OR '1'='1" }]);
+    if (injected.ok) expect(injected.result.rows).toEqual([]);
+  });
+
+  it("gives nothing for a file without keys", async () => {
+    expect(await listSqliteForeignKeys(file)).toEqual({ foreignKeys: [] });
+  });
+});
+
 describe("findSqliteFiles", () => {
   it("finds real SQLite files, not fake ones, links or dependencies", () => {
-    expect(findSqliteFiles(root)).toEqual([join("data", "app.sqlite")]);
+    expect(findSqliteFiles(root)).toEqual([join("data", "app.sqlite"), "keyed.sqlite"]);
   });
 });
 

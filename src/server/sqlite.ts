@@ -2,12 +2,13 @@ import { execFile } from "node:child_process";
 import { closeSync, openSync, readSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { and, eq } from "drizzle-orm";
+import { type ForeignKey, groupForeignKeys, type RowFilter } from "@/lib/db-schema";
 import type { Plan } from "@/lib/explain";
 import { parseSqlitePlan } from "@/lib/explain";
 import { quoteIdentifier } from "@/lib/sql-guard";
 import { ROW_LIMIT, type QueryResult } from "@/lib/sql-result";
 import type { Db } from "./db/client";
-import { type ColumnInfo, PAGE_SIZE, QUERY_TIMEOUT_S, type TableInfo } from "./databases";
+import { type ColumnInfo, filterClause, PAGE_SIZE, QUERY_TIMEOUT_S, type TableInfo } from "./databases";
 import { projectMeta, projects } from "./db/schema";
 import { getProject } from "./registry";
 
@@ -207,9 +208,29 @@ export async function listSqliteColumns(file: string, table: string): Promise<{ 
   };
 }
 
-export async function browseSqliteTable(file: string, table: string, page: number) {
+/**
+ * A key may name its table in another case, and leave out the columns it points to: then it
+ * points to the primary key. Both are settled here, so that the rest knows real names only.
+ */
+const FOREIGN_KEYS_SQL = `SELECT m.name || '_' || f.id, NULL, m.name, f."from", NULL,
+  COALESCE((SELECT name FROM sqlite_master WHERE type = 'table' AND name = f."table" COLLATE NOCASE), f."table"),
+  COALESCE(f."to", (SELECT name FROM pragma_table_info(f."table") WHERE pk = f.seq + 1))
+  FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) f
+  WHERE m.type = 'table'
+  ORDER BY m.name, f.id, f.seq`;
+
+/** Far more than any real schema has: it must not stop in the middle of one. */
+const MAX_KEY_COLUMNS = 100_000;
+
+export async function listSqliteForeignKeys(file: string): Promise<{ foreignKeys: ForeignKey[] } | { error: string }> {
+  const outcome = await runSqlite(file, FOREIGN_KEYS_SQL, MAX_KEY_COLUMNS);
+  return outcome.ok ? { foreignKeys: groupForeignKeys(outcome.result.rows) } : outcome;
+}
+
+export async function browseSqliteTable(file: string, table: string, page: number, filter?: RowFilter | null) {
   const offset = Math.max(0, Math.floor(page)) * PAGE_SIZE;
-  const outcome = await runSqlite(file, `SELECT * FROM ${quote(table)} LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`);
+  // SQLite quotes the way PostgreSQL does, and a column converts the text it is compared with.
+  const outcome = await runSqlite(file, `SELECT * FROM ${quote(table)}${filterClause(filter, "postgres")} LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`);
   if (!outcome.ok) return outcome;
   const hasMore = outcome.result.rows.length > PAGE_SIZE;
   return { ok: true as const, result: { ...outcome.result, rows: outcome.result.rows.slice(0, PAGE_SIZE) }, hasMore, elapsedMs: outcome.elapsedMs };
