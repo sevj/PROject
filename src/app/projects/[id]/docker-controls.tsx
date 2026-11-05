@@ -6,8 +6,7 @@ import { controlContainers, dismissCompose, startCompose } from "@/app/actions";
 import { DumpModal, LoadModal } from "@/app/dump-modals";
 import type { DumpRow } from "@/lib/dumps";
 import type { DatabaseTarget } from "@/server/dumps/containers";
-import { ConsolePanel } from "./console-panel";
-import { LogsPanel } from "./logs-panel";
+import { DockerWindow, type WindowTab, type WindowTarget } from "./docker-window";
 import { BUTTON, BUTTON_PRIMARY, BUTTON_SMALL, DATA } from "@/app/ui";
 import { useFlash } from "@/app/flash";
 import { useConfirm } from "@/app/modal";
@@ -41,41 +40,34 @@ function Feedback({ pending }: { pending: boolean }) {
 export function ContainerControls({
   projectId,
   containerId,
-  containerName,
   running,
   canOpenConsole,
+  targets,
   database,
 }: {
   projectId: number;
   containerId: string;
-  containerName: string;
   running: boolean;
   /** Running, and not paused: a paused container cannot start a shell. */
   canOpenConsole: boolean;
+  /** The containers of the project, which the window can open next to this one. */
+  targets: WindowTarget[];
   /** Set when this container is a database: it can be dumped, and loaded into. */
   database?: { target: DatabaseTarget; dumps: DumpRow[] };
 }) {
   const messages = useMessages().sheet;
   const m = messages.dockerTab;
   const { pending, run } = useControl(projectId);
-  const [consoleOpen, setConsoleOpen] = useState(false);
-  const [logsOpen, setLogsOpen] = useState(false);
+  const [opened, setOpened] = useState<WindowTab | null>(null);
   const [dialog, setDialog] = useState<"dump" | "load" | null>(null);
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={() => setLogsOpen(true)} className={BUTTON}>
+      <button type="button" onClick={() => setOpened({ kind: "logs", containerId })} className={BUTTON}>
         {messages.logs.open}
       </button>
-      {logsOpen ? (
-        <LogsPanel
-          projectId={projectId}
-          containerId={containerId}
-          containerName={containerName}
-          onClose={() => setLogsOpen(false)}
-        />
-      ) : null}
+      {opened ? <DockerWindow projectId={projectId} targets={targets} first={opened} onClose={() => setOpened(null)} /> : null}
       {canOpenConsole ? (
-        <button type="button" onClick={() => setConsoleOpen(true)} className={BUTTON}>
+        <button type="button" onClick={() => setOpened({ kind: "console", containerId })} className={BUTTON}>
           {messages.console.open}
         </button>
       ) : null}
@@ -92,14 +84,6 @@ export function ContainerControls({
       {database && dialog === "dump" ? <DumpModal target={database.target} onClose={() => setDialog(null)} /> : null}
       {database && dialog === "load" ? (
         <LoadModal dumps={database.dumps} targets={[database.target]} targetId={database.target.id} onClose={() => setDialog(null)} />
-      ) : null}
-      {consoleOpen ? (
-        <ConsolePanel
-          projectId={projectId}
-          containerId={containerId}
-          containerName={containerName}
-          onClose={() => setConsoleOpen(false)}
-        />
       ) : null}
       {running ? (
         <>
@@ -127,8 +111,10 @@ export function ProjectControls({
   canCreate,
   hasCompose,
   composeJob,
+  targets,
 }: {
   projectId: number;
+  targets: WindowTarget[];
   running: number;
   total: number;
   /** A Compose file exists to create the containers from. */
@@ -146,6 +132,7 @@ export function ProjectControls({
   const composing = composeJob?.running === true;
   const [logsOpen, setLogsOpen] = useState(false);
   const sheet = useMessages().sheet;
+
 
   const ask = (action: ComposeAction) =>
     confirm({
@@ -180,7 +167,7 @@ export function ProjectControls({
           {sheet.logs.openAll}
         </button>
       ) : null}
-      {logsOpen ? <LogsPanel projectId={projectId} containerName={sheet.logs.allContainers} onClose={() => setLogsOpen(false)} /> : null}
+      {logsOpen ? <DockerWindow projectId={projectId} targets={targets} first={{ kind: "logs" }} onClose={() => setLogsOpen(false)} /> : null}
       {hasCompose ? (
         <>
           <button type="button" disabled={pending || asking || composing} onClick={() => ask("build")} title={m.composeHint.build} className={BUTTON}>

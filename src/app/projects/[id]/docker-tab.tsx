@@ -11,6 +11,7 @@ import type { DumpRow } from "@/lib/dumps";
 import type { JobView } from "@/server/dumps/jobs";
 import { ContainerControls, ProjectControls } from "./docker-controls";
 import { DockerResources } from "./docker-resources";
+import type { WindowTarget } from "./docker-window";
 import { StateBadge, StateGlyph, TONE_BG, TONE_EDGE, TONE_TEXT } from "./state-badge";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -95,6 +96,9 @@ function QuickList({ containers, now, messages }: { containers: ContainerDetail[
   );
 }
 
+/** Running, and not paused: a paused container cannot start a shell. */
+const canConsole = (container: ContainerDetail) => container.running && container.state !== "paused";
+
 function ContainerCard({
   container,
   projectPath,
@@ -103,6 +107,7 @@ function ContainerCard({
   dumps,
   now,
   messages,
+  targets,
 }: {
   container: ContainerDetail;
   projectPath: string;
@@ -111,6 +116,7 @@ function ContainerCard({
   dumps: DumpRow[];
   now: number;
   messages: Messages;
+  targets: WindowTarget[];
 }) {
   const m = messages.sheet.dockerTab;
   const kind = kindOf(container);
@@ -137,9 +143,9 @@ function ContainerCard({
         <ContainerControls
           projectId={projectId}
           containerId={container.id}
-          containerName={container.name}
           running={container.running}
-          canOpenConsole={container.running && container.state !== "paused"}
+          canOpenConsole={canConsole(container)}
+          targets={targets}
           database={
             container.engine
               ? {
@@ -264,6 +270,7 @@ export function DockerTab({
   const created = new Set(containers.map(({ service }) => service));
   const missing = (stack?.components ?? []).filter(({ service }) => !created.has(service));
   const kinds = containers.map(kindOf);
+  const targets: WindowTarget[] = containers.map((container) => ({ id: container.id, name: container.name, canConsole: canConsole(container) }));
 
   return (
     <div className="grid gap-4">
@@ -278,6 +285,7 @@ export function DockerTab({
             canCreate={error === null && ((stack?.components.length ?? 0) > 0 || row.hasCompose)}
             hasCompose={error === null && row.hasCompose}
             composeJob={composeJob}
+            targets={targets}
           />
         </div>
         {containers.length > 0 ? (
@@ -309,6 +317,7 @@ export function DockerTab({
             dumps={dumps}
             now={now}
             messages={messages}
+            targets={targets}
           />
         ))
       )}

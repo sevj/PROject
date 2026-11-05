@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BUTTON, BUTTON_PRIMARY, BUTTON_TOGGLE, DATA, FIELD } from "@/app/ui";
 import { usePageLock } from "@/app/use-page-lock";
 import { useMessages } from "@/i18n/provider";
@@ -116,12 +116,19 @@ export function LogsPanel({
   projectId,
   containerId,
   containerName,
+  embedded = false,
+  controls,
+  onStatusChange,
   onClose,
 }: {
   projectId: number;
   /** Without it, all the containers of the project together. */
   containerId?: string;
   containerName: string;
+  /** One tab of a window that owns the screen: it neither covers the page nor answers Escape. */
+  embedded?: boolean;
+  controls?: ReactNode;
+  onStatusChange?: (kind: StateKind) => void;
   onClose: () => void;
 }) {
   const sheet = useMessages().sheet;
@@ -134,15 +141,20 @@ export function LogsPanel({
   const [following, setFollowing] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
 
-  usePageLock();
+  usePageLock(!embedded);
 
   useEffect(() => {
+    if (embedded) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, embedded]);
+
+  useEffect(() => {
+    onStatusChange?.(GLYPH[status]);
+  }, [status, onStatusChange]);
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -159,9 +171,13 @@ export function LogsPanel({
 
   return (
     <section
-      role="dialog"
+      role={embedded ? undefined : "dialog"}
       aria-label={m.title(containerName)}
-      className="fixed inset-3 z-50 flex flex-col overscroll-contain border border-rule-strong bg-bg font-sans text-[14px] font-normal text-ink max-sm:inset-0"
+      className={
+        embedded
+          ? "flex min-h-0 flex-1 flex-col"
+          : "fixed inset-3 z-50 flex flex-col overscroll-contain border border-rule-strong bg-bg font-sans text-[14px] font-normal text-ink max-sm:inset-0"
+      }
     >
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule-strong px-3 py-2">
         <h2 className="min-w-0 flex-1 font-semibold break-all">{m.title(containerName)}</h2>
@@ -170,6 +186,7 @@ export function LogsPanel({
           {label}
         </span>
         <div className="flex flex-wrap gap-2">
+          {controls}
           {status === "ended" || status === "failed" ? (
             <button
               type="button"

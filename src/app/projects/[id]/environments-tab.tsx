@@ -6,12 +6,12 @@ import { useMessages } from "@/i18n/provider";
 import { looksLikeProduction } from "@/lib/remote-servers";
 import type { AccessView, EnvironmentView, ServerView, Suggestions } from "@/server/remote-servers";
 import { TestButton } from "../../connection-test";
-import { openRemoteConsole, removeAccess, removeEnvironment, submitAccess, submitEnvironment } from "../../environment-actions";
+import { removeAccess, removeEnvironment, submitAccess, submitEnvironment } from "../../environment-actions";
 import { CloseIcon, OpenIcon, PlusIcon } from "../../icons";
 import { Modal, useConfirm } from "../../modal";
 import { VpnBadge } from "../../vpn/vpn-controls";
 import type { VpnView } from "@/server/vpn";
-import { TerminalPanel } from "./terminal-panel";
+import { type RemoteTarget, RemoteWindow } from "./remote-window";
 import { FormField, ServerFormModal } from "../../server-form";
 import { BADGE, BADGE_ALERT, BUTTON, BUTTON_ICON, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, LINK, SECTION_TITLE } from "../../ui";
 
@@ -205,7 +205,10 @@ function accessSummary({ serverKind, path, namespace, target, container }: Acces
   return (serverKind === "ssh" ? [path] : [namespace, target, container]).filter(Boolean).join(" / ");
 }
 
-function AccessRow({ projectId, environment, access, servers, suggestions, vpns, readOnly }: {
+/** `kubectl exec` needs something to enter. */
+const canConsole = (access: AccessView) => access.serverKind === "ssh" || access.target !== null;
+
+function AccessRow({ projectId, environment, access, servers, suggestions, vpns, readOnly, targets }: {
   projectId: number;
   environment: EnvironmentView;
   access: AccessView;
@@ -213,6 +216,7 @@ function AccessRow({ projectId, environment, access, servers, suggestions, vpns,
   suggestions: Suggestions;
   vpns: VpnView[];
   readOnly: boolean;
+  targets: RemoteTarget[];
 }) {
   const messages = useMessages();
   const m = messages.environments;
@@ -224,7 +228,7 @@ function AccessRow({ projectId, environment, access, servers, suggestions, vpns,
   const { confirm, confirmation } = useConfirm();
   const detail = accessSummary(access);
   // `kubectl exec` needs something to enter.
-  const canOpen = !readOnly && (access.serverKind === "ssh" || access.target !== null);
+  const canOpen = !readOnly && canConsole(access);
 
   const askConsole = () => {
     if (!environment.protected) {
@@ -277,13 +281,7 @@ function AccessRow({ projectId, environment, access, servers, suggestions, vpns,
         )}
       </div>
       {consoleOpen ? (
-        <TerminalPanel
-          title={`${environment.name} · ${access.label}`}
-          open={() => openRemoteConsole(projectId, access.id, consoleOpen.confirmed)}
-          reconnectLabel={messages.sheet.console.reconnect}
-          info={environment.protected ? <span className={BADGE_ALERT}>{m.protectedBadge}</span> : undefined}
-          onClose={() => setConsoleOpen(null)}
-        />
+        <RemoteWindow projectId={projectId} targets={targets} first={{ accessId: access.id, confirmed: consoleOpen.confirmed }} onClose={() => setConsoleOpen(null)} />
       ) : null}
       {editing ? (
         <AccessFormModal projectId={projectId} environmentId={environmentId} access={access} servers={servers} suggestions={suggestions} vpns={vpns} onClose={() => setEditing(false)} />
@@ -293,13 +291,14 @@ function AccessRow({ projectId, environment, access, servers, suggestions, vpns,
   );
 }
 
-function EnvironmentCard({ projectId, environment, servers, suggestions, vpns, readOnly }: {
+function EnvironmentCard({ projectId, environment, servers, suggestions, vpns, readOnly, targets }: {
   projectId: number;
   environment: EnvironmentView;
   servers: ServerView[];
   suggestions: Suggestions;
   vpns: VpnView[];
   readOnly: boolean;
+  targets: RemoteTarget[];
 }) {
   const m = useMessages().environments;
   const [editing, setEditing] = useState(false);
@@ -353,7 +352,7 @@ function EnvironmentCard({ projectId, environment, servers, suggestions, vpns, r
       {environment.accesses.length > 0 ? (
         <ul className="mt-2">
           {environment.accesses.map((access) => (
-            <AccessRow key={access.id} projectId={projectId} environment={environment} access={access} servers={servers} suggestions={suggestions} vpns={vpns} readOnly={readOnly} />
+            <AccessRow key={access.id} projectId={projectId} environment={environment} access={access} servers={servers} suggestions={suggestions} vpns={vpns} readOnly={readOnly} targets={targets} />
           ))}
         </ul>
       ) : null}
@@ -378,6 +377,11 @@ export function EnvironmentsTab({ projectId, environments, servers, suggestions,
 }) {
   const m = useMessages().environments;
   const [adding, setAdding] = useState(false);
+  const targets: RemoteTarget[] = readOnly
+    ? []
+    : environments.flatMap((environment) =>
+        environment.accesses.filter(canConsole).map((access) => ({ accessId: access.id, environment: environment.name, label: access.label, protected: environment.protected })),
+      );
   return (
     <div className="grid gap-4">
       <div className={CARD}>
@@ -396,7 +400,7 @@ export function EnvironmentsTab({ projectId, environments, servers, suggestions,
         {environments.length === 0 ? <p className="pt-3 text-mut">{m.none}</p> : null}
       </div>
       {environments.map((environment) => (
-        <EnvironmentCard key={environment.id} projectId={projectId} environment={environment} servers={servers} suggestions={suggestions} vpns={vpns} readOnly={readOnly} />
+        <EnvironmentCard key={environment.id} projectId={projectId} environment={environment} servers={servers} suggestions={suggestions} vpns={vpns} readOnly={readOnly} targets={targets} />
       ))}
       {adding ? <EnvironmentFormModal projectId={projectId} environment={null} onClose={() => setAdding(false)} /> : null}
     </div>

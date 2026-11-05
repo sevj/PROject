@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useState } from "react";
+import type { StateKind } from "@/lib/docker-state";
 import { openConsole, readConsoleAliases } from "@/app/actions";
 import { type CommandAlias, expandAlias } from "@/lib/aliases";
 import { BUTTON, BUTTON_PRIMARY, DATA, FIELD, LABEL } from "@/app/ui";
@@ -13,11 +14,18 @@ export function ConsolePanel({
   projectId,
   containerId,
   containerName,
+  embedded,
+  controls,
+  onStatusChange,
   onClose,
 }: {
   projectId: number;
   containerId: string;
   containerName: string;
+  /** One tab of a window that owns the screen. */
+  embedded?: { shown: boolean; frame: RefObject<HTMLElement | null> };
+  controls?: ReactNode;
+  onStatusChange?: (kind: StateKind) => void;
   onClose: () => void;
 }) {
   const m = useMessages().sheet.console;
@@ -57,10 +65,15 @@ export function ConsolePanel({
       onClose={onClose}
       overlay={AliasBox}
       expand={expand}
+      embedded={embedded}
+      onStatusChange={onStatusChange}
       controls={
-        <button type="button" aria-expanded={showOptions} onClick={() => setShowOptions((open) => !open)} className={BUTTON}>
-          {m.options}
-        </button>
+        <>
+          {controls}
+          <button type="button" aria-expanded={showOptions} onClick={() => setShowOptions((open) => !open)} className={BUTTON}>
+            {m.options}
+          </button>
+        </>
       }
       below={
         showOptions ? (
