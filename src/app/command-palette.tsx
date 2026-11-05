@@ -94,6 +94,16 @@ function KindBadge({ kind, label }: { kind: Kind; label: string }) {
 
 const PROJECT_TABS = ["docker", "git", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
 
+/** A file to save, not a page to open: a link with `download`, clicked once. */
+function download(href: string) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = "";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 function readRecent(): string[] {
   try {
     const value = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as unknown;
@@ -197,7 +207,7 @@ export function CommandPalette() {
         { id: "ide", label: a.ide, run: () => result(openIde(project.id)) },
         { id: "terminal", label: a.terminal, run: () => result(openTerminal(project.id)) },
         { id: "fetch", label: a.fetch, run: () => result(fetchProject(project.id)) },
-        { id: "export", label: a.exportConfig, run: () => window.location.assign(`/api/projects/${project.id}/config`) },
+        { id: "export", label: a.exportConfig, run: () => download(`/api/projects/${project.id}/config`) },
         { id: "import", label: a.importConfig, run: () => router.push(`/projects/${project.id}?tab=environments`) },
         ...PROJECT_TABS.map((tab) => ({ id: `tab-${tab}`, label: a.tab(messages.sheet[tab]), run: () => router.push(`/projects/${project.id}?tab=${tab}`) })),
       ],
