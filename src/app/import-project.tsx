@@ -63,7 +63,7 @@ export function ImportProjectButton({ className }: { className: string }) {
     const answer = await ask(file?.config, chosen, false);
     setPending(false);
     if (!answer) setProblem(m.unreadable);
-    else if ("problem" in answer) setProblem(answer.problem === "directory" ? (answer.detail ?? m.unreadable) : answer.problem === "noSheet" ? m.noSheet : m.invalidFile);
+    else if ("problem" in answer) setProblem(answer.problem === "directory" ? (answer.detail ?? m.unreadable) : answer.problem === "noSheet" ? m.noSheet : answer.problem === "noSubProject" ? m.noSubProject : m.invalidFile);
     else {
       setProblem(null);
       setPlan(answer.items);

@@ -1,10 +1,11 @@
+import { basename } from "node:path";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { type CommandAlias, normalizeAliases } from "@/lib/aliases";
 import { isHttpMethod, VARIABLE_NAME } from "@/lib/http-requests";
 import { addTag, isStatus, setDescription, setNote, setStatus } from "./classification";
 import type { Db } from "./db/client";
-import { environmentAccesses, httpRequests, httpVariables, projectEnvironments, projectMeta, type ProjectStatus, projectTags, remoteServers, tags, vpns } from "./db/schema";
-import { checkDirectory, registerProject } from "./projects";
+import { environmentAccesses, httpRequests, httpVariables, projectEnvironments, projectMeta, projects, type ProjectStatus, projectTags, remoteServers, tags, vpns } from "./db/schema";
+import { checkDirectory, checkSubdirectory, registerMultiProject, registerProject, registerSubProject } from "./projects";
 import { saveRequest } from "./http-requests";
 import { saveAccess, saveEnvironment, saveServer } from "./remote-servers";
 import { getSettings, saveSettings } from "./settings";
@@ -47,6 +48,8 @@ export type SharedConfig = {
   environments: SharedEnvironment[];
   aliases: CommandAlias[];
   http: { requests: SharedRequest[]; variables: SharedVariable[] };
+  /** A multi-project's sub-projects, each in its folder relative to the multi-project's own. */
+  subProjects: { subdirectory: string; config: SharedConfig }[];
 };
 
 export function exportConfig(db: Db, projectId: number, sheet: SharedSheet, now = new Date()): SharedConfig {
@@ -108,7 +111,34 @@ export function exportConfig(db: Db, projectId: number, sheet: SharedSheet, now 
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((variable) => ({ environment: envName(variable.environmentId), name: variable.name, value: variable.secret ? "" : variable.value, secret: variable.secret })),
     },
+    subProjects: [],
   };
+}
+
+/** The sheet as the user filled it in: the shown name, description, tags, status and note. */
+export function sheetOf(db: Db, projectId: number): SharedSheet | null {
+  const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
+  if (!project) return null;
+  const meta = db.select().from(projectMeta).where(eq(projectMeta.projectId, projectId)).get();
+  const tagNames = db.select({ name: tags.name }).from(projectTags).innerJoin(tags, eq(tags.id, projectTags.tagId)).where(eq(projectTags.projectId, projectId)).all().map(({ name }) => name).sort();
+  return { name: meta?.displayName ?? project.name, folder: basename(project.path), description: meta?.description ?? null, tags: tagNames, status: meta?.status ?? null, note: meta?.note ?? null };
+}
+
+/** A project's file; a multi-project's holds each of its sub-projects too. */
+export function exportProject(db: Db, projectId: number, now = new Date()): SharedConfig | null {
+  const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
+  const sheet = sheetOf(db, projectId);
+  if (!project || !sheet) return null;
+  const config = exportConfig(db, projectId, sheet, now);
+  if (project.kind !== "group") return config;
+  const children = db.select().from(projects).where(eq(projects.parentId, projectId)).all().sort((a, b) => a.path.localeCompare(b.path));
+  config.subProjects = children.flatMap((child) => {
+    const childSheet = sheetOf(db, child.id);
+    if (!childSheet || !child.path.startsWith(`${project.path}/`)) return [];
+    // The aliases belong to the whole app: they come once, with the multi-project.
+    return [{ subdirectory: child.path.slice(project.path.length + 1), config: { ...exportConfig(db, child.id, childSheet, now), aliases: [] } }];
+  });
+  return config;
 }
 
 const text = (value: unknown, max = 2000) => (typeof value === "string" ? value.slice(0, max) : null);
@@ -130,7 +160,7 @@ function readSheet(raw: unknown): SharedSheet | null {
 }
 
 /** The file read back, shape checked field by field: anything else in it is left aside. */
-export function readConfig(raw: unknown): SharedConfig | null {
+export function readConfig(raw: unknown, nested = false): SharedConfig | null {
   if (!raw || typeof raw !== "object") return null;
   const file = raw as Record<string, unknown>;
   if (file.format !== CONFIG_FORMAT || file.version !== CONFIG_VERSION) return null;
@@ -202,15 +232,26 @@ export function readConfig(raw: unknown): SharedConfig | null {
         return name ? [{ environment: text(item.environment, 80), name, value: item.secret === true ? "" : (text(item.value, 8000) ?? ""), secret: item.secret === true }] : [];
       }),
     },
+    // One level only, inside the multi-project's folder.
+    subProjects: nested
+      ? []
+      : list(file.subProjects).flatMap((item) => {
+          const subdirectory = text(item.subdirectory, 255)?.replace(/^\.\/|\/+$/g, "");
+          if (!subdirectory || subdirectory.startsWith("/") || subdirectory.split("/").includes("..")) return [];
+          const config = readConfig(item.config, true);
+          return config?.sheet ? [{ subdirectory, config }] : [];
+        }),
   };
 }
 
 export type PlanAction = "create" | "keep" | "skip";
 export type PlanItem = {
+  /** The sub-project it belongs to, for a multi-project. */
+  group?: string;
   kind: "project" | "description" | "tag" | "status" | "note" | "server" | "vpn" | "environment" | "access" | "alias" | "request" | "variable";
   name: string;
   action: PlanAction;
-  reason?: "exists" | "needsFile" | "noServer" | "invalid" | "filled";
+  reason?: "exists" | "needsFile" | "noServer" | "invalid" | "filled" | "missingFolder";
 };
 export type ImportResult = { items: PlanItem[] };
 
@@ -367,21 +408,79 @@ export async function importConfig(db: Db, projectId: number, config: SharedConf
 
 /**
  * A new project from a file, in a folder already cloned by whoever imports: its sheet, then its
- * configuration. Without `apply`, only says what would be done, and whether the folder will do.
+ * configuration. A multi-project brings the sub-projects whose folders are there. Without
+ * `apply`, only says what would be done, and whether the folders will do.
  */
 export async function importProject(db: Db, directory: string, config: SharedConfig, apply: boolean): Promise<(ImportResult & { projectId: number | null }) | { error: string }> {
   if (!config.sheet) return { error: "noSheet" };
   const checked = checkDirectory(db, directory);
   if ("error" in checked) return checked;
-  const sheetItems: PlanItem[] = [{ kind: "project", name: `${config.sheet.name} · ${checked.path}`, action: "create" }];
-  if (!apply) {
-    // The project does not exist yet: nothing of its own can be found, so all of it is planned.
-    const rest = await importConfig(db, -1, { ...config, sheet: config.sheet }, false);
-    return { projectId: null, items: [...sheetItems, ...rest.items] };
+  const sheet = config.sheet;
+  const head: PlanItem = { kind: "project", name: `${sheet.name} · ${checked.path}`, action: "create" };
+
+  if (config.subProjects.length === 0) {
+    if (!apply) return { projectId: null, items: [head, ...(await importConfig(db, -1, config, false)).items] };
+    const registered = registerProject(db, { name: sheet.name, description: sheet.description ?? "", directory: checked.path, tags: sheet.tags });
+    if ("error" in registered) return registered;
+    const [projectId] = registered.ids;
+    return { projectId, items: [head, ...(await importConfig(db, projectId, config, true)).items] };
   }
-  const registered = registerProject(db, { name: config.sheet.name, description: config.sheet.description ?? "", directory: checked.path, tags: config.sheet.tags });
-  if ("error" in registered) return registered;
-  const [projectId] = registered.ids;
-  const rest = await importConfig(db, projectId, config, true);
-  return { projectId, items: [...sheetItems, ...rest.items] };
+
+  const present = config.subProjects.filter(({ subdirectory }) => !("error" in checkSubdirectory(db, checked.path, subdirectory)));
+  const missing: PlanItem[] = config.subProjects
+    .filter((item) => !present.includes(item))
+    .map(({ subdirectory, config: child }) => ({ group: child.sheet?.name, kind: "project", name: `${child.sheet?.name} · ${subdirectory}`, action: "skip", reason: "missingFolder" }));
+  if (present.length === 0) return { error: "noSubProject" };
+
+  let ids: number[] = [];
+  if (apply) {
+    const registered = registerMultiProject(
+      db,
+      { name: sheet.name, description: sheet.description ?? "", directory: checked.path },
+      present.map(({ subdirectory, config: child }) => ({ name: child.sheet?.name ?? subdirectory, description: child.sheet?.description ?? "", subdirectory, tags: child.sheet?.tags })),
+    );
+    if ("error" in registered) return registered;
+    ids = registered.ids;
+    // A multi-project gets no tags from its form: they are added here.
+    for (const tag of sheet.tags) addTag(db, [ids[0]], tag);
+  }
+  const items: PlanItem[] = [head, ...(await importConfig(db, apply ? ids[0] : -1, config, apply)).items];
+  for (const [index, { subdirectory, config: child }] of present.entries()) {
+    const group = child.sheet?.name ?? subdirectory;
+    items.push({ group, kind: "project", name: `${group} · ${subdirectory}`, action: "create" });
+    for (const item of (await importConfig(db, apply ? ids[index + 1] : -1, child, apply)).items) items.push({ ...item, group });
+  }
+  return { projectId: apply ? ids[0] : null, items: [...items, ...missing] };
+}
+
+/**
+ * Into a project already here. A multi-project's sub-projects are matched by their folder:
+ * one not added yet is added when its folder is there, else left aside.
+ */
+export async function importInto(db: Db, projectId: number, config: SharedConfig, apply: boolean): Promise<ImportResult> {
+  const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
+  const items = [...(await importConfig(db, projectId, config, apply)).items];
+  if (!project || project.kind !== "group") return { items };
+  for (const { subdirectory, config: child } of config.subProjects) {
+    const group = child.sheet?.name ?? subdirectory;
+    const path = `${project.path}/${subdirectory}`;
+    let childId = db.select({ id: projects.id }).from(projects).where(and(eq(projects.parentId, projectId), eq(projects.path, path))).get()?.id ?? null;
+    if (childId === null) {
+      if ("error" in checkSubdirectory(db, project.path, subdirectory)) {
+        items.push({ group, kind: "project", name: `${group} · ${subdirectory}`, action: "skip", reason: "missingFolder" });
+        continue;
+      }
+      if (apply) {
+        const registered = registerSubProject(db, projectId, { name: group, description: child.sheet?.description ?? "", subdirectory, tags: child.sheet?.tags });
+        if ("error" in registered) {
+          items.push({ group, kind: "project", name: `${group} · ${subdirectory}`, action: "skip", reason: "invalid" });
+          continue;
+        }
+        childId = registered.ids[0];
+      }
+      items.push({ group, kind: "project", name: `${group} · ${subdirectory}`, action: "create" });
+    }
+    for (const item of (await importConfig(db, childId ?? -1, child, apply)).items) items.push({ ...item, group });
+  }
+  return { items };
 }

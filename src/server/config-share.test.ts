@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync } from "node:fs";
 import { eq } from "drizzle-orm";
-import { exportConfig, importConfig, importProject, readConfig } from "./config-share";
+import { exportConfig, exportProject, importConfig, importInto, importProject, readConfig } from "./config-share";
 import { projectMeta } from "./db/schema";
 import { setDescription } from "./classification";
 import { type Db, openDb } from "./db/client";
@@ -140,5 +140,53 @@ describe("the sheet", () => {
     expect(db.select().from(projectMeta).where(eq(projectMeta.projectId, done.projectId)).get()).toMatchObject({ displayName: "Site", description: "The site", status: "active", note: "Deploy on Fridays" });
     expect(db.select().from(projectEnvironments).all()).toHaveLength(1);
     expect(await importProject(db, folder, config, false)).toHaveProperty("error");
+  });
+});
+
+describe("multi-projects", () => {
+  function group(db: Db) {
+    const root = join(dir, "anfr");
+    const groupId = db.insert(projects).values({ path: root, name: "anfr", kind: "group" }).returning({ id: projects.id }).get().id;
+    const api = db.insert(projects).values({ path: `${root}/api`, name: "api", parentId: groupId }).returning({ id: projects.id }).get().id;
+    db.insert(projects).values({ path: `${root}/front`, name: "front", parentId: groupId }).run();
+    db.insert(projectEnvironments).values({ projectId: api, name: "Recette", urls: [{ label: "api", url: "https://api.recette" }] }).run();
+    setDescription(db, groupId, "All of ANFR");
+    return groupId;
+  }
+
+  it("exports each sub-project in its folder, with the aliases once", () => {
+    const db = openDb(":memory:");
+    const config = exportProject(db, group(db));
+    expect(config?.sheet?.name).toBe("anfr");
+    expect(config?.subProjects.map(({ subdirectory, config: child }) => [subdirectory, child.sheet?.name, child.environments.map(({ name }) => name), child.aliases.length])).toEqual([
+      ["api", "api", ["Recette"], 0],
+      ["front", "front", [], 0],
+    ]);
+    expect(readConfig(JSON.parse(JSON.stringify(config)))?.subProjects).toHaveLength(2);
+  });
+
+  it("imports the sub-projects whose folders are there, and leaves the others aside", async () => {
+    const source = openDb(":memory:");
+    const config = exportProject(source, group(source));
+    if (!config) throw new Error("no export");
+    const root = join(dir, "clone-anfr");
+    mkdirSync(join(root, "api"), { recursive: true });
+    const db = openDb(":memory:");
+
+    const plan = await importProject(db, root, config, false);
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.items.filter(({ kind }) => kind === "project").map(({ name, action }) => `${name}:${action}`)).toEqual([`anfr · ${root}:create`, "api · api:create", "front · front:skip"]);
+
+    const done = await importProject(db, root, config, true);
+    if ("error" in done || done.projectId === null) throw new Error("not imported");
+    const children = db.select().from(projects).where(eq(projects.parentId, done.projectId)).all();
+    expect(children.map(({ path }) => path)).toEqual([join(root, "api")]);
+    expect(db.select().from(projectEnvironments).where(eq(projectEnvironments.projectId, children[0].id)).all()).toHaveLength(1);
+
+    // The other folder cloned since: importing into the multi-project adds it.
+    mkdirSync(join(root, "front"));
+    const into = await importInto(db, done.projectId, config, true);
+    expect(into.items.filter(({ kind, action }) => kind === "project" && action === "create").map(({ name }) => name)).toEqual(["front · front"]);
+    expect(db.select().from(projects).where(eq(projects.parentId, done.projectId)).all()).toHaveLength(2);
   });
 });

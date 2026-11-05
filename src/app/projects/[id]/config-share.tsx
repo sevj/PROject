@@ -28,7 +28,7 @@ export function PlanList({ items }: { items: PlanItem[] }) {
   return (
     <ul className="grid max-h-[50vh] gap-1 overflow-y-auto">
       {items.map((item, index) => (
-        <li key={index} className="flex flex-wrap items-center gap-2 border-b border-rule py-1.5 last:border-b-0">
+        <li key={index} className={`flex flex-wrap items-center gap-2 border-b border-rule py-1.5 last:border-b-0 ${item.group ? "pl-4" : ""} ${item.group && item.group !== items[index - 1]?.group ? "mt-2 border-t-2 border-t-rule-strong" : ""}`}>
           <span className={`${DATA} w-32 shrink-0 text-mut`}>{m.kinds[item.kind]}</span>
           <span className="min-w-0 flex-1 break-all">{item.kind === "status" && item.name in messages.status ? messages.status[item.name as keyof typeof messages.status] : item.name}</span>
           <span className={`${DATA} px-1.5 ${ACTION_CLASS[item.action]}`}>{m.actions[item.action]}</span>

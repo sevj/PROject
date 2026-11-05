@@ -24,6 +24,7 @@ import type { BulkJob } from "@/server/bulk-jobs";
 import { analyzeAllProjects, fetchAllProjects, markAbandoned, refreshEverything, removeFromList, updateStatus } from "./actions";
 import { AddProjectForm, AddSubProjectForm } from "./add-project-form";
 import { ImportProjectButton } from "./import-project";
+import { ConfigShare } from "./projects/[id]/config-share";
 import { ClassificationEditor } from "./classification-editor";
 import { DependencyMark } from "./dependency-mark";
 import { useStoredCollapsedGroups } from "./use-stored-collapsed-groups";
@@ -240,8 +241,11 @@ function GroupInspector({
           className={PANEL_TITLE}
         />
       </div>
-      <div className="mb-5">
+      <div className="mb-4">
         <ProjectDescription key={group.parentId} projectId={group.parentId} description={group.description} detected={null} />
+      </div>
+      <div className="mb-5">
+        <ConfigShare projectId={group.parentId} readOnly={false} />
       </div>
       <h2 className={SECTION_TITLE}>{m.repositories}</h2>
       <ul className="mb-4">
@@ -430,6 +434,9 @@ function Inspector({
           description={row.description}
           detected={row.manifestDescription}
         />
+      </div>
+      <div className="mb-4">
+        <ConfigShare projectId={row.id} readOnly={row.abandoned} />
       </div>
       {row.scanError ? <p className={`${DATA} mb-4 break-words text-alert`}>{row.scanError}</p> : null}
       {/* Stays open from one project to the next, to tag several in a row. */}

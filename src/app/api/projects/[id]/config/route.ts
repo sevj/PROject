@@ -1,5 +1,6 @@
+import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
-import { exportConfig, importConfig, readConfig } from "@/server/config-share";
+import { exportProject, importInto, readConfig } from "@/server/config-share";
 import { getDb } from "@/server/db/client";
 import { getProject } from "@/server/registry";
 
@@ -10,8 +11,8 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/proj
   await connection();
   const project = getProject(getDb(), Number((await params).id));
   if (!project) return new Response("Not Found", { status: 404 });
-  const { row } = project;
-  const config = exportConfig(getDb(), row.id, { name: row.name, folder: row.folderName, description: row.description, tags: row.tags, status: row.status, note: row.note });
+  const config = exportProject(getDb(), project.row.id);
+  if (!config) return new Response("Not Found", { status: 404 });
   return new Response(`${JSON.stringify(config, null, 2)}\n`, {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
@@ -34,5 +35,7 @@ export async function POST(request: Request, { params }: RouteContext<"/api/proj
   }
   const config = readConfig(body.config);
   if (!config) return Response.json({ problem: "invalidFile" }, { headers: { "Cache-Control": "no-store" } });
-  return Response.json({ project: config.project, ...(await importConfig(getDb(), project.row.id, config, body.apply === true)) }, { headers: { "Cache-Control": "no-store" } });
+  const result = await importInto(getDb(), project.row.id, config, body.apply === true);
+  if (body.apply === true) revalidatePath("/", "layout");
+  return Response.json({ project: config.project, ...result }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -72,6 +72,14 @@ export function checkDirectory(db: Db, value: string): { path: string } | { erro
   return taken ? { error: taken } : directory;
 }
 
+/** Where a sub-project could be added: a folder inside `root` that no project has yet. */
+export function checkSubdirectory(db: Db, root: string, value: string): { path: string } | { error: string } {
+  const directory = readSubdirectory(db, root, value);
+  if ("error" in directory) return directory;
+  const taken = takenBy(db, directory.path);
+  return taken ? { error: taken } : directory;
+}
+
 export function registerProject(db: Db, input: ProjectInput): Registered {
   const name = cleanName(input.name);
   if (!name) return { error: serverMessages(db).errors.nameRequired };
