@@ -706,6 +706,7 @@ export const fr: Messages = {
     loading: "Chargement…",
     help: "↑↓ choisir · Entrée lancer · Tab : ses actions (nom / …) · Échap effacer, puis fermer",
     kinds: { page: "page", project: "projet", container: "conteneur", access: "console", server: "serveur", vpn: "VPN", action: "action" },
+    areas: { docker: "Docker", console: "Console", claude: "Claude", git: "Git", tools: "Outils", vpn: "VPN", nav: "Aller à" },
     actions: {
       open: "Ouvrir",
       openSheet: "Ouvrir la fiche",

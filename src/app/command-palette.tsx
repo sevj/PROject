@@ -45,6 +45,40 @@ const KIND_COLOR: Record<Kind, string> = {
   page: "var(--kind-page)",
 };
 
+/** What an action is about, each with its own color, apart from the kinds of items. */
+type Area = "docker" | "console" | "claude" | "git" | "tools" | "vpn" | "nav";
+const AREA_COLOR: Record<Area, string> = {
+  docker: "var(--area-docker)",
+  console: "var(--area-console)",
+  claude: "var(--area-claude)",
+  git: "var(--area-git)",
+  tools: "var(--area-tools)",
+  vpn: "var(--area-vpn)",
+  nav: "var(--kind-page)",
+};
+
+/** From the item and the action's id: the ids say what each one does. */
+function areaOf(entryId: string, actionId: string): Area {
+  if (entryId === "action:stop-all") return "docker";
+  if (entryId.startsWith("action:")) return "git";
+  if (entryId.startsWith("vpn:") && actionId !== "page") return "vpn";
+  if (["docker-start", "docker-stop", "restart", "stop", "start"].includes(actionId)) return "docker";
+  if (["console", "logs", "terminal"].includes(actionId)) return "console";
+  if (actionId === "claude") return "claude";
+  if (actionId === "fetch") return "git";
+  if (actionId === "ide" || actionId === "database") return "tools";
+  return "nav";
+}
+
+function AreaBadge({ area, label }: { area: Area; label: string }) {
+  const style = area === "nav" ? { color: AREA_COLOR.nav, boxShadow: `inset 0 0 0 1px ${AREA_COLOR.nav}` } : { background: AREA_COLOR[area], color: "var(--kind-text)" };
+  return (
+    <span className="inline-flex shrink-0 justify-center px-1.5 font-mono text-[11px] leading-[20px] font-medium tracking-[.04em] uppercase" style={style}>
+      {label}
+    </span>
+  );
+}
+
 function KindBadge({ kind, label }: { kind: Kind; label: string }) {
   // Pages are where one goes, not what one acts on: an outline is enough for them.
   const style =
@@ -387,6 +421,9 @@ export function CommandPalette() {
                   {entry.subtitle ? <span className={`${DATA} block truncate text-mut`}>{entry.subtitle}</span> : null}
                 </span>
                 {entry.actions.length > 1 && index === selected ? <span className={`${DATA} shrink-0 text-mut`}>Tab →</span> : null}
+                {entry.id.includes("#") || entry.kind === "action" ? (
+                  <AreaBadge area={areaOf(entry.id.split("#")[0], entry.actions[0].id)} label={m.areas[areaOf(entry.id.split("#")[0], entry.actions[0].id)]} />
+                ) : null}
               </li>
             ))}
           </ul>

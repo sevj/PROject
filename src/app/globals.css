@@ -38,6 +38,13 @@
   --kind-action: #e9e9ec;
   --kind-page: #6b6b75;
   --kind-text: #0c0c0f;
+  /* What an action is about: the same badges, their own hues. */
+  --area-docker: #38bdf8;
+  --area-console: #4ade80;
+  --area-claude: #f0956a;
+  --area-git: #facc15;
+  --area-tools: #b69cff;
+  --area-vpn: #f472b6;
 }
 
 :root[data-theme="light"] {

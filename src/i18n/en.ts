@@ -713,6 +713,7 @@ export const en = {
     loading: "Loading…",
     help: "↑↓ choose · Enter run · Tab: its actions (name / …) · Esc clear, then close",
     kinds: { page: "page", project: "project", container: "container", access: "console", server: "server", vpn: "VPN", action: "action" },
+    areas: { docker: "Docker", console: "Console", claude: "Claude", git: "Git", tools: "Tools", vpn: "VPN", nav: "Go to" },
     actions: {
       open: "Open",
       openSheet: "Open the sheet",
