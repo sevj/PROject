@@ -124,7 +124,7 @@ function PasswordTool() {
             max={128}
             value={length}
             onChange={(event) => make({ length: Math.min(128, Math.max(4, Number(event.target.value) || 4)) })}
-            className={`${FIELD} ${DATA} w-20`}
+            className={`${FIELD} ${DATA} !w-20`}
           />
         </label>
         <div className="flex flex-wrap gap-1" role="group">
@@ -182,7 +182,7 @@ function UuidTool() {
         </div>
         <label className="flex items-center gap-2">
           <span className={LABEL}>{m.uuid.count}</span>
-          <input type="number" min={1} max={50} value={count} onChange={(event) => make(version, Math.min(50, Math.max(1, Number(event.target.value) || 1)))} className={`${FIELD} ${DATA} w-20`} />
+          <input type="number" min={1} max={50} value={count} onChange={(event) => make(version, Math.min(50, Math.max(1, Number(event.target.value) || 1)))} className={`${FIELD} ${DATA} !w-20`} />
         </label>
         <button type="button" onClick={() => make()} className={BUTTON_SMALL}>
           {m.generate}
@@ -226,7 +226,7 @@ function BcryptTool() {
         </label>
         <label>
           <span className={`${LABEL} block pb-1`}>{m.cost}</span>
-          <select value={cost} onChange={(event) => setCost(Number(event.target.value))} className={`${FIELD} w-20`}>
+          <select value={cost} onChange={(event) => setCost(Number(event.target.value))} className={`${FIELD} !w-20`}>
             {[4, 6, 8, 10, 11, 12, 13, 14].map((value) => (
               <option key={value} value={value}>
                 {value}

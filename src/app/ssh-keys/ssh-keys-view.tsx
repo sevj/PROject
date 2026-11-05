@@ -122,7 +122,7 @@ function KeyCard({ sshKey, servers }: { sshKey: SshKeyView; servers: KeyTarget[]
             disabled={pending}
             value=""
             onChange={(event) => choose(Number(event.target.value))}
-            className={`${FIELD} ml-auto w-auto`}
+            className={`${FIELD} ml-auto !w-auto`}
           >
             <option value="">{m.assign}</option>
             {others.map((server) => (

@@ -230,7 +230,7 @@ export function HttpTab({ projectId, view, readOnly }: { projectId: number; view
             {dirty ? <span className={`${DATA} text-mut`}>{m.unsaved}</span> : null}
           </div>
           <div className="flex gap-2">
-            <select aria-label={m.method} value={draft.method} disabled={readOnly} onChange={(event) => change({ method: event.target.value as HttpMethod })} className={`${FIELD} ${DATA} w-28 shrink-0`} style={{ color: METHOD_COLOR[draft.method] }}>
+            <select aria-label={m.method} value={draft.method} disabled={readOnly} onChange={(event) => change({ method: event.target.value as HttpMethod })} className={`${FIELD} ${DATA} !w-28 shrink-0`} style={{ color: METHOD_COLOR[draft.method] }}>
               {HTTP_METHODS.map((method) => (
                 <option key={method} value={method}>
                   {method}
