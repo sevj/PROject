@@ -31,6 +31,7 @@ export const SECTIONS: Section[] = [
     label: "servers",
     pages: [
       { href: "/servers", label: "servers" },
+      { href: "/ssh-keys", label: "sshKeys" },
       { href: "/vpn", label: "vpn" },
     ],
   },

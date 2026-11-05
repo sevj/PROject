@@ -50,7 +50,7 @@ export function looksLikeProduction(name: string): boolean {
 
 const sq = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 
-const expandHome = (path: string, home: string) => (path.startsWith("~/") ? `${home}${path.slice(1)}` : path);
+export const expandHome = (path: string, home: string) => (path.startsWith("~/") ? `${home}${path.slice(1)}` : path);
 
 /** How to reach the machine: what a test and a console have in common. */
 function sshConnection(target: SshTarget, home: string): string[] {
