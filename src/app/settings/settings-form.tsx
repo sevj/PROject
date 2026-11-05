@@ -9,7 +9,7 @@ import { deleteTagByName, renameTagByName, saveSettingsForm } from "../actions";
 import { AliasEditor } from "../alias-editor";
 import { useFlash } from "../flash";
 import { useConfirm } from "../modal";
-import { BUTTON, BUTTON_PRIMARY, CARD, DATA, FIELD, LABEL, SECTION_TITLE } from "../ui";
+import { BUTTON, BUTTON_PRIMARY, CARD, DATA, FIELD, LABEL, SECTION_TITLE, PAGE_TITLE } from "../ui";
 
 type Props = {
   locale: Locale;
@@ -30,7 +30,7 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, aliases, st
 
   return (
     <main className="mx-auto grid w-full max-w-[1240px] flex-1 content-start gap-6 px-5 pt-6 pb-10">
-      <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
+      <h1 className={PAGE_TITLE}>{m.title}</h1>
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <form

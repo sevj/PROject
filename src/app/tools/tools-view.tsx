@@ -20,7 +20,7 @@ import {
 } from "@/lib/tools";
 import { copyText } from "../clipboard";
 import { useFlash } from "../flash";
-import { BADGE, BADGE_ALERT, BUTTON, BUTTON_SMALL, CARD, CHECKBOX, DATA, FIELD, LABEL, SECTION_TITLE, SEGMENT_SMALL } from "../ui";
+import { BADGE, BADGE_ALERT, BUTTON, BUTTON_SMALL, CARD, CHECKBOX, DATA, FIELD, LABEL, SECTION_TITLE, SEGMENT_SMALL, PAGE_TITLE } from "../ui";
 
 const AREA = `${FIELD} ${DATA} min-h-24 py-2 placeholder:text-mut`;
 const OUTPUT = `${DATA} max-h-80 overflow-auto border border-rule bg-field p-2 break-all whitespace-pre-wrap`;
@@ -39,8 +39,7 @@ export function ToolsView() {
   return (
     <section className="grid gap-4">
       <div>
-        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-        <p className="pt-2 text-mut">{m.intro}</p>
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
       </div>
       {inBrowser ? (
         <div className="grid items-start gap-4 lg:grid-cols-2">

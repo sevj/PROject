@@ -456,10 +456,10 @@ export function PaletteButton() {
     <button
       type="button"
       onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))}
-      className={`${DATA} inline-flex items-center gap-2 self-center border border-rule px-2 py-1 text-mut hover:text-ink`}
+      className="inline-flex min-h-8 items-center gap-3 self-center border border-rule-strong bg-field pr-1.5 pl-2.5 text-mut hover:border-accent/50 hover:text-ink"
     >
       {m.open}
-      <kbd className="text-[11px]">{m.shortcut}</kbd>
+      <kbd className="border border-rule-strong bg-panel px-1.5 font-mono text-[11px] leading-[18px]">{m.shortcut}</kbd>
     </button>
   );
 }

@@ -41,7 +41,7 @@ export function NavLinks() {
           key={section.label}
           href={section.pages[0].href}
           aria-current={section === current ? "page" : undefined}
-          className="-mb-px inline-flex items-center border-b-2 border-transparent px-3 font-mono text-[12px] tracking-[.06em] text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink"
+          className="-mb-px inline-flex items-center border-b-2 border-transparent px-3 text-[14px] font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink"
         >
           {m[section.label]}
           {hasDumps(section) ? <DumpsBadge /> : null}

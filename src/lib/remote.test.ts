@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRemote, publishedPorts } from "./remote";
+import { parseRemote, publishedPorts, readablePorts } from "./remote";
 
 describe("parseRemote", () => {
   it.each([
@@ -21,5 +21,16 @@ describe("publishedPorts", () => {
     expect(publishedPorts("127.0.0.1:8000-8002->8000-8002/tcp, 0.0.0.0:443->443/udp")).toEqual(["8000-8002", "443"]);
     expect(publishedPorts("80/tcp, 443/tcp")).toEqual([]);
     expect(publishedPorts("")).toEqual([]);
+  });
+});
+
+describe("readablePorts", () => {
+  it.each([
+    ["0.0.0.0:5446->5432/tcp, [::]:5446->5432/tcp", ["5446->5432/tcp"]],
+    ["1025/tcp, 1110/tcp, 8025/tcp", ["1025/tcp", "1110/tcp", "8025/tcp"]],
+    ["127.0.0.1:8080->80/tcp, 443/tcp", ["127.0.0.1:8080->80/tcp", "443/tcp"]],
+    ["", []],
+  ])("%s", (ports, expected) => {
+    expect(readablePorts(ports)).toEqual(expected);
   });
 });

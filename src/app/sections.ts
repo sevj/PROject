@@ -5,7 +5,8 @@ type NavLabel = Exclude<keyof Messages["nav"], "label" | "sections" | "dumpsRunn
 export type Section = {
   label: NavLabel;
   /** The section's pages, the first one being where its menu entry leads. */
-  pages: { href: string; label: NavLabel; wide?: boolean }[];
+  /** `full` for a page that spans the whole window, so that its tabs line up with it. */
+  pages: { href: string; label: NavLabel; wide?: boolean; full?: boolean }[];
 };
 
 /** The menu: a section with several pages shows them as tabs. */
@@ -13,7 +14,7 @@ export const SECTIONS: Section[] = [
   {
     label: "projects",
     pages: [
-      { href: "/", label: "projects" },
+      { href: "/", label: "projects", full: true },
       { href: "/versions", label: "versions" },
     ],
   },

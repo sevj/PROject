@@ -13,9 +13,10 @@ export function SectionTabs() {
   const m = useMessages().nav;
   const section = sectionOf(pathname);
   if (!section || section.pages.length < 2) return null;
-  const wide = section.pages.find(({ href }) => href === pathname)?.wide;
+  const page = section.pages.find(({ href }) => href === pathname);
+  const width = page?.full ? "px-4" : `mx-auto px-5 ${page?.wide ? "max-w-[1500px]" : "max-w-[1240px]"}`;
   return (
-    <div className={`mx-auto w-full px-5 pt-4 ${wide ? "max-w-[1500px]" : "max-w-[1240px]"}`}>
+    <div className={`w-full pt-4 ${width}`}>
       <nav aria-label={m.sections} className="flex flex-wrap border-b border-rule-strong">
         {section.pages.map(({ href, label }) => (
           <Link key={href} href={href} aria-current={href === pathname ? "page" : undefined} className={TAB}>

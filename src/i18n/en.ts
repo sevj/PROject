@@ -16,6 +16,7 @@ export const en = {
     cancel: "Cancel",
     adding: "Adding…",
     close: "Close",
+    more: "More actions",
   },
   nav: {
     label: "Main views",
@@ -83,6 +84,14 @@ export const en = {
     unpushed: (count: number, noRemote: boolean) =>
       noRemote ? `${plural(count, "commit")} and no remote: no copy elsewhere` : `${plural(count, "commit")} on no remote`,
     fetchAll: "Fetch all",
+    legend: {
+      favorite: "favorite",
+      vulnerabilities: "known vulnerabilities",
+      outdated: "packages to update",
+      unpushed: "commits not pushed",
+      changes: "Changes: files modified, not committed",
+      weeks: "26 weeks: commits per week, oldest on the left",
+    },
     fetchAllHint: "Runs git fetch on every project with a remote, then refreshes them. No local branch is touched.",
     analyzeAll: "Analyze all",
     analyzeAllHint: "Runs the dependency analysis on every project, a few at a time.",
@@ -810,7 +819,6 @@ export const en = {
   },
   versions: {
     title: "Versions and end of support",
-    intro: "What each project runs or installs, against the support dates of endoflife.date. An image or composer.lock says what runs; a constraint (composer.json, engines) only what is allowed, its lowest version being taken.",
     none: "No version found in the projects: composer.json, composer.lock, package.json, .nvmrc and Docker images are read.",
     project: "Project",
     states: { active: "supported", security: "security only", soon: "ends soon", eol: "end of life", unknown: "unknown" },
@@ -825,7 +833,6 @@ export const en = {
   },
   tools: {
     title: "Tools",
-    intro: "Generators and converters. Everything runs in this page: nothing is sent, nothing is kept.",
     copy: "Copy",
     copied: "Copied.",
     generate: "Generate",
@@ -890,7 +897,6 @@ export const en = {
   },
   sshKeys: {
     title: "SSH keys",
-    intro: "The keys of ~/.ssh and the servers that use them. A server given a key offers only that one, which avoids \"Too many authentication failures\" when the agent holds many.",
     none: "No key in ~/.ssh: a private key is found by its .pub beside it.",
     protected: "passphrase",
     unprotected: "no passphrase",
@@ -916,7 +922,6 @@ export const en = {
   },
   containers: {
     title: "Containers",
-    intro: "Every container on this machine, by project, to see what runs and free what is not needed.",
     dockerUnavailable: (reason: string) => `Docker did not respond: ${reason}`,
     running: (count: number) => (count === 0 ? "Nothing is running." : `${plural(count, "container")} running`),
     showStopped: (count: number) => `Show the stopped ones (${count})`,
@@ -924,9 +929,9 @@ export const en = {
     stopAllConfirm: (count: number) => ({ title: "Stop everything?", body: `${plural(count, "container")} will be stopped. They are kept, with their volumes: starting them again is enough.` }),
     stopGroup: "Stop",
     startGroup: "Start",
-    onlyThis: "Keep only this one",
+    onlyThis: "Stop the other projects",
     onlyThisConfirm: (label: string, count: number) => ({
-      title: `Keep only ${label}?`,
+      title: `Stop every project but ${label}?`,
       body: `${plural(count, "container")} of the other projects will be stopped. They are kept, with their volumes.`,
     }),
     loose: "Started outside compose",
@@ -940,7 +945,6 @@ export const en = {
   },
   resources: {
     title: "Resources",
-    intro: "What the containers use right now, and what Docker keeps on the disk.",
     dockerUnavailable: (reason: string) => `Docker did not respond: ${reason}`,
     live: {
       title: "Running containers",
@@ -1007,7 +1011,6 @@ export const en = {
   },
   ports: {
     title: "Ports",
-    intro: "Every port used or declared by your projects, and by the machine. Collisions come first.",
     dockerUnavailable: (reason: string) => `Docker did not respond: ${reason}`,
     hostUnavailable: (reason: string) => `The programs listening on the machine could not be read: ${reason}`,
     none: "No port to show.",
@@ -1065,11 +1068,10 @@ export const en = {
   },
   databases: {
     title: "Databases",
-    intro: "Browse the tables of the databases that run in your projects and of the SQLite files they contain, and query them. Nothing can be changed from here.",
-    readOnly: "Queries run in a read-only session of the database itself, with at most 1000 rows and 15 seconds.",
     container: "Database container",
     database: "Database",
     none: "No database is running in your projects.",
+    detected: "Databases found in your projects",
     pickContainer: "Choose a database container",
     pickDatabase: "Choose a database",
     noDatabases: "No database to show in this container.",
@@ -1184,8 +1186,6 @@ export const en = {
   },
   journal: {
     title: "Work journal",
-    intro: "Time spent per project, deduced from your activity. Nothing to type in.",
-    estimate: "These are estimates, not a time tracker: a stretch of work is a series of moments of activity less than the gap apart, plus the padding before the first one.",
     previousWeek: "Previous week",
     nextWeek: "Next week",
     thisWeek: "This week",
@@ -1220,8 +1220,6 @@ export const en = {
   },
   map: {
     title: "Map",
-    intro: "Your projects, their Docker services and what each one waits for, as a graph.",
-    note: "Built from the compose files and from what Docker runs now. An arrow goes from a service to the one it waits for (depends_on).",
     none: "No project of the list uses Docker.",
     project: "Project",
     all: "All projects",
@@ -1233,7 +1231,6 @@ export const en = {
   },
   vpn: {
     title: "VPN",
-    hint: "Connected on your click, never by themselves. With sudo, the app runs the same openvpn as a terminal. By NetworkManager, the file becomes a profile that also appears in the system's network settings.",
     add: "Add a VPN",
     none: "No VPN yet.",
     addTitle: "Add a VPN",
@@ -1320,7 +1317,6 @@ export const en = {
   },
   servers: {
     title: "Remote servers",
-    hint: "Machines and clusters, shared between projects. SSH keys and Kubernetes credentials stay in your own files: only their names are kept here.",
     add: "Add a server",
     none: "No server yet.",
     addTitle: "Add a server",
@@ -1503,7 +1499,6 @@ export const en = {
   dumps: {
     keptBeforeLoading: (file: string) => `Copy made before loading ${file}`,
     title: "Dump stash",
-    intro: "Dumps of the databases of your projects. They stay here until you delete them.",
     newDump: "New dump",
     empty: "No dump yet.",
     emptyHint: "Dump a database with the button above, or from the Docker tab of a project.",

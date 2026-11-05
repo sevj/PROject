@@ -5,7 +5,7 @@ import { useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { PRODUCT_LABELS, type SupportState } from "@/lib/versions";
 import type { VersionCell, VersionsReport } from "@/server/versions";
-import { BUTTON, CARD, DATA, LABEL, LINK } from "../ui";
+import { BUTTON, CARD, DATA, LABEL, LINK, PAGE_TITLE } from "../ui";
 import { reloadSupportDates } from "./actions";
 
 const TONE: Record<SupportState, string> = {
@@ -52,8 +52,7 @@ export function VersionsView({ report }: { report: VersionsReport }) {
     <section className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-[80ch]">
-          <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-          <p className="pt-2 text-mut">{m.intro}</p>
+          <h1 className={PAGE_TITLE}>{m.title}</h1>
         </div>
         <button type="button" disabled={pending} onClick={() => start(() => reloadSupportDates())} className={BUTTON}>
           {pending ? m.reloading : m.reload}

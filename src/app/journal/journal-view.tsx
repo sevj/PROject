@@ -5,7 +5,7 @@ import { Fragment, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { formatMinutes, type JournalWeek } from "@/lib/journal";
 import { useFlash } from "../flash";
-import { BUTTON_PRIMARY, BUTTON_SMALL, CARD, DATA, FIELD, LABEL, LINK, SECTION_TITLE } from "../ui";
+import { BUTTON_PRIMARY, BUTTON_SMALL, CARD, DATA, FIELD, LABEL, LINK, SECTION_TITLE, PAGE_TITLE } from "../ui";
 import { saveJournalConfig } from "./actions";
 
 type Day = { start: number; short: string; long: string };
@@ -130,9 +130,7 @@ export function JournalView({
   return (
     <div className="grid gap-5">
       <header>
-        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-        <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
-        <p className="mt-1 max-w-2xl text-[12px] text-mut">{m.estimate}</p>
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">

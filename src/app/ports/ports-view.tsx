@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useMessages } from "@/i18n/provider";
 import type { PortRow } from "@/lib/ports";
 import type { PortReport } from "@/server/ports";
-import { BADGE, BADGE_ALERT, BUTTON_SMALL, CARD, DATA, FIELD, LINK } from "../ui";
+import { BADGE, BADGE_ALERT, BUTTON_SMALL, CARD, DATA, FIELD, LINK, PAGE_TITLE } from "../ui";
 
 function Row({ row }: { row: PortRow }) {
   const m = useMessages().ports;
@@ -60,8 +60,7 @@ export function PortsView({ report }: { report: PortReport }) {
   return (
     <div className="grid gap-5">
       <header>
-        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-        <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
       </header>
       {report.dockerError ? <p className="text-alert">{m.dockerUnavailable(report.dockerError)}</p> : null}
       {report.hostError ? <p className="text-alert">{m.hostUnavailable(report.hostError)}</p> : null}

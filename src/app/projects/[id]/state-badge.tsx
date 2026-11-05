@@ -42,13 +42,15 @@ export function StateGlyph({ kind }: { kind: StateKind }) {
   );
 }
 
-export function StateBadge({ kind, label }: { kind: StateKind; label: string }) {
+/** `quiet` keeps only the glyph in sight, for when the text beside it already says the state ("Up 15 hours"). */
+export function StateBadge({ kind, label, quiet = false }: { kind: StateKind; label: string; quiet?: boolean }) {
   return (
     <span
+      title={quiet ? label : undefined}
       className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-medium tracking-[.06em] uppercase ${TONE_TEXT[TONE[kind]]}`}
     >
       <StateGlyph kind={kind} />
-      {label}
+      <span className={quiet ? "sr-only" : undefined}>{label}</span>
     </span>
   );
 }

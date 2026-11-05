@@ -13,7 +13,7 @@ import { DumpJobs } from "../dump-jobs";
 import { DumpModal, LoadModal } from "../dump-modals";
 import { Modal, useConfirm } from "../modal";
 import { StateGlyph } from "../projects/[id]/state-badge";
-import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_SMALL, CARD, DATA, LINK } from "../ui";
+import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_SMALL, CARD, DATA, LINK, PAGE_TITLE } from "../ui";
 import type { StateKind } from "@/lib/docker-state";
 
 const GLYPH: Record<DumpRow["status"], StateKind> = {
@@ -189,8 +189,7 @@ export function DumpStash({
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
-          <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-          <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
+          <h1 className={PAGE_TITLE}>{m.title}</h1>
         </div>
         <button type="button" onClick={() => setPicking(true)} className={BUTTON_PRIMARY}>
           {m.newDump}

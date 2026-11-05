@@ -40,7 +40,7 @@ import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
 import { BackIcon, OpenIcon, PlusIcon } from "./icons";
-import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_TOGGLE_SMALL, CHECKBOX, DATA, LABEL, SECTION_TITLE, SEGMENT } from "./ui";
+import { BUTTON, BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_QUIET, BUTTON_SMALL, BUTTON_TOGGLE_SMALL, CHECKBOX, DATA, LABEL, PAGE_TITLE, SECTION_TITLE, SEGMENT } from "./ui";
 
 const BULK_FIELD = "min-h-10 border border-rule bg-panel px-2.5";
 const COLUMNS =
@@ -52,6 +52,22 @@ const PANEL =
   "min-w-0 flex-[1_1_clamp(360px,36vw,560px)] bg-panel px-5 pt-5 pb-6 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto";
 const PANEL_TITLE = "text-[26px] leading-[1.1] font-bold tracking-tight";
 const FILTER = `${BUTTON_TOGGLE_SMALL} max-w-full`;
+
+/** What the marks of the list mean, for whoever has not learned them yet. */
+function Legend() {
+  const m = useMessages().registry.legend;
+  const mark = "font-mono text-ink";
+  return (
+    <p className="flex flex-wrap gap-x-5 gap-y-1 border-b border-rule px-4 py-2 text-[12px] text-mut">
+      <span><span className="text-accent">★</span> {m.favorite}</span>
+      <span><span className={mark}>⚠</span> {m.vulnerabilities}</span>
+      <span><span className={mark}>↻</span> {m.outdated}</span>
+      <span><span className="font-mono text-alert">↑</span> {m.unpushed}</span>
+      <span>{m.changes}</span>
+      <span>{m.weeks}</span>
+    </p>
+  );
+}
 
 function cellColor(commits: number): string {
   if (commits === 0) return "var(--r0)";
@@ -659,6 +675,7 @@ export function RegistryView({
 
   return (
     <main className="flex-1">
+      <h1 className={`${PAGE_TITLE} px-4 pt-5 pb-3`}>{messages.nav.projects}</h1>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule-strong px-4 py-2.5">
         <label className="min-w-[200px] flex-[0_1_260px]">
           <span className="sr-only">{m.search}</span>
@@ -722,13 +739,13 @@ export function RegistryView({
           <button type="button" onClick={refresh} disabled={refreshing || rows.length === 0} className={BUTTON}>
             {m.refresh}
           </button>
-          <button type="button" onClick={() => startBulk(fetchAllProjects)} disabled={bulkBusy || rows.length === 0} title={m.fetchAllHint} className={BUTTON}>
+          <button type="button" onClick={() => startBulk(fetchAllProjects)} disabled={bulkBusy || rows.length === 0} title={m.fetchAllHint} className={BUTTON_QUIET}>
             {m.fetchAll}
           </button>
-          <button type="button" onClick={() => startBulk(analyzeAllProjects)} disabled={bulkBusy || rows.length === 0} title={m.analyzeAllHint} className={BUTTON}>
+          <button type="button" onClick={() => startBulk(analyzeAllProjects)} disabled={bulkBusy || rows.length === 0} title={m.analyzeAllHint} className={BUTTON_QUIET}>
             {m.analyzeAll}
           </button>
-          <ImportProjectButton className={BUTTON} />
+          <ImportProjectButton className={BUTTON_QUIET} />
           <button
             type="button"
             aria-pressed={showForm}
@@ -752,6 +769,8 @@ export function RegistryView({
           {m.dockerSilent}
         </p>
       ) : null}
+
+      <Legend />
 
       {checked.size > 0 ? (
         <BulkBar selected={[...checked]} rows={rows} view={view} knownTags={knownTags} onClear={() => setChecked(new Set())} />

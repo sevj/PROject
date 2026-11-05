@@ -7,9 +7,10 @@ import type { VpnFailure, VpnInput, VpnKind, VpnView as Vpn } from "@/server/vpn
 import { useFlash } from "../flash";
 import { PlusIcon } from "../icons";
 import { Modal, useConfirm } from "../modal";
+import { MENU_ITEM_DANGER, MoreMenu } from "../more-menu";
 import { TerminalPanel } from "../projects/[id]/terminal-panel";
 import { FormField } from "../server-form";
-import { BADGE, BADGE_ALERT, BUTTON, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, SECTION_TITLE, SEGMENT_SMALL } from "../ui";
+import { BADGE, BADGE_ALERT, BUTTON, BUTTON_PRIMARY, BUTTON_SMALL, CARD, CHECKBOX, DATA, FIELD, PAGE_TITLE, SEGMENT_SMALL } from "../ui";
 import { openNordLogin, removeVpn, stopVpn } from "../vpn-actions";
 import { VpnConnectButton } from "./vpn-controls";
 import { announceVpnChange } from "./vpn-topbar";
@@ -177,6 +178,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
               } className={BUTTON_SMALL}>{m.dismiss}</button>
           ) : null}
           <button type="button" onClick={() => setEditing(true)} className={BUTTON_SMALL}>{m.edit}</button>
+          <MoreMenu>
           <button
             type="button"
             disabled={pending}
@@ -189,10 +191,11 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
                 onConfirm: () => start(async () => say(await removeVpn(vpn.id))),
               })
             }
-            className={BUTTON_SMALL_DANGER}
+            className={MENU_ITEM_DANGER}
           >
             {m.delete}
           </button>
+          </MoreMenu>
         </div>
       </div>
       {vpn.setup ? (
@@ -226,21 +229,22 @@ export function VpnView({ vpns, files }: { vpns: Vpn[]; files: string[] }) {
   const m = useMessages().vpn;
   const [adding, setAdding] = useState(false);
   return (
-    <section className={CARD}>
-      <div className={`${SECTION_TITLE} mb-1`}>
-        <h1>{m.title}</h1>
+    <section className="grid gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
+        <button type="button" onClick={() => setAdding(true)} className={BUTTON_PRIMARY}>
+          <PlusIcon />
+          {m.add}
+        </button>
       </div>
-      <p className="pt-1 pb-3 text-[12px] text-mut">{m.hint}</p>
-      <button type="button" onClick={() => setAdding(true)} className={BUTTON_PRIMARY}>
-        <PlusIcon />
-        {m.add}
-      </button>
-      {vpns.length === 0 ? <p className="pt-3 text-mut">{m.none}</p> : null}
-      <ul className="mt-2">
-        {vpns.map((vpn) => (
-          <VpnRow key={vpn.id} vpn={vpn} vpns={vpns} files={files} />
-        ))}
-      </ul>
+      <div className={CARD}>
+        {vpns.length === 0 ? <p className="text-mut">{m.none}</p> : null}
+        <ul>
+          {vpns.map((vpn) => (
+            <VpnRow key={vpn.id} vpn={vpn} vpns={vpns} files={files} />
+          ))}
+        </ul>
+      </div>
       {adding ? <VpnFormModal vpn={null} files={files} onClose={() => setAdding(false)} /> : null}
     </section>
   );

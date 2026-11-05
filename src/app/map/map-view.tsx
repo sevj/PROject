@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useMessages } from "@/i18n/provider";
 import { isInChoice, layoutMap, mapChoices } from "@/lib/project-map";
 import type { ProjectMap } from "@/server/project-map";
-import { FIELD, LABEL } from "../ui";
+import { FIELD, LABEL, PAGE_TITLE } from "../ui";
 import { STATE_COLORS } from "./map-canvas";
 
 // The canvas measures the screen: it is drawn in the browser only.
@@ -20,9 +20,7 @@ export function MapView({ map }: { map: ProjectMap }) {
   return (
     <div className="grid gap-4">
       <header>
-        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-        <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
-        <p className="mt-1 max-w-2xl text-[12px] text-mut">{m.note}</p>
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
       </header>
       {map.error ? <p className="text-alert">{m.dockerUnavailable(map.error)}</p> : null}
       {map.projects.length === 0 ? (

@@ -9,10 +9,11 @@ import { forgetServerPassword, removeServer } from "../environment-actions";
 import { useFlash } from "../flash";
 import { PlusIcon } from "../icons";
 import { useConfirm } from "../modal";
+import { MENU_ITEM, MENU_ITEM_DANGER, MoreMenu } from "../more-menu";
 import { ServerFormModal } from "../server-form";
 import { VpnBadge } from "../vpn/vpn-controls";
 import type { VpnView } from "@/server/vpn";
-import { BADGE, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, DATA, LINK, SECTION_TITLE } from "../ui";
+import { BADGE, BUTTON_PRIMARY, BUTTON_SMALL, CARD, DATA, LINK, PAGE_TITLE } from "../ui";
 
 export function serverSummary(server: ServerView): string {
   if (server.kind === "kubernetes") return server.context ?? "";
@@ -53,21 +54,23 @@ function ServerRow({ server, suggestions, vpns }: { server: ServerView; suggesti
         <div className="flex flex-wrap items-center gap-2">
           <VpnBadge vpnId={server.vpnId ?? null} vpns={vpns} />
           <TestButton serverId={server.id} serverName={server.name} />
-          {server.hasPassword ? (
-            <button type="button" disabled={pending} onClick={() => start(() => forgetServerPassword(server.id))} className={BUTTON_SMALL}>
-              {m.forget}
-            </button>
-          ) : null}
           <button type="button" onClick={() => setEditing(true)} className={BUTTON_SMALL}>{m.edit}</button>
-          <button
-            type="button"
-            disabled={pending || server.usedBy.length > 0}
-            title={server.usedBy.length > 0 ? m.problems.serverInUse : undefined}
-            onClick={ask}
-            className={BUTTON_SMALL_DANGER}
-          >
-            {m.delete}
-          </button>
+          <MoreMenu>
+            {server.hasPassword ? (
+              <button type="button" disabled={pending} onClick={() => start(() => forgetServerPassword(server.id))} className={MENU_ITEM}>
+                {m.forget}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={pending || server.usedBy.length > 0}
+              title={server.usedBy.length > 0 ? m.problems.serverInUse : undefined}
+              onClick={ask}
+              className={MENU_ITEM_DANGER}
+            >
+              {m.delete}
+            </button>
+          </MoreMenu>
         </div>
       </div>
       {server.usedBy.length > 0 ? (
@@ -91,21 +94,22 @@ export function ServersView({ servers, suggestions, vpns }: { servers: ServerVie
   const m = useMessages().servers;
   const [adding, setAdding] = useState(false);
   return (
-    <section className={CARD}>
-      <div className={`${SECTION_TITLE} mb-1`}>
-        <h1>{m.title}</h1>
+    <section className="grid gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
+        <button type="button" onClick={() => setAdding(true)} className={BUTTON_PRIMARY}>
+          <PlusIcon />
+          {m.add}
+        </button>
       </div>
-      <p className="pt-1 pb-3 text-[12px] text-mut">{m.hint}</p>
-      <button type="button" onClick={() => setAdding(true)} className={BUTTON_PRIMARY}>
-        <PlusIcon />
-        {m.add}
-      </button>
-      {servers.length === 0 ? <p className="pt-3 text-mut">{m.none}</p> : null}
-      <ul className="mt-2">
+      <div className={CARD}>
+      {servers.length === 0 ? <p className="text-mut">{m.none}</p> : null}
+      <ul>
         {servers.map((server) => (
           <ServerRow key={server.id} server={server} suggestions={suggestions} vpns={vpns} />
         ))}
       </ul>
+      </div>
       {adding ? <ServerFormModal server={null} suggestions={suggestions} vpns={vpns} onClose={() => setAdding(false)} /> : null}
     </section>
   );

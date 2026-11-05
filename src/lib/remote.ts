@@ -26,3 +26,17 @@ export function publishedPorts(ports: string): string[] {
   for (const match of ports.matchAll(/:(\d+(?:-\d+)?)->/g)) found.add(match[1]);
   return [...found];
 }
+
+/**
+ * Docker's list of ports, one entry per mapping and without the duplicates that only differ by the
+ * "any address" they listen on: `0.0.0.0:5438->5432/tcp, [::]:5438->5432/tcp` gives `["5438->5432/tcp"]`.
+ * A mapping bound to one address, such as 127.0.0.1, keeps it.
+ */
+export function readablePorts(ports: string): string[] {
+  const seen = new Set<string>();
+  for (const entry of ports.split(",")) {
+    const port = entry.trim().replace(/^(?:0\.0\.0\.0|\[::\]):/, "");
+    if (port) seen.add(port);
+  }
+  return [...seen];
+}

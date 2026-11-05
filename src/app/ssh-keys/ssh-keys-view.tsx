@@ -7,7 +7,7 @@ import type { KeyTarget, SshKeys, SshKeyView } from "@/server/ssh-keys";
 import { copyText } from "../clipboard";
 import { useFlash } from "../flash";
 import { useConfirm } from "../modal";
-import { BADGE, BADGE_ALERT, BUTTON_SMALL, CARD, DATA, FIELD } from "../ui";
+import { BADGE, BADGE_ALERT, BUTTON_SMALL, CARD, DATA, FIELD, PAGE_TITLE } from "../ui";
 import { fixSshKeyMode, giveSshKey } from "./actions";
 
 export function SshKeysView({ keys, servers }: SshKeys) {
@@ -15,8 +15,7 @@ export function SshKeysView({ keys, servers }: SshKeys) {
   return (
     <section className="grid gap-4">
       <div>
-        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-        <p className="max-w-[80ch] pt-2 text-mut">{m.intro}</p>
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
       </div>
       {keys.length === 0 ? <p className="text-mut">{m.none}</p> : null}
       <ul className="grid gap-3">

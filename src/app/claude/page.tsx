@@ -8,7 +8,7 @@ import { serverMessages } from "@/server/i18n";
 import { LoadingFallback } from "../loading-fallback";
 import { CELL, NUMBER, Table } from "../projects/[id]/claude-tab";
 import { CostBars, usageFormats } from "../projects/[id]/claude-usage";
-import { CARD, DATA, LINK, SECTION_TITLE } from "../ui";
+import { CARD, DATA, LINK, SECTION_TITLE, PAGE_TITLE } from "../ui";
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 const shortModel = (model: string) => model.replace(/^claude-/, "");
@@ -24,7 +24,7 @@ async function ClaudeOverview() {
   const messages = serverMessages(getDb());
   const m = messages.sheet.claudeUsage;
   const global = messages.sheet.claudeGlobal;
-  const heading = <h1 className="text-[32px] leading-none font-bold tracking-tight">{global.title}</h1>;
+  const heading = <h1 className={PAGE_TITLE}>{global.title}</h1>;
   const page = "mx-auto grid w-full max-w-[1240px] flex-1 content-start gap-4 px-5 pt-6 pb-10";
   if (!usage) {
     return (

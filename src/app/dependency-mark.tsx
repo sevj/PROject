@@ -20,7 +20,7 @@ export function DependencyMark({ alerts }: { alerts: RegistryRow["dependencies"]
       ) : null}
       {alerts.outdated > 0 ? (
         <span className={BADGE} title={`${m.outdated}: ${alerts.outdated}${alerts.major > 0 ? ` · ${m.major(alerts.major)}` : ""}`}>
-          ↑ {alerts.outdated}
+          ↻ {alerts.outdated}
         </span>
       ) : null}
     </span>

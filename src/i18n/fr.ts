@@ -10,6 +10,7 @@ export const fr: Messages = {
     cancel: "Annuler",
     adding: "Ajout…",
     close: "Fermer",
+    more: "Plus d’actions",
   },
   nav: {
     label: "Vues principales",
@@ -79,6 +80,14 @@ export const fr: Messages = {
         ? `${plural(count, "commit")} sans dépôt distant : aucune copie ailleurs`
         : `${plural(count, "commit")} absent${count > 1 ? "s" : ""} des dépôts distants`,
     fetchAll: "Fetch tout",
+    legend: {
+      favorite: "favori",
+      vulnerabilities: "failles connues",
+      outdated: "paquets à mettre à jour",
+      unpushed: "commits non poussés",
+      changes: "Modifs : fichiers modifiés, non commités",
+      weeks: "26 semaines : commits par semaine, les plus anciens à gauche",
+    },
     fetchAllHint: "Lance git fetch sur tous les projets qui ont un dépôt distant, puis les actualise. Ne touche à aucune branche locale.",
     analyzeAll: "Analyser tout",
     analyzeAllHint: "Lance l'analyse des dépendances sur tous les projets, l'un après l'autre.",
@@ -803,7 +812,6 @@ export const fr: Messages = {
   },
   versions: {
     title: "Versions et fin de support",
-    intro: "Ce que chaque projet exécute ou installe, face aux dates de support d'endoflife.date. Une image ou le composer.lock disent ce qui tourne ; une contrainte (composer.json, engines) seulement ce qui est permis, et sa version la plus basse est retenue.",
     none: "Aucune version trouvée dans les projets : sont lus composer.json, composer.lock, package.json, .nvmrc et les images Docker.",
     project: "Projet",
     states: { active: "supporté", security: "sécurité seulement", soon: "fin proche", eol: "fin de vie", unknown: "inconnu" },
@@ -818,7 +826,6 @@ export const fr: Messages = {
   },
   tools: {
     title: "Outils",
-    intro: "Générateurs et convertisseurs. Tout se passe dans cette page : rien n'est envoyé, rien n'est gardé.",
     copy: "Copier",
     copied: "Copié.",
     generate: "Générer",
@@ -883,7 +890,6 @@ export const fr: Messages = {
   },
   sshKeys: {
     title: "Clés SSH",
-    intro: "Les clés de ~/.ssh et les serveurs qui les utilisent. Un serveur à qui une clé est donnée ne propose qu'elle, ce qui évite « Too many authentication failures » quand l'agent en garde beaucoup.",
     none: "Aucune clé dans ~/.ssh : une clé privée est reconnue à son .pub à côté.",
     protected: "phrase de passe",
     unprotected: "sans phrase de passe",
@@ -909,7 +915,6 @@ export const fr: Messages = {
   },
   containers: {
     title: "Conteneurs",
-    intro: "Tous les conteneurs de la machine, par projet, pour voir ce qui tourne et libérer ce qui ne sert pas.",
     dockerUnavailable: (reason) => `Docker n'a pas répondu : ${reason}`,
     running: (count) => (count === 0 ? "Rien ne tourne." : `${plural(count, "conteneur")} en cours`),
     showStopped: (count) => `Afficher les arrêtés (${count})`,
@@ -917,9 +922,9 @@ export const fr: Messages = {
     stopAllConfirm: (count) => ({ title: "Tout arrêter ?", body: `${plural(count, "conteneur")} seront arrêtés. Ils sont gardés, avec leurs volumes : il suffit de les redémarrer.` }),
     stopGroup: "Arrêter",
     startGroup: "Démarrer",
-    onlyThis: "Ne garder que celui-ci",
+    onlyThis: "Arrêter les autres projets",
     onlyThisConfirm: (label, count) => ({
-      title: `Ne garder que ${label} ?`,
+      title: `Arrêter tous les projets sauf ${label} ?`,
       body: `${plural(count, "conteneur")} des autres projets seront arrêtés. Ils sont gardés, avec leurs volumes.`,
     }),
     loose: "Lancés hors compose",
@@ -933,7 +938,6 @@ export const fr: Messages = {
   },
   resources: {
     title: "Ressources",
-    intro: "Ce que les conteneurs utilisent maintenant, et ce que Docker garde sur le disque.",
     dockerUnavailable: (reason) => `Docker n'a pas répondu : ${reason}`,
     live: {
       title: "Conteneurs en cours",
@@ -1000,7 +1004,6 @@ export const fr: Messages = {
   },
   ports: {
     title: "Ports",
-    intro: "Tous les ports utilisés ou déclarés par tes projets, et par la machine. Les collisions viennent en premier.",
     dockerUnavailable: (reason) => `Docker n'a pas répondu : ${reason}`,
     hostUnavailable: (reason) => `Les programmes à l'écoute sur la machine n'ont pas pu être lus : ${reason}`,
     none: "Aucun port à montrer.",
@@ -1058,11 +1061,10 @@ export const fr: Messages = {
   },
   databases: {
     title: "Bases de données",
-    intro: "Parcours les tables des bases qui tournent dans tes projets et des fichiers SQLite qu'ils contiennent, et interroge-les. Rien ne peut être modifié d'ici.",
-    readOnly: "Les requêtes tournent dans une session en lecture seule de la base elle-même, avec au plus 1000 lignes et 15 secondes.",
     container: "Conteneur de base",
     database: "Base",
     none: "Aucune base ne tourne dans tes projets.",
+    detected: "Bases trouvées dans tes projets",
     pickContainer: "Choisis un conteneur de base",
     pickDatabase: "Choisis une base",
     noDatabases: "Aucune base à montrer dans ce conteneur.",
@@ -1177,8 +1179,6 @@ export const fr: Messages = {
   },
   journal: {
     title: "Journal de travail",
-    intro: "Le temps passé par projet, déduit de ton activité. Rien à saisir.",
-    estimate: "Ce sont des estimations, pas un suivi du temps : une période de travail est une suite de moments d'activité espacés de moins que l'écart, plus la marge avant le premier.",
     previousWeek: "Semaine précédente",
     nextWeek: "Semaine suivante",
     thisWeek: "Cette semaine",
@@ -1213,8 +1213,6 @@ export const fr: Messages = {
   },
   map: {
     title: "Carte",
-    intro: "Tes projets, leurs services Docker et ce que chacun attend, sous forme de graphe.",
-    note: "Construite à partir des fichiers compose et de ce que Docker exécute maintenant. Une flèche va d'un service vers celui qu'il attend (depends_on).",
     none: "Aucun projet de la liste n'utilise Docker.",
     project: "Projet",
     all: "Tous les projets",
@@ -1226,7 +1224,6 @@ export const fr: Messages = {
   },
   vpn: {
     title: "VPN",
-    hint: "Connectés sur ton clic, jamais d'eux-mêmes. Avec sudo, l'app lance le même openvpn que dans un terminal. Par NetworkManager, le fichier devient un profil, visible aussi dans les réglages réseau du système.",
     add: "Ajouter un VPN",
     none: "Aucun VPN pour l'instant.",
     addTitle: "Ajouter un VPN",
@@ -1313,7 +1310,6 @@ export const fr: Messages = {
   },
   servers: {
     title: "Serveurs distants",
-    hint: "Les machines et les clusters, partagés entre projets. Les clés SSH et les identifiants Kubernetes restent dans tes fichiers : seul leur nom est gardé ici.",
     add: "Ajouter un serveur",
     none: "Aucun serveur pour l'instant.",
     addTitle: "Ajouter un serveur",
@@ -1496,7 +1492,6 @@ export const fr: Messages = {
   dumps: {
     keptBeforeLoading: (file) => `Copie faite avant de charger ${file}`,
     title: "Dump stash",
-    intro: "Les dumps des bases de données de tes projets. Ils restent ici jusqu'à ce que tu les supprimes.",
     newDump: "Nouveau dump",
     empty: "Aucun dump pour l'instant.",
     emptyHint: "Fais un dump avec le bouton ci-dessus, ou depuis l'onglet Docker d'un projet.",

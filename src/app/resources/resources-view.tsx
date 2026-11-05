@@ -22,6 +22,7 @@ import {
   LABEL,
   LINK,
   SECTION_TITLE,
+  PAGE_TITLE,
 } from "../ui";
 import { deleteVolume, runCleanup } from "./actions";
 import { Bar, useLiveStats } from "./live-stats";
@@ -297,8 +298,7 @@ export function ResourcesView({ disk }: { disk: DiskReport }) {
   return (
     <div className="grid gap-8">
       <header>
-        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-        <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
       </header>
       <LiveSection />
       {disk.error ? (

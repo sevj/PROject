@@ -11,7 +11,7 @@ import type { DatabaseTarget as ServerTarget, RedisContainer } from "@/server/du
 import type { SqliteTarget } from "@/server/sqlite";
 import type { HistoryEntry } from "@/server/query-history";
 import type { Plan } from "@/lib/explain";
-import { BADGE, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, LABEL, LINK, SECTION_TITLE } from "../ui";
+import { BADGE, BUTTON_PRIMARY, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, FIELD, LABEL, LINK, SECTION_TITLE, PAGE_TITLE } from "../ui";
 import {
   clearProjectHistory,
   executeFilter,
@@ -296,9 +296,7 @@ export function DatabasesView({
   return (
     <div className="grid gap-5">
       <header>
-        <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-        <p className="mt-2 max-w-2xl text-mut">{m.intro}</p>
-        <p className="mt-1 max-w-2xl text-[12px] text-mut">{m.readOnly}</p>
+        <h1 className={PAGE_TITLE}>{m.title}</h1>
         {error ? <p className="mt-2 text-alert">{messages.errors.dockerUnavailable(error)}</p> : null}
       </header>
 
@@ -339,6 +337,27 @@ export function DatabasesView({
           </label>
         </div>
       )}
+
+      {targets.length > 0 && !containerId ? (
+        <section aria-label={m.detected} className="grid gap-3">
+          <h2 className={SECTION_TITLE}>{m.detected}</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {groups.map(([project, items]) => (
+              <div key={project} className={`${CARD} grid content-start gap-2`}>
+                <h3 className="font-semibold break-words">{project}</h3>
+                <div className="flex flex-wrap gap-2">
+                  {items.map((item) => (
+                    <button key={item.id} type="button" onClick={() => void pickContainer(item.id)} className={BUTTON_SMALL}>
+                      {item.name}
+                      <span className="text-[12px] text-mut">{BROWSABLE_LABELS[item.engine]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {failure ? (
         <p role="alert" className={`${DATA} border border-alert px-3 py-2 break-words whitespace-pre-wrap text-alert`}>

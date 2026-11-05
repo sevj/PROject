@@ -159,11 +159,13 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
               </Suspense>
             </div>
           ) : null}
-          <div className="mt-2">
-            <ConfigShare projectId={row.id} readOnly={row.abandoned} />
-          </div>
         </div>
-        <ProjectOrganizer key={row.id} row={row} knownTags={knownTags} />
+        <ProjectOrganizer
+          key={row.id}
+          row={row}
+          knownTags={knownTags}
+          share={<ConfigShare projectId={row.id} readOnly={row.abandoned} />}
+        />
       </div>
 
       {row.abandoned ? (

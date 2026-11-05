@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useTransition } from "react";
+import { type ReactNode, useOptimistic, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import { STATUSES, type RegistryRow } from "@/lib/registry";
 import type { ProjectStatus } from "@/server/db/schema";
@@ -11,8 +11,11 @@ import { LABEL } from "./ui";
 
 const CELL = "px-4 pt-3 pb-3.5";
 
-/** Everything decided by hand about a project, in one place. Mount with `key={row.id}`. */
-export function ProjectOrganizer({ row, knownTags }: { row: RegistryRow; knownTags: string[] }) {
+/**
+ * Everything decided by hand about a project, in one place. Mount with `key={row.id}`.
+ * `share` is what moves the project's configuration in or out, kept here away from what opens it.
+ */
+export function ProjectOrganizer({ row, knownTags, share }: { row: RegistryRow; knownTags: string[]; share?: ReactNode }) {
   const messages = useMessages();
   const m = messages.classification;
   const [, start] = useTransition();
@@ -82,6 +85,7 @@ export function ProjectOrganizer({ row, knownTags }: { row: RegistryRow; knownTa
           className="block w-full resize-y bg-transparent outline-none placeholder:text-mut"
         />
       </label>
+      {share ? <div className={CELL}>{share}</div> : null}
     </section>
   );
 }

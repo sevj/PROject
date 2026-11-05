@@ -6,13 +6,14 @@ import { useEffect, useState, useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import type { ContainerGroup, OverviewAction, OverviewContainer } from "@/lib/docker-overview";
 import { formatSize } from "@/lib/registry";
+import { readablePorts } from "@/lib/remote";
 import type { ContainerStat } from "@/lib/resources";
 import type { DockerOverview } from "@/server/docker-overview";
 import { useFlash } from "../flash";
 import { useConfirm } from "../modal";
 import { StateBadge } from "../projects/[id]/state-badge";
 import { Bar, useLiveStats } from "../resources/live-stats";
-import { BUTTON, BUTTON_DANGER, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, LABEL, LINK } from "../ui";
+import { BUTTON, BUTTON_DANGER, BUTTON_SMALL, BUTTON_SMALL_DANGER, CARD, CHECKBOX, DATA, LABEL, LINK, PAGE_TITLE } from "../ui";
 import { actOnDockerContainers } from "./actions";
 
 /** States change behind the page, as when a project is started from elsewhere. */
@@ -66,8 +67,7 @@ export function ContainersView({ overview }: { overview: DockerOverview }) {
     <section className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[32px] leading-none font-bold tracking-tight">{m.title}</h1>
-          <p className="pt-2 text-mut">{m.intro}</p>
+          <h1 className={PAGE_TITLE}>{m.title}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <span className={DATA}>{m.running(running.length)}</span>
@@ -203,12 +203,18 @@ function GroupCard({
                   <td className="py-2 pr-3">
                     <span className="block font-semibold break-all">{container.service || container.name}</span>
                     <span className="flex flex-wrap items-center gap-x-2">
-                      <StateBadge kind={container.kind} label={d.states[container.kind]} />
+                      <StateBadge kind={container.kind} label={d.states[container.kind]} quiet={container.kind === "running"} />
                       <span className={`${DATA} text-mut`}>{container.status}</span>
                     </span>
                   </td>
                   <td className={`${DATA} py-2 pr-3 break-all text-mut`}>{container.image}</td>
-                  <td className={`${DATA} max-w-[220px] py-2 pr-3 break-all text-mut`}>{container.ports}</td>
+                  <td className={`${DATA} max-w-[260px] py-2 pr-3 text-mut`}>
+                    {readablePorts(container.ports).map((port, index) => (
+                        <span key={index} className="block whitespace-nowrap">
+                          {port}
+                        </span>
+                      ))}
+                  </td>
                   <td className="py-2 pr-3">{stat ? <Bar value={stat.cpuPercent} label={`${stat.cpuPercent.toFixed(1)} %`} /> : null}</td>
                   <td className="py-2 pr-3">{stat ? <Bar value={stat.memPercent} label={size(stat.memBytes)} /> : null}</td>
                   <td className="py-2">
