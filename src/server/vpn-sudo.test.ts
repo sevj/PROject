@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { type Db, openDb } from "./db/client";
 import { vpns } from "./db/schema";
 import type { CommandRunner } from "./run-command";
-import { connectVpn, deleteVpn, disconnectVpn, listVpns, readActiveVpns, saveVpn, type VpnInput } from "./vpn";
+import { connectVpn, deleteVpn, disconnectVpn, listVpns, readActiveVpns, readVpnStatuses, saveVpn, type VpnInput } from "./vpn";
 import { realSudoDriver, type SudoDriver } from "./vpn-sudo";
 
 let dir: string;
@@ -85,9 +85,15 @@ describe("listing", () => {
     const [view] = await listVpns(db, missing, fakeDriver(["off"]));
     expect(view.setup?.ready).toBe(false);
     expect(view.setup?.commands[1]).toContain("NOPASSWD: /usr/sbin/openvpn --config /etc/openvpn/client/pm-la-villette.conf");
-    expect(missing.mock.calls[0][1].slice(0, 2)).toEqual(["-n", "-l"]);
+    expect(missing.mock.calls[0][1]).toEqual(["-n", "-l"]);
     expect(JSON.stringify(view)).not.toContain("pa\\\\ss");
-    const [ready] = await listVpns(db, noRun, fakeDriver(["connected"]));
+    const listed = vi.fn<CommandRunner>(async () => ({
+      code: 0,
+      stderr: "",
+      notInstalled: false,
+      stdout: "(root) NOPASSWD: /usr/sbin/openvpn --config /etc/openvpn/client/pm-la-villette.conf --auth-user-pass /dev/stdin --management /run/user/1000/pm-vpn-la-villette.sock unix\n",
+    }));
+    const [ready] = await listVpns(db, listed, fakeDriver(["connected"]));
     expect(ready).toMatchObject({ state: "connected", setup: { ready: true } });
   });
 });
@@ -100,6 +106,16 @@ describe("readActiveVpns", () => {
     expect(await readActiveVpns(db, run, fakeDriver(["off"]))).toEqual([]);
     expect(await readActiveVpns(db, run, fakeDriver(["connected"]))).toEqual([{ id, name: "La Villette", state: "connected" }]);
     expect(await readActiveVpns(db, run, fakeDriver(["connecting"]))).toEqual([{ id, name: "La Villette", state: "connecting" }]);
+    expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe("readVpnStatuses", () => {
+  it("lists every VPN with what connecting needs, without reading the sudo rules or the secret", async () => {
+    const run = vi.fn<CommandRunner>(async () => ({ code: 0, stdout: "", stderr: "", notInstalled: false }));
+    const id = await saved();
+    const [status] = await readVpnStatuses(db, run, fakeDriver(["off"]));
+    expect(status).toEqual({ id, name: "La Villette", kind: "sudo_openvpn", state: "off", hasPassword: expect.any(Boolean), tokenAppended: expect.any(Boolean), loggedIn: null });
     expect(run).not.toHaveBeenCalled();
   });
 });

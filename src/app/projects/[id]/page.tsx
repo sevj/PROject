@@ -31,7 +31,7 @@ import { ProjectName } from "../../project-name";
 import { ProjectCleanup } from "../../project-cleanup";
 import { ProjectOrganizer } from "../../project-organizer";
 import { BackIcon } from "../../icons";
-import { BUTTON_SMALL, CARD, DATA, SECTION_TITLE } from "../../ui";
+import { BUTTON_SMALL, CARD, DATA, SECTION_TITLE, TAB } from "../../ui";
 import { ClaudeConfigCard } from "./claude-config-card";
 import { ClaudeTab } from "./claude-tab";
 import { ClaudeUsageBlock } from "./claude-usage";
@@ -48,8 +48,6 @@ import { SecurityTab } from "./security-tab";
 
 const TABS = ["general", "docker", "git", "env", "environments", "claude", "security", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
-const TAB =
-  "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";
 
 function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) {
   const peak = Math.max(...weeks, 1);

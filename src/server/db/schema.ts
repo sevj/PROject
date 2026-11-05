@@ -278,7 +278,7 @@ export const activitySamples = sqliteTable(
   (table) => [primaryKey({ columns: [table.projectId, table.at] })],
 );
 
-export const VPN_KINDS = ["openvpn", "sudo_openvpn", "nordlayer"] as const;
+export const VPN_KINDS = ["openvpn", "sudo_openvpn", "nordlayer", "globalprotect"] as const;
 
 /**
  * A VPN the user connects to from here. An OpenVPN file becomes a NetworkManager profile, which
@@ -299,8 +299,12 @@ export const vpns = sqliteTable("vpns", {
   tokenAppended: integer("token_appended", { mode: "boolean" }).notNull().default(false),
   /** With sudo: names its files, and stays when the VPN is renamed, since the sudo rule holds it. */
   sudoSlug: text("sudo_slug"),
-  /** NordLayer: what `nordlayer connect` takes. */
+  /** NordLayer: what `nordlayer connect` takes. GlobalProtect: the portal. */
   gateway: text("gateway"),
+  /** NordLayer: what `nordlayer login` otherwise asks to choose. */
+  organization: text("organization"),
+  /** GlobalProtect: the only networks sent through it, as `10.0.0.0/8 192.168.1.0/24`. Empty: all of them. */
+  routes: text("routes"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
 });
 

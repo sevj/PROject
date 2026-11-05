@@ -33,6 +33,7 @@ import { ProjectDirectory } from "./project-directory";
 import { useFlash } from "./flash";
 import { useConfirm } from "./modal";
 import { ProjectFacts } from "./project-facts";
+import { ProjectFavicon } from "./project-favicon";
 import { ProjectName } from "./project-name";
 import { TagList } from "./tag-list";
 import { TagPicker } from "./tag-picker";
@@ -607,10 +608,13 @@ export function RegistryView({
         className={`${COLUMNS} min-h-11 cursor-pointer py-1.5 text-left`}
       >
         <span className={`min-w-0 ${nested ? "border-l-2 border-rule pl-3" : ""}`}>
-          <span className="block truncate font-semibold">
-            {row.favorite ? <span aria-label={m.favorite} className="text-accent">★ </span> : null}
-            {row.name}
-            <DependencyMark alerts={row.dependencies} />
+          <span className="flex min-w-0 items-center gap-1.5 font-semibold">
+            <ProjectFavicon projectId={row.id} version={row.faviconVersion} />
+            <span className="min-w-0 truncate">
+              {row.favorite ? <span aria-label={m.favorite} className="text-accent">★ </span> : null}
+              {row.name}
+              <DependencyMark alerts={row.dependencies} />
+            </span>
           </span>
           <TagList tags={row.tags} />
         </span>

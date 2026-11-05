@@ -68,6 +68,7 @@ function row(name: string, patch: Partial<RegistryRow> = {}): RegistryRow {
     abandoned: false,
     tags: [],
     dependencies: null,
+    faviconVersion: null,
     ...patch,
   };
 }

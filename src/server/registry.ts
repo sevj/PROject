@@ -6,6 +6,7 @@ import type { Db } from "./db/client";
 import { projectFacts, projectMeta, projects, projectTags, scans, tags } from "./db/schema";
 import { readDependencyCounters } from "./dependencies";
 import { serverMessages } from "./i18n";
+import { findFavicon } from "./project-favicon";
 import { REFRESH_INTERRUPTED } from "./scan/run";
 import { getSettings } from "./settings";
 
@@ -122,6 +123,7 @@ function toRow(
     abandoned: project.abandoned,
     tags: rowTags,
     dependencies,
+    faviconVersion: project.missingAt === null ? (findFavicon(project.path)?.version ?? null) : null,
   };
 }
 

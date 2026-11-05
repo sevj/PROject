@@ -1,0 +1,1 @@
+ALTER TABLE `vpns` ADD `organization` text;

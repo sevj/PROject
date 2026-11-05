@@ -2,32 +2,42 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMessages } from "@/i18n/provider";
-import type { ActiveVpn } from "@/server/vpn";
+import type { VpnState } from "@/lib/vpn";
+import type { VpnStatus } from "@/server/vpn";
 import { useFlash } from "../flash";
 import { BUTTON_SMALL, DATA } from "../ui";
 import { stopVpn } from "../vpn-actions";
+import { VpnConnectButton } from "./vpn-controls";
+import { VPN_CHANGED } from "./vpn-events";
+
+export { announceVpnChange } from "./vpn-events";
 
 const EVERY_MS = 10_000;
-const CHANGED = "pm-vpn-changed";
 
-/** A VPN can also stop or start outside the app: the top bar looks by itself, and at once after a click. */
-export const announceVpnChange = () => window.dispatchEvent(new Event(CHANGED));
+const isUp = (state: VpnState) => state === "connected" || state === "connecting";
 
-/** Nothing shows while no VPN is up. */
+function Dot({ state }: { state: VpnState }) {
+  const color = state === "connected" ? "bg-ok" : state === "connecting" ? "animate-pulse bg-alert" : "border border-rule-strong";
+  return <span aria-hidden className={`size-2 shrink-0 rounded-full ${color}`} />;
+}
+
+/** Every VPN, its state, and connecting or disconnecting it from any page. Nothing shows while none is declared. */
 export function VpnTopbar() {
   const messages = useMessages();
   const m = messages.vpn;
   const flash = useFlash();
   const router = useRouter();
-  const [active, setActive] = useState<ActiveVpn[]>([]);
+  const [vpns, setVpns] = useState<VpnStatus[]>([]);
+  const [open, setOpen] = useState(false);
   const [stopping, setStopping] = useState<number | null>(null);
+  const root = useRef<HTMLDivElement>(null);
 
   const read = useCallback(async () => {
     try {
-      const response = await fetch("/api/vpns/active");
-      if (response.ok) setActive((await response.json()) as ActiveVpn[]);
+      const response = await fetch("/api/vpns/status");
+      if (response.ok) setVpns((await response.json()) as VpnStatus[]);
     } catch {
       // The app is restarting: what was shown stays until the next look.
     }
@@ -39,16 +49,34 @@ export function VpnTopbar() {
     };
     look();
     const timer = setInterval(look, EVERY_MS);
-    window.addEventListener(CHANGED, look);
+    window.addEventListener(VPN_CHANGED, look);
     document.addEventListener("visibilitychange", look);
     return () => {
       clearInterval(timer);
-      window.removeEventListener(CHANGED, look);
+      window.removeEventListener(VPN_CHANGED, look);
       document.removeEventListener("visibilitychange", look);
     };
   }, [read]);
 
-  const stop = async ({ id, name }: ActiveVpn) => {
+  useEffect(() => {
+    if (!open) return;
+    // The password and token dialog lies inside the menu: a click in it keeps the menu open.
+    const away = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    // Escape first closes that dialog, which then needs its menu.
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.querySelector("dialog[open]")) setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  const stop = async ({ id, name }: VpnStatus) => {
     setStopping(id);
     try {
       const failure = await stopVpn(id);
@@ -67,22 +95,68 @@ export function VpnTopbar() {
     }
   };
 
-  if (active.length === 0) return null;
+  if (vpns.length === 0) return null;
+
+  const up = vpns.filter(({ state }) => isUp(state));
+  const summary: VpnState = up.some(({ state }) => state === "connected") ? "connected" : up.length > 0 ? "connecting" : "off";
 
   return (
-    <ul aria-label={m.topbar} className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 py-1.5">
-      {active.map((vpn) => (
-        <li key={vpn.id} className="flex items-center gap-2">
-          <Link href="/vpn" className={`${DATA} inline-flex items-center gap-1.5 hover:underline`}>
-            <span aria-hidden className={`size-2 rounded-full ${vpn.state === "connected" ? "bg-ok" : "animate-pulse bg-alert"}`} />
-            <span>{vpn.name}</span>
-            {vpn.state === "connected" ? null : <span className="text-mut">{m.states.connecting}</span>}
+    <div ref={root} className="relative ml-auto self-stretch">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="vpn-menu"
+        onClick={() => setOpen((value) => !value)}
+        className={`${DATA} inline-flex h-full cursor-pointer items-center gap-1.5 px-2 text-mut hover:text-ink aria-expanded:text-ink`}
+      >
+        <Dot state={summary} />
+        <span>{m.title}</span>
+        {up.length > 0 ? <span className="max-w-[220px] truncate text-ink">{up.map(({ name }) => name).join(", ")}</span> : null}
+        <span aria-hidden>{open ? "▴" : "▾"}</span>
+      </button>
+      {open ? (
+        <div
+          id="vpn-menu"
+          role="region"
+          aria-label={m.topbar}
+          className="absolute top-full right-0 z-20 grid w-[min(360px,calc(100vw-32px))] border border-rule-strong bg-panel text-[14px]"
+        >
+          <ul>
+            {vpns.map((vpn) => (
+              <li key={vpn.id} className="flex items-center gap-3 border-b border-rule px-3 py-2">
+                <Dot state={vpn.state} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">{vpn.name}</span>
+                  <span className={`${DATA} block ${vpn.state === "unavailable" ? "text-alert" : "text-mut"}`}>
+                    {m.kinds[vpn.kind]} · {m.states[vpn.state]}
+                    {vpn.loggedIn === false ? ` · ${m.notLoggedIn}` : null}
+                  </span>
+                </span>
+                {isUp(vpn.state) ? (
+                  <button
+                    type="button"
+                    disabled={stopping === vpn.id}
+                    aria-label={m.disconnectOne(vpn.name)}
+                    onClick={() => void stop(vpn)}
+                    className={BUTTON_SMALL}
+                  >
+                    {m.disconnect}
+                  </button>
+                ) : vpn.loggedIn === false ? (
+                  <Link href="/vpn" title={m.loginOnPage} onClick={() => setOpen(false)} className={BUTTON_SMALL}>
+                    {m.login}
+                  </Link>
+                ) : vpn.state === "unavailable" ? null : (
+                  <VpnConnectButton vpn={vpn} vpns={vpns} />
+                )}
+              </li>
+            ))}
+          </ul>
+          <Link href="/vpn" onClick={() => setOpen(false)} className={`${DATA} px-3 py-2 text-mut hover:text-ink hover:underline`}>
+            {m.manage} →
           </Link>
-          <button type="button" disabled={stopping === vpn.id} title={m.disconnectOne(vpn.name)} aria-label={m.disconnectOne(vpn.name)} onClick={() => void stop(vpn)} className={BUTTON_SMALL}>
-            {m.disconnect}
-          </button>
-        </li>
-      ))}
-    </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }

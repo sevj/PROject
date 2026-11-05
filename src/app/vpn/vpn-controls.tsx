@@ -3,15 +3,15 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { useMessages } from "@/i18n/provider";
-import type { VpnFailure, VpnView } from "@/server/vpn";
+import type { VpnFailure, VpnStatus, VpnView } from "@/server/vpn";
 import { useFlash } from "../flash";
 import { Modal, useConfirm } from "../modal";
 import { BADGE, BADGE_ALERT, BUTTON, BUTTON_PRIMARY, BUTTON_SMALL, FIELD } from "../ui";
 import { stopVpn } from "../vpn-actions";
-import { announceVpnChange } from "./vpn-topbar";
+import { announceVpnChange } from "./vpn-events";
 
 /** Connects on a click, asking only for what is not known: a token is typed each time. */
-export function VpnConnectButton({ vpn, vpns }: { vpn: VpnView; vpns: VpnView[] }) {
+export function VpnConnectButton({ vpn, vpns }: { vpn: VpnStatus; vpns: Pick<VpnStatus, "id" | "name" | "state">[] }) {
   const messages = useMessages();
   const m = messages.vpn;
   const flash = useFlash();
@@ -21,8 +21,10 @@ export function VpnConnectButton({ vpn, vpns }: { vpn: VpnView; vpns: VpnView[] 
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const { confirm, confirmation } = useConfirm();
-  const needsPassword = vpn.kind !== "nordlayer" && !vpn.hasPassword;
-  const needsToken = vpn.kind !== "nordlayer" && vpn.tokenAppended;
+  // NordLayer has its own login, and GlobalProtect shows Microsoft's in a window.
+  const asksHere = vpn.kind !== "nordlayer" && vpn.kind !== "globalprotect";
+  const needsPassword = asksHere && !vpn.hasPassword;
+  const needsToken = asksHere && vpn.tokenAppended;
 
   const say = ({ problem, detail }: VpnFailure) => flash("error", detail ? `${m.problems[problem]} (${detail})` : m.problems[problem], { seconds: 12 });
 

@@ -61,6 +61,8 @@ export type RegistryRow = {
   tags: string[];
   /** The last dependency analysis, if one was made. */
   dependencies: DependencyAlerts | null;
+  /** The modification time of the project's icon, to bust the cache, or null without one. */
+  faviconVersion: number | null;
 };
 
 export type DependencyAlerts = {

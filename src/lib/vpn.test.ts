@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editorKeepsIntact, parseManagementState, readSudoLog, sudoOpenvpnCommand, sudoRemovalCommand, sudoSetupCommands, sudoVpnPaths, vpnSlug, fullPassword, hasAuthFailure, isGateway, isOneLine, isOvpnPath, isVpnUsername, NM_RELEASE_SECRET_SCRIPT, nmEditArguments, nmEditWorked, nmHoldSecretScript, nmSetupArguments, nmUpArguments, ovpnFilesAmong, ovpnForImport, parseImportedUuid, parseNmActive, parseNordStatus } from "./vpn";
+import { editorKeepsIntact, formatGpRoutes, parseGpRoutes, gpRemovalCommand, gpRuleCommand, gpScript, gpSetupCommands, isOwnSudo, parseGpSaml, readGpLog, sudoGpCommand, sudoRuleAllows, withoutCookies, parseManagementState, readSudoLog, sudoOpenvpnCommand, sudoRemovalCommand, sudoRuleInPlace, sudoSetupCommands, sudoVpnPaths, vpnSlug, fullPassword, hasAuthFailure, isGateway, isOneLine, isOrganization, isOvpnPath, isVpnUsername, nordLoginArguments, NM_RELEASE_SECRET_SCRIPT, nmEditArguments, nmEditWorked, nmHoldSecretScript, nmSetupArguments, nmUpArguments, ovpnFilesAmong, ovpnForImport, parseImportedUuid, parseNmActive, parseNordStatus } from "./vpn";
 
 describe("what can be declared", () => {
   it("wants a .ovpn file, from the root or home", () => {
@@ -125,6 +125,14 @@ describe("OpenVPN through sudo", () => {
     expect(sudoRemovalCommand(paths)).toBe("sudo rm /etc/sudoers.d/pm-vpn-la-villette /etc/openvpn/client/pm-la-villette.conf");
   });
 
+  it("wants this very rule, not a yes for the sudo group or the rule of another VPN", () => {
+    const rule = `    (root) NOPASSWD: ${sudoOpenvpnCommand(paths).join(" ")}`;
+    expect(sudoRuleInPlace(`User me may run:\n    (ALL : ALL) ALL\n${rule}\n`, paths)).toBe(true);
+    expect(sudoRuleInPlace("User me may run:\n    (ALL : ALL) ALL\n", paths)).toBe(false);
+    expect(sudoRuleInPlace(rule, sudoVpnPaths("semardel", 1000))).toBe(false);
+    expect(sudoRuleInPlace("sudo: a password is required", paths)).toBe(false);
+  });
+
   it("reads the state from the socket", () => {
     expect(parseManagementState(">INFO:OpenVPN Management\n1793888000,CONNECTED,SUCCESS,10.0.0.2,1.2.3.4\nEND\n")).toBe("connected");
     expect(parseManagementState("1793888000,TCP_CONNECT,,,\nEND\n")).toBe("connecting");
@@ -137,5 +145,77 @@ describe("OpenVPN through sudo", () => {
     expect(readSudoLog("sudo: il est nécessaire de saisir un mot de passe\n")).toBe("ruleMissing");
     expect(readSudoLog("Options error: x\n")).toBe("ended");
     expect(readSudoLog("Initialization Sequence Completed\n")).toBeNull();
+  });
+});
+
+describe("nordLoginArguments", () => {
+  it("goes straight to the organization when there is one", () => {
+    expect(nordLoginArguments("adimeo_fr")).toEqual(["login", "--organization", "adimeo_fr"]);
+    expect(nordLoginArguments(null)).toEqual(["login"]);
+    expect(isOrganization("adimeo_fr")).toBe(true);
+    expect(isOrganization("--email=x")).toBe(false);
+  });
+});
+
+describe("GlobalProtect", () => {
+  const saml = "HOST=https://vpn.corp.fr/portal:prelogin-cookie\nUSER='GROUPE-GT\\j.dupont'\nCOOKIE='Tmq+GU/x=='\nOS=linux-64\n";
+
+  it("reads what gp-saml-gui prints, quoted or not", () => {
+    expect(parseGpSaml(saml)).toEqual({ user: "GROUPE-GT\\j.dupont", group: "portal:prelogin-cookie", cookie: "Tmq+GU/x==" });
+    expect(parseGpSaml("HOST=https://vpn.corp.fr/gateway:prelogin-cookie\nUSER=jd\nCOOKIE=abc\n")).toMatchObject({ user: "jd", group: "gateway:prelogin-cookie" });
+    expect(parseGpSaml(saml.replace("portal:prelogin-cookie", "portal:x;id"))).toBeNull();
+    expect(parseGpSaml(saml.replace("j.dupont", "j dupont"))).toBeNull();
+    expect(parseGpSaml("")).toBeNull();
+  });
+
+  it("keeps the cookie out of a message", () => {
+    const err = "[PAGE   ] Finished loading page https://login.microsoftonline.com/x\n[SAML   ] Got SAML result headers: {'prelogin-cookie': 'Tmq'}\n    echo Tmq |\n        sudo openconnect --protocol=gp\n";
+    expect(withoutCookies(err)).not.toContain("Tmq");
+    expect(withoutCookies(err)).toContain("Finished loading page");
+  });
+
+  it("allows one root script, without any argument, which fixes the portal", () => {
+    expect(sudoGpCommand("corp")).toEqual(["/usr/local/sbin/pm-gp-corp"]);
+    const commands = gpSetupCommands("corp", "/etc/sudoers.d/pm-vpn-corp", "vpn.corp.fr", [], "me");
+    expect(commands[0]).toBe(`sudo tee /usr/local/sbin/pm-gp-corp >/dev/null <<'PM_GP'\n${gpScript("corp", "vpn.corp.fr")}PM_GP`);
+    expect(commands).toContain(`echo 'me ALL=(root) NOPASSWD: /usr/local/sbin/pm-gp-corp ""' | sudo tee /etc/sudoers.d/pm-vpn-corp >/dev/null`);
+    expect(gpScript("corp", "vpn.corp.fr")).toMatch(/--passwd-on-stdin vpn\.corp\.fr\n$/);
+    expect(gpScript("corp", "vpn.corp.fr")).not.toContain("--script");
+    expect(gpRemovalCommand("corp", "/etc/sudoers.d/pm-vpn-corp")).toBe("sudo rm /etc/sudoers.d/pm-vpn-corp /usr/local/sbin/pm-gp-corp");
+    expect(sudoRuleAllows('    (root) NOPASSWD: /usr/local/sbin/pm-gp-corp ""\n', gpRuleCommand("corp"))).toBe(true);
+    expect(sudoRuleAllows("    (root) NOPASSWD: /usr/local/sbin/pm-gp-corp\n", gpRuleCommand("corp"))).toBe(false);
+  });
+
+  it("reads how openconnect went", () => {
+    expect(readGpLog("POST https://vpn.corp.fr/ssl-vpn/login.esp\nConfigured as 10.1.2.3, with SSL connected and ESP in progress\n")).toBe("connected");
+    expect(readGpLog("Configured as 10.1.2.3\nSession terminated by server; exiting.\n")).toBe("ended");
+    expect(readGpLog("Failed to complete authentication\n")).toBe("refused");
+    expect(readGpLog("sudo: a password is required\n")).toBe("ruleMissing");
+    expect(readGpLog("POST https://vpn.corp.fr/global-protect/prelogin.esp\n")).toBeNull();
+  });
+
+  it("recognizes only the sudo it started", () => {
+    expect(isOwnSudo(["sudo", "-n", "/usr/local/sbin/pm-gp-corp", ""].join("\0"))).toBe(true);
+    expect(isOwnSudo(["sudo", "-n", "/usr/sbin/openvpn", "--config", "x", ""].join("\0"))).toBe(false);
+    expect(isOwnSudo("bash\0")).toBe(false);
+  });
+
+  it("reads the networks to send through it, brought back to their start", () => {
+    expect(parseGpRoutes(" 192.168.200.37/24, 10.1.0.0/16 10.5.18.28 ")).toEqual([
+      { address: "192.168.200.0", mask: "255.255.255.0", length: 24 },
+      { address: "10.1.0.0", mask: "255.255.0.0", length: 16 },
+      { address: "10.5.18.28", mask: "255.255.255.255", length: 32 },
+    ]);
+    expect(parseGpRoutes("")).toEqual([]);
+    for (const bad of ["192.168.200.0/33", "300.1.1.1", "10.0.0.0/0", "vpn.corp.fr", "1.2.3.4/24;id"]) expect(parseGpRoutes(bad)).toBeNull();
+    expect(formatGpRoutes(parseGpRoutes("192.168.200.37/24 10.5.18.28") ?? [])).toBe("192.168.200.0/24 10.5.18.28/32");
+  });
+
+  it("sends only those networks through the tunnel, and keeps the system's DNS", () => {
+    const script = gpScript("corp", "vpn.corp.fr", parseGpRoutes("192.168.200.0/24") ?? []);
+    expect(script).toContain("--script=/usr/local/sbin/pm-gp-corp ");
+    expect(script).toContain("CISCO_SPLIT_INC=1\n  CISCO_SPLIT_INC_0_ADDR=192.168.200.0\n  CISCO_SPLIT_INC_0_MASK=255.255.255.0\n  CISCO_SPLIT_INC_0_MASKLEN=24\n");
+    expect(script).toContain("unset INTERNAL_IP4_DNS");
+    expect(script.indexOf("exec /usr/share/vpnc-scripts/vpnc-script")).toBeLessThan(script.indexOf("read -r user"));
   });
 });

@@ -107,6 +107,16 @@ describe("saveVpn", () => {
   });
 });
 
+describe("NordLayer's organization", () => {
+  it("is kept, and only when it could not be read as an option", async () => {
+    const id = await saveVpn(db, null, { ...nord, organization: " adimeo_fr " }, nmcli(), dir).then(idOf);
+    expect(db.select().from(vpns).where(eq(vpns.id, id)).get()?.organization).toBe("adimeo_fr");
+    expect(await saveVpn(db, id, { ...nord, organization: "--email=x" }, nmcli(), dir)).toMatchObject({ problem: "organizationInvalid" });
+    await saveVpn(db, id, { ...nord, organization: "" }, nmcli(), dir);
+    expect(db.select().from(vpns).where(eq(vpns.id, id)).get()?.organization).toBeNull();
+  });
+});
+
 describe("connectVpn", () => {
   const edited = () => vi.fn<CommandRunner>(async (command, args, secret) => ({
     code: 0,

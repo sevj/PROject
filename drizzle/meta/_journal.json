@@ -141,6 +141,20 @@
       "when": 1793890279388,
       "tag": "0019_vpn_sudo",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1793894013274,
+      "tag": "0020_vpn_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1793915069264,
+      "tag": "0021_vpn_routes",
+      "breakpoints": true
     }
   ]
 }

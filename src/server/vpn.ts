@@ -7,9 +7,15 @@ import { cleanLogText } from "@/lib/container-logs";
 import {
   editorKeepsIntact,
   fullPassword,
+  gpRemovalCommand,
+  gpRuleCommand,
+  gpSamlArguments,
+  gpScript,
+  gpSetupCommands,
   hasAuthFailure,
   isGateway,
   isOneLine,
+  isOrganization,
   isOvpnPath,
   isVpnUsername,
   NM_ACTIVE_ARGUMENTS,
@@ -27,22 +33,31 @@ import {
   ovpnForImport,
   parseImportedUuid,
   parseNmActive,
+  formatGpRoutes,
+  parseGpRoutes,
+  parseGpSaml,
   parseNordStatus,
+  readGpLog,
   readSudoLog,
+  sudoGpCommand,
   sudoOpenvpnCommand,
   sudoRemovalCommand,
+  sudoRuleAllows,
+  sudoRuleInPlace,
   sudoSetupCommands,
   sudoVpnPaths,
   vpnSlug,
   type VpnState,
+  withoutCookies,
 } from "@/lib/vpn";
 import type { Db } from "./db/client";
 import { remoteServers, vpns } from "./db/schema";
 import { type CommandRunner, runCommand } from "./run-command";
 import { decryptSecret, encryptSecret } from "./secrets";
+import { type GpDriver, realGpDriver } from "./vpn-gp";
 import { realSudoDriver, type SudoDriver, sudoLogFile } from "./vpn-sudo";
 
-export type VpnKind = "openvpn" | "sudo_openvpn" | "nordlayer";
+export type VpnKind = "openvpn" | "sudo_openvpn" | "nordlayer" | "globalprotect";
 
 export type VpnInput = {
   name: string;
@@ -53,6 +68,8 @@ export type VpnInput = {
   password: string;
   tokenAppended: boolean;
   gateway: string | null;
+  organization?: string | null;
+  routes?: string | null;
 };
 
 /** What leaves the server: never a password, or the profile's id. */
@@ -63,6 +80,8 @@ export type VpnView = {
   configPath: string | null;
   username: string | null;
   gateway: string | null;
+  organization: string | null;
+  routes: string | null;
   hasPassword: boolean;
   tokenAppended: boolean;
   state: VpnState;
@@ -81,6 +100,11 @@ export type VpnProblem =
   | "usernameInvalid"
   | "passwordInvalid"
   | "gatewayInvalid"
+  | "portalInvalid"
+  | "routesInvalid"
+  | "gpSamlMissing"
+  | "samlFailed"
+  | "organizationInvalid"
   | "passwordNeeded"
   | "tokenNeeded"
   | "gone"
@@ -105,46 +129,67 @@ const lastLine = (output: string, secret?: string) => {
 /** nmcli waits this long, and is killed a little later if it does not stop by itself. */
 const CONNECT_WAIT_SECONDS = 50;
 const CONNECT_TIMEOUT_MS = 60_000;
+/** The time to type a password and a code in Microsoft's window. */
+const SAML_TIMEOUT_MS = 5 * 60_000;
 const WATCH_MS = 500;
 
 type Row = typeof vpns.$inferSelect;
 
-const pathsOf = (row: Row, uid: number) => sudoVpnPaths(row.sudoSlug ?? vpnSlug(row.name), uid);
+const slugOf = (row: Row) => row.sudoSlug ?? vpnSlug(row.name);
+const pathsOf = (row: Row, uid: number) => sudoVpnPaths(slugOf(row), uid);
 
-async function readStates(rows: Row[], run: CommandRunner, driver: SudoDriver) {
-  const [nm, nord, sudo] = await Promise.all([
+async function gpState(row: Row, gp: GpDriver): Promise<VpnState> {
+  if (!(await gp.alive(slugOf(row)))) return "off";
+  return readGpLog(await gp.readLog(slugOf(row))) === "connected" ? "connected" : "connecting";
+}
+
+async function readStates(rows: Row[], run: CommandRunner, driver: SudoDriver, gp: GpDriver) {
+  const [nm, nord, sudo, globalprotect] = await Promise.all([
     rows.some(({ kind }) => kind === "openvpn") ? run("nmcli", NM_ACTIVE_ARGUMENTS) : null,
     rows.some(({ kind }) => kind === "nordlayer") ? run("nordlayer", ["status"]) : null,
     Promise.all(
       rows.filter(({ kind }) => kind === "sudo_openvpn").map(async (row) => [row.id, await driver.state(pathsOf(row, driver.uid).socket)] as const),
     ),
+    Promise.all(rows.filter(({ kind }) => kind === "globalprotect").map(async (row) => [row.id, await gpState(row, gp)] as const)),
   ]);
   return {
     nm: nm && nm.code === 0 ? parseNmActive(nm.stdout) : null,
     nord: nord && !nord.notInstalled ? parseNordStatus(nord.stdout) : null,
-    sudo: new Map(sudo),
+    sudo: new Map([...sudo, ...globalprotect]),
   };
 }
 
 function stateOf(row: Row, states: Awaited<ReturnType<typeof readStates>>): VpnState {
   if (row.kind === "nordlayer") return states.nord?.state ?? "unavailable";
-  if (row.kind === "sudo_openvpn") return states.sudo.get(row.id) ?? "off";
+  if (row.kind === "sudo_openvpn" || row.kind === "globalprotect") return states.sudo.get(row.id) ?? "off";
   if (!states.nm) return "unavailable";
   return states.nm.get(row.connectionUuid ?? "") ?? "off";
 }
 
-export async function listVpns(db: Db, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver): Promise<VpnView[]> {
+function setupOf(row: Row, listing: string, driver: SudoDriver, scripts: Map<number, string>): VpnView["setup"] {
+  const paths = pathsOf(row, driver.uid);
+  if (row.kind === "sudo_openvpn") {
+    return { commands: sudoSetupCommands(row.configPath ?? "", paths, driver.user), ready: sudoRuleInPlace(listing, paths), removal: sudoRemovalCommand(paths) };
+  }
+  if (row.kind === "globalprotect") {
+    const slug = slugOf(row);
+    // Its script names the portal: changed here, it must be written again.
+    const routes = parseGpRoutes(row.routes ?? "") ?? [];
+    const ready = sudoRuleAllows(listing, gpRuleCommand(slug)) && scripts.get(row.id) === gpScript(slug, row.gateway ?? "", routes);
+    return { commands: gpSetupCommands(slug, paths.rule, row.gateway ?? "", routes, driver.user), ready, removal: gpRemovalCommand(slug, paths.rule) };
+  }
+  return null;
+}
+
+const withSudoRule = (kind: VpnKind) => kind === "sudo_openvpn" || kind === "globalprotect";
+
+export async function listVpns(db: Db, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver, gp: GpDriver = realGpDriver): Promise<VpnView[]> {
   const rows = db.select().from(vpns).all().sort((a, b) => a.name.localeCompare(b.name));
   if (rows.length === 0) return [];
-  const states = await readStates(rows, run, driver);
-  const readiness = new Map(
-    await Promise.all(
-      rows
-        .filter(({ kind }) => kind === "sudo_openvpn")
-        // Asks sudo whether this exact command is allowed, without ever prompting.
-        .map(async (row) => [row.id, (await run("sudo", ["-n", "-l", ...sudoOpenvpnCommand(pathsOf(row, driver.uid))])).code === 0] as const),
-    ),
-  );
+  const states = await readStates(rows, run, driver, gp);
+  // Lists the rules, which never prompts.
+  const listing = rows.some(({ kind }) => withSudoRule(kind)) ? (await run("sudo", ["-n", "-l"])).stdout : "";
+  const scripts = new Map(await Promise.all(rows.filter(({ kind }) => kind === "globalprotect").map(async (row) => [row.id, await gp.readScript(slugOf(row))] as const)));
   const servers = db.select({ name: remoteServers.name, vpnId: remoteServers.vpnId }).from(remoteServers).all();
   return rows.map((row) => ({
     // Field by field, so that the secret, or one added later, cannot leave by accident.
@@ -154,40 +199,51 @@ export async function listVpns(db: Db, run: CommandRunner = runCommand, driver: 
     configPath: row.configPath,
     username: row.username,
     gateway: row.gateway,
+    organization: row.organization,
+    routes: row.routes,
     hasPassword: row.passwordSecret !== null,
     tokenAppended: row.tokenAppended,
     state: stateOf(row, states),
     loggedIn: row.kind === "nordlayer" ? (states.nord?.loggedIn ?? false) : null,
-    setup:
-      row.kind === "sudo_openvpn"
-        ? {
-            commands: sudoSetupCommands(row.configPath ?? "", pathsOf(row, driver.uid), driver.user),
-            ready: readiness.get(row.id) ?? false,
-            removal: sudoRemovalCommand(pathsOf(row, driver.uid)),
-          }
-        : null,
+    setup: setupOf(row, listing, driver, scripts),
     usedBy: servers.filter(({ vpnId }) => vpnId === row.id).map(({ name }) => name).sort(),
   }));
 }
 
 export type ActiveVpn = { id: number; name: string; state: VpnState };
 
-/** For the top bar, every few seconds: only what is up, without the rest of `listVpns`. */
-export async function readActiveVpns(db: Db, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver): Promise<ActiveVpn[]> {
+/** What the top bar's menu needs to show a VPN and connect it, without the sudo rules of `listVpns`. */
+export type VpnStatus = Pick<VpnView, "id" | "name" | "kind" | "state" | "hasPassword" | "tokenAppended" | "loggedIn">;
+
+/** For the top bar, every few seconds. */
+export async function readVpnStatuses(db: Db, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver, gp: GpDriver = realGpDriver): Promise<VpnStatus[]> {
   const rows = db.select().from(vpns).all().sort((a, b) => a.name.localeCompare(b.name));
   if (rows.length === 0) return [];
-  const states = await readStates(rows, run, driver);
-  return rows
-    .map(({ id, name, ...row }) => ({ id, name, state: stateOf({ id, name, ...row }, states) }))
-    .filter(({ state }) => state === "connected" || state === "connecting");
+  const states = await readStates(rows, run, driver, gp);
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    state: stateOf(row, states),
+    hasPassword: row.passwordSecret !== null,
+    tokenAppended: row.tokenAppended,
+    loggedIn: row.kind === "nordlayer" ? (states.nord?.loggedIn ?? false) : null,
+  }));
+}
+
+/** Only what is up. */
+export async function readActiveVpns(db: Db, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver, gp: GpDriver = realGpDriver): Promise<ActiveVpn[]> {
+  return (await readVpnStatuses(db, run, driver, gp))
+    .filter(({ state }) => state === "connected" || state === "connecting")
+    .map(({ id, name, state }) => ({ id, name, state }));
 }
 
 /** The name of the VPN this server needs when it is not up. Off or unknown, both mean no answer from the server. */
-export async function downVpnName(db: Db, vpnId: number | null, run: CommandRunner, driver: SudoDriver = realSudoDriver): Promise<string | null> {
+export async function downVpnName(db: Db, vpnId: number | null, run: CommandRunner, driver: SudoDriver = realSudoDriver, gp: GpDriver = realGpDriver): Promise<string | null> {
   if (vpnId === null) return null;
   const row = db.select().from(vpns).where(eq(vpns.id, vpnId)).get();
   if (!row) return null;
-  return stateOf(row, await readStates([row], run, driver)) === "connected" ? null : row.name;
+  return stateOf(row, await readStates([row], run, driver, gp)) === "connected" ? null : row.name;
 }
 
 const expandHome = (path: string, home: string) => (path.startsWith("~/") ? join(home, path.slice(2)) : path);
@@ -221,7 +277,9 @@ export async function saveVpn(db: Db, id: number | null, raw: VpnInput, run: Com
   if ((current?.kind ?? raw.kind) === "nordlayer") {
     const gateway = text(raw.gateway);
     if (!gateway || !isGateway(gateway)) return fail("gatewayInvalid");
-    const values = { name, gateway };
+    const organization = text(raw.organization);
+    if (organization && !isOrganization(organization)) return fail("organizationInvalid");
+    const values = { name, gateway, organization };
     if (current) {
       db.update(vpns).set(values).where(eq(vpns.id, current.id)).run();
       return { id: current.id };
@@ -229,9 +287,26 @@ export async function saveVpn(db: Db, id: number | null, raw: VpnInput, run: Com
     return { id: db.insert(vpns).values({ ...values, kind: "nordlayer" }).returning({ id: vpns.id }).get().id };
   }
 
+  if ((current?.kind ?? raw.kind) === "globalprotect") {
+    // The password and the second factor go to Microsoft, in its own window: nothing is kept here.
+    const gateway = text(raw.gateway);
+    if (!gateway || !isGateway(gateway)) return fail("portalInvalid");
+    const parsed = parseGpRoutes(typeof raw.routes === "string" ? raw.routes : "");
+    if (!parsed) return fail("routesInvalid");
+    const routes = parsed.length > 0 ? formatGpRoutes(parsed) : null;
+    if (current) {
+      db.update(vpns).set({ name, gateway, routes }).where(eq(vpns.id, current.id)).run();
+      return { id: current.id };
+    }
+    const sudoSlug = vpnSlug(name);
+    // It names a script and a sudo rule, which two VPNs cannot share.
+    if (db.select({ id: vpns.id }).from(vpns).where(eq(vpns.sudoSlug, sudoSlug)).get()) return fail("nameTaken");
+    return { id: db.insert(vpns).values({ name, gateway, routes, kind: "globalprotect", sudoSlug }).returning({ id: vpns.id }).get().id };
+  }
+
   const username = text(raw.username);
-  if (username && !isVpnUsername(username)) return fail("usernameInvalid");
   const common = { name, username, passwordSecret, tokenAppended: raw.tokenAppended === true };
+  if (username && !isVpnUsername(username)) return fail("usernameInvalid");
   if ((current?.kind ?? raw.kind) === "sudo_openvpn") {
     if (!username) return fail("usernameInvalid");
     if (current) {
@@ -278,7 +353,7 @@ export async function saveVpn(db: Db, id: number | null, raw: VpnInput, run: Com
 async function connectThroughSudo(row: Row, secret: string, driver: SudoDriver, now: () => number, pause: (ms: number) => Promise<void>): Promise<{ ok: true } | VpnFailure> {
   const paths = pathsOf(row, driver.uid);
   if ((await driver.state(paths.socket)) === "connected") return { ok: true };
-  const logFile = sudoLogFile(row.sudoSlug ?? vpnSlug(row.name));
+  const logFile = sudoLogFile(slugOf(row));
   await driver.launch(sudoOpenvpnCommand(paths), `${row.username}\n${secret}`, logFile);
   const deadline = now() + CONNECT_WAIT_SECONDS * 1000;
   while (now() < deadline) {
@@ -294,6 +369,49 @@ async function connectThroughSudo(row: Row, secret: string, driver: SudoDriver, 
   return fail("timeout");
 }
 
+/**
+ * The Microsoft login shows in a window of `gp-saml-gui`, on this desktop: the person types the
+ * password and the code there. Its cookie goes to openconnect once, on its input; a refusal ends it.
+ */
+async function connectGlobalProtect(
+  db: Db,
+  row: Row,
+  run: CommandRunner,
+  gp: GpDriver,
+  now: () => number,
+  pause: (ms: number) => Promise<void>,
+): Promise<{ ok: true } | VpnFailure> {
+  const slug = slugOf(row);
+  if (await gp.alive(slug)) {
+    if (readGpLog(await gp.readLog(slug)) === "connected") return { ok: true };
+    await gp.stop(slug);
+  }
+  // Checked before the login: a code typed for nothing would be lost.
+  if (!sudoRuleAllows((await run("sudo", ["-n", "-l"])).stdout, gpRuleCommand(slug))) return fail("sudoRuleMissing");
+  const saml = await run("gp-saml-gui", gpSamlArguments(row.gateway ?? ""), undefined, SAML_TIMEOUT_MS);
+  if (saml.notInstalled) return fail("gpSamlMissing");
+  if (saml.code === null) return fail("timeout");
+  const login = saml.code === 0 ? parseGpSaml(saml.stdout) : null;
+  if (!login) return fail("samlFailed", lastLine(withoutCookies(saml.stderr)));
+  db.update(vpns).set({ username: login.user }).where(eq(vpns.id, row.id)).run();
+  await gp.launch(sudoGpCommand(slug), `${login.user}\n${login.group}\n${login.cookie}`, slug);
+  const deadline = now() + CONNECT_WAIT_SECONDS * 1000;
+  while (now() < deadline) {
+    const log = await gp.readLog(slug);
+    const end = readGpLog(log);
+    if (end === "refused") {
+      await gp.stop(slug);
+      return fail("authRefused");
+    }
+    if (end === "ruleMissing") return fail("sudoRuleMissing");
+    if (end === "connected") return { ok: true };
+    if (end === "ended" || !(await gp.alive(slug))) return fail("connectFailed", lastLine(log, login.cookie));
+    await pause(WATCH_MS);
+  }
+  await gp.stop(slug);
+  return fail("timeout");
+}
+
 export async function connectVpn(
   db: Db,
   id: number,
@@ -302,9 +420,11 @@ export async function connectVpn(
   now: () => number = Date.now,
   pause: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   driver: SudoDriver = realSudoDriver,
+  gp: GpDriver = realGpDriver,
 ): Promise<{ ok: true } | VpnFailure> {
   const row = db.select().from(vpns).where(eq(vpns.id, id)).get();
   if (!row) return fail("gone");
+  if (row.kind === "globalprotect") return connectGlobalProtect(db, row, run, gp, now, pause);
   if (row.kind === "nordlayer") {
     const ran = await run("nordlayer", ["--assume-yes", "connect", row.gateway ?? ""], undefined, CONNECT_TIMEOUT_MS);
     if (ran.notInstalled) return fail("nordlayerMissing");
@@ -353,9 +473,10 @@ export async function connectVpn(
   return ran.code === 0 ? { ok: true } : fail("connectFailed", lastLine(ran.stderr || ran.stdout, secret));
 }
 
-export async function disconnectVpn(db: Db, id: number, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver): Promise<VpnFailure | null> {
+export async function disconnectVpn(db: Db, id: number, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver, gp: GpDriver = realGpDriver): Promise<VpnFailure | null> {
   const row = db.select().from(vpns).where(eq(vpns.id, id)).get();
   if (!row) return fail("gone");
+  if (row.kind === "globalprotect") return (await gp.stop(slugOf(row))) ? null : fail("disconnectFailed");
   if (row.kind === "sudo_openvpn") return (await driver.stop(pathsOf(row, driver.uid).socket)) ? null : fail("disconnectFailed");
   const ran = row.kind === "nordlayer" ? await run("nordlayer", ["--assume-yes", "disconnect"]) : await run("nmcli", nmDownArguments(row.connectionUuid ?? ""));
   if (ran.notInstalled) return fail(row.kind === "nordlayer" ? "nordlayerMissing" : "nmcliMissing");
@@ -363,9 +484,10 @@ export async function disconnectVpn(db: Db, id: number, run: CommandRunner = run
 }
 
 /** Its profile goes with it: left behind, it would stay in the system's settings with no way back here. */
-export async function deleteVpn(db: Db, id: number, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver): Promise<VpnFailure | null> {
+export async function deleteVpn(db: Db, id: number, run: CommandRunner = runCommand, driver: SudoDriver = realSudoDriver, gp: GpDriver = realGpDriver): Promise<VpnFailure | null> {
   const row = db.select().from(vpns).where(eq(vpns.id, id)).get();
   if (!row) return null;
+  if (row.kind === "globalprotect") await gp.stop(slugOf(row));
   if (row.kind === "sudo_openvpn") await driver.stop(pathsOf(row, driver.uid).socket);
   if (row.connectionUuid) {
     const ran = await run("nmcli", nmDeleteArguments(row.connectionUuid));

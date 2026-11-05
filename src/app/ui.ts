@@ -49,3 +49,7 @@ export const LINK = "cursor-pointer text-accent hover:underline";
 /** A fact about something, which does nothing when clicked. */
 export const BADGE = "inline-block bg-sel px-1.5 font-mono text-[11px] leading-[18px] text-mut";
 export const BADGE_ALERT = "inline-block bg-alert/15 px-1.5 font-mono text-[11px] leading-[18px] text-alert";
+
+/** A tab of a page, as a link: the open one carries `aria-current="page"`. */
+export const TAB =
+  "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";

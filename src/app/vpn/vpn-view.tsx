@@ -25,12 +25,14 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
   const [password, setPassword] = useState("");
   const [tokenAppended, setTokenAppended] = useState(vpn?.tokenAppended ?? false);
   const [gateway, setGateway] = useState(vpn?.gateway ?? "");
+  const [organization, setOrganization] = useState(vpn?.organization ?? "");
+  const [routes, setRoutes] = useState(vpn?.routes ?? "");
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const input: VpnInput = { name, kind, configPath, username, password, tokenAppended, gateway };
+    const input: VpnInput = { name, kind, configPath, username, password, tokenAppended, gateway, organization, routes };
     setPending(true);
     try {
       const response = await fetch(vpn ? `/api/vpns/${vpn.id}` : "/api/vpns", {
@@ -62,7 +64,7 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
       <form onSubmit={(event) => void submit(event)} className="grid gap-3">
         {vpn ? null : (
           <div className="flex flex-wrap gap-1" role="group">
-            {(["sudo_openvpn", "openvpn", "nordlayer"] as const).map((item) => (
+            {(["sudo_openvpn", "openvpn", "globalprotect", "nordlayer"] as const).map((item) => (
               <button key={item} type="button" aria-pressed={kind === item} onClick={() => setKind(item)} className={SEGMENT_SMALL}>
                 {m.kinds[item]}
               </button>
@@ -72,7 +74,17 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
         <FormField label={m.name}>
           <input required value={name} onChange={(event) => setName(event.target.value)} className={FIELD} />
         </FormField>
-        {kind !== "nordlayer" ? (
+        {kind === "globalprotect" ? (
+          <>
+            <p className="text-[12px] text-mut">{m.gpHint}</p>
+            <FormField label={m.portal} hint={m.portalHint}>
+              <input required placeholder="vpn.example.com" value={gateway} onChange={(event) => setGateway(event.target.value)} className={FIELD} />
+            </FormField>
+            <FormField label={m.routes} hint={m.routesHint}>
+              <input placeholder="192.168.200.0/24" value={routes} onChange={(event) => setRoutes(event.target.value)} className={FIELD} />
+            </FormField>
+          </>
+        ) : kind !== "nordlayer" ? (
           <>
             {kind === "sudo_openvpn" ? <p className="text-[12px] text-mut">{m.sudoHint}</p> : null}
             <FormField label={m.configPath} hint={kind === "sudo_openvpn" ? m.sudoConfigHint : m.configHint}>
@@ -98,9 +110,14 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
             </label>
           </>
         ) : (
+          <>
           <FormField label={m.gateway} hint={m.gatewayHint}>
             <input required value={gateway} onChange={(event) => setGateway(event.target.value)} className={FIELD} />
           </FormField>
+            <FormField label={m.organization} hint={m.organizationHint}>
+              <input value={organization} placeholder="adimeo_fr" onChange={(event) => setOrganization(event.target.value)} className={FIELD} />
+            </FormField>
+          </>
         )}
         {problem ? <p role="alert" className="text-alert">{problem}</p> : null}
         <div className="mt-1 flex flex-wrap gap-2">
@@ -136,7 +153,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
           <span className={up ? BADGE : vpn.state === "unavailable" ? BADGE_ALERT : BADGE}>{m.states[vpn.state]}</span>
           {vpn.loggedIn === false ? <> <span className={BADGE_ALERT}>{m.notLoggedIn}</span></> : null}
           <p className={`${DATA} break-all text-mut`}>
-            {[vpn.configPath, vpn.username, vpn.gateway, vpn.hasPassword ? m.passwordKept : null].filter(Boolean).join(" · ")}
+            {[vpn.configPath, vpn.username, vpn.organization, vpn.gateway, vpn.routes, vpn.hasPassword ? m.passwordKept : null].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -158,7 +175,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
             onClick={() =>
               confirm({
                 title: m.deleteTitle(vpn.name),
-                body: vpn.setup ? m.deleteSudoBody(vpn.setup.removal) : m.deleteBody,
+                body: !vpn.setup ? m.deleteBody : vpn.kind === "globalprotect" ? m.deleteRuleBody(vpn.setup.removal) : m.deleteSudoBody(vpn.setup.removal),
                 action: m.delete,
                 danger: true,
                 onConfirm: () => start(async () => say(await removeVpn(vpn.id))),
@@ -184,7 +201,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
       {login ? (
         <TerminalPanel
           title={m.loginTitle}
-          open={openNordLogin}
+          open={() => openNordLogin(vpn.id)}
           reconnectLabel={messages.sheet.console.reconnect}
           onClose={() => {
             setLogin(false);

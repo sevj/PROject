@@ -1,0 +1,1 @@
+ALTER TABLE `vpns` ADD `routes` text;
