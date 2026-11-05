@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { DEFAULT_LOCALE } from "@/i18n";
 import { Logo, Wordmark } from "./brand";
 import { ClaudeConsolesProvider } from "./claude-consoles";
+import { CommandPalette, PaletteButton } from "./command-palette";
 import { DumpActivityProvider } from "./dump-activity";
 import { FlashProvider } from "./flash";
 import { LocaleBoundary } from "./locale-boundary";
@@ -44,9 +45,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <Suspense>
                   <NavLinks />
                 </Suspense>
+                <PaletteButton />
                 <VpnTopbar />
               </header>
-              <ClaudeConsolesProvider>{children}</ClaudeConsolesProvider>
+              <ClaudeConsolesProvider>
+                {children}
+                <CommandPalette />
+              </ClaudeConsolesProvider>
               </DumpActivityProvider>
             </FlashProvider>
           </LocaleBoundary>

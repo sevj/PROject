@@ -1,6 +1,18 @@
-# Project Manager
+# PROject
 
-Application locale pour visualiser et organiser les projets qu'on y ajoute : état git, Docker, taille, documentation et variables d'environnement, avec un classement par tags, statut et notes.
+Application locale pour visualiser et organiser les projets qu'on y ajoute : état git, Docker, taille, documentation et variables d'environnement, avec un classement par tags, statut et notes. Elle réunit aussi ce qui sert autour : bases de données, consoles, serveurs distants, VPN et outils du quotidien.
+
+## Ce qu'elle fait
+
+- **Projets :** liste avec tags, statut, favoris et notes ; fiche par projet avec onglets Général, Docker, Git, Env-Var, Environnements, Claude, Sécurité, Structure et Documentation.
+- **Docker :** page Conteneurs (tous les conteneurs de la machine par projet, CPU et mémoire en direct, arrêt d'un conteneur, d'un projet, de tout, ou de tout sauf un projet), Ressources (disque, nettoyage), Ports (collisions), Carte (projets, services et dépendances).
+- **Consoles et logs :** fenêtre à onglets par projet, avec plusieurs consoles de conteneurs, les logs d'un conteneur ou de tout le projet, et un bouton « Logs » dans chaque console. Alias de commandes (`sf:cc`…) cliquables ou tapés dans une console Docker, réglables dans Réglages ou depuis la console.
+- **Bases :** explorateur en lecture seule (PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Redis), EXPLAIN visuel, relations entre tables ; Dump stash pour sauvegarder et recharger des bases.
+- **Serveurs :** serveurs SSH et Kubernetes, environnements par projet, consoles distantes en onglets ; clés SSH de `~/.ssh` et leur affectation aux serveurs ; VPN OpenVPN, NordLayer et GlobalProtect.
+- **Journal :** temps de travail par projet et par jour, déduit des commits et de l'activité de Claude Code.
+- **Claude :** consoles Claude Code dans l'app, coût par projet, jour et modèle, consignes par projet.
+- **Outils :** mot de passe, UUID, bcrypt, JWT, timestamp, base64, JSON et cron, calculés dans la page.
+- **Palette (Ctrl+K) :** aller à un projet, un conteneur, une console distante, un serveur, un VPN ou une page, et lancer ses actions au clavier. `>` ne cherche que les actions ; Tab ou → montre celles de l'élément choisi.
 
 ## Lancer
 
@@ -31,7 +43,10 @@ L'interface est en anglais par défaut, et la langue se choisit dans Settings. P
 - **Consommation Claude Code :** les transcripts de `~/.claude/projects/` (ou de `CLAUDE_CONFIG_DIR`) sont lus au démarrage puis chaque minute, sans jamais y écrire. Seuls les chiffres de chaque appel sont gardés dans la base, jamais le contenu des échanges, et ils survivent à la purge des transcripts. Un appel va au projet le plus profond qui contient son dossier. Le coût est un équivalent au tarif API, avec la grille de `src/lib/claude-pricing.ts` à mettre à jour à la main ; il ne compte pas la majoration de `inference_geo: "us"`.
 - **Console Claude :** le bouton « Ouvrir Claude » lance le vrai `claude` sur la machine, dans le dossier du projet, avec tes droits, ta configuration et ton mode de permissions par défaut : il peut modifier le projet comme dans un terminal. Rien de ce qui vient du navigateur n'est passé à la commande, sauf un identifiant de session déjà connu pour ce projet. Plusieurs sessions peuvent tourner en onglets. Claude appartient au serveur : fermer ou recharger la page ne l'arrête pas, et il continue ce qu'il faisait, consommation comprise. La page retrouve ses consoles au retour, avec les 4 derniers Mo de ce qu'elles ont affiché. Seuls « Terminer la session », l'arrêt du serveur ou 24 h sans aucune page connectée arrêtent Claude ; « Reprendre » rouvre alors la conversation. Chaque console reçoit un hook `SessionStart`, pour elle seule, qui lui permet de suivre sa conversation après un `/clear`.
 - **Serveurs distants :** une connexion ne part que d'un clic. « Tester » ne lance rien d'autre que `true`, `test -d <dossier>` ou une lecture `kubectl`. « Console » ouvre un vrai `ssh` ou `kubectl exec`, avec confirmation sur un environnement protégé : ce qu'on y tape s'exécute, et le mot de passe non mémorisé se saisit dans le terminal, sans passer par l'app. Les clés et identifiants Kubernetes restent dans `~/.ssh` et `~/.kube` ; l'app ne garde que leur nom. Un mot de passe est demandé à chaque connexion, sauf si tu le renseignes dans le formulaire du serveur ou choisis de le mémoriser après un test : il est alors chiffré en AES-256-GCM avec une clé privée dans `~/.config/project-manager/secret.key`, hors du dossier de données. Une copie de la base seule ne le révèle pas, mais un programme lancé avec ton compte peut lire cette clé. Perdre ce fichier oblige seulement à ressaisir les mots de passe. Une clé d'hôte inconnue est refusée par « Tester », et c'est à toi d'y répondre dans une console : elle n'est jamais acceptée à ta place.
-- **VPN :** ils ne se connectent et ne se coupent que sur un clic. Un fichier `.ovpn` devient un profil NetworkManager, sans `sudo` et visible dans les réglages réseau du système ; son mot de passe y est marqué « non enregistré » et reste chiffré dans l'app, avec la même clé que les serveurs. Un token n'est jamais gardé. Pour un serveur qui refuse NetworkManager, le mode « OpenVPN avec sudo » lance `openvpn` directement : tu ajoutes une fois une règle `sudoers` limitée à cette commande exacte et une copie du fichier appartenant à `root`, et l'app n'écrit jamais dans `/etc`. Un programme lancé avec ton compte pourrait démarrer ce VPN sans mot de passe, mais pas changer ce qu'il exécute.
+- **Conteneurs :** les boutons d'arrêt font un `docker stop` (jamais `down`), et le serveur n'agit que sur des conteneurs que Docker liste encore au moment du clic.
+- **Clés SSH :** la page lit `~/.ssh` sans rien envoyer. Savoir si une clé a une phrase de passe revient à essayer de l'ouvrir avec une phrase vide (`ssh-keygen -y -P ""`). Le seul changement possible sur le disque est un `chmod 600` sur une clé de `~/.ssh` trop ouverte, sur un clic. Donner une clé à un serveur la fait seule proposer (`IdentitiesOnly`).
+- **Outils et palette :** les outils tournent dans le navigateur, sans rien envoyer ni garder. La palette lit à chaque ouverture des noms et des états, jamais un secret, et ses actions qui arrêtent quelque chose ou ouvrent une console sur un environnement protégé demandent confirmation comme ailleurs.
+- **VPN :** ils ne se connectent et ne se coupent que sur un clic. Un fichier `.ovpn` devient un profil NetworkManager, sans `sudo` et visible dans les réglages réseau du système ; son mot de passe y est marqué « non enregistré » et reste chiffré dans l'app, avec la même clé que les serveurs. Un token n'est jamais gardé. Pour un serveur qui refuse NetworkManager, le mode « OpenVPN avec sudo » lance `openvpn` directement : tu ajoutes une fois une règle `sudoers` limitée à cette commande exacte et une copie du fichier appartenant à `root`, et l'app n'écrit jamais dans `/etc`. Un programme lancé avec ton compte pourrait démarrer ce VPN sans mot de passe, mais pas changer ce qu'il exécute. GlobalProtect se connecte derrière la connexion Microsoft du portail : `gp-saml-gui` ouvre la fenêtre de connexion, puis un script root (`/usr/local/sbin/pm-gp-<nom>`, avec sa règle `sudoers` sans argument) lance `openconnect`, avec les réseaux à faire passer par le VPN (split tunnel) si tu les indiques. Le cookie de session passe par l'entrée standard, jamais par la ligne de commande ni les logs. Une session terminée par la passerelle est signalée, avec « Se reconnecter ».
 - **MCP de l'app :** chaque console Claude de l'app reçoit, pour elle seule, un accès en lecture à ce que l'app sait des projets : conteneurs, adresses, ports, analyses, statut, tags et note, structure des bases, noms et adresses des environnements. Jamais de valeur d'environnement, de ligne de base ni d'accès à un serveur. Le jeton change à chaque démarrage du serveur et reste dans un fichier privé, supprimé avec la console.
 - **Accès local :** le serveur écoute sur `127.0.0.1`, et `src/proxy.ts` refuse les requêtes venant d'un autre site.
 
@@ -46,19 +61,10 @@ pnpm db:generate  # migration après un changement de src/server/db/schema.ts
 
 Node 26 (voir `.nvmrc`) : `better-sqlite3` 13 plante à l'ouverture d'une base sur Node 22.12, il faut au moins une 22.22 ou plus récente.
 
-## Start with a name
+## Démarrer avec un nom
 
-`./start.sh` runs the dev server so that it also answers at http://project.dev.local:4300.
-Add `127.0.0.1 project.dev.local` to `/etc/hosts` first. The server stays bound to 127.0.0.1;
-other names are accepted only when listed in `PM_ALLOWED_HOSTS` (comma-separated, exact names).
+`./start.sh` lance le serveur de dev pour qu'il réponde aussi sur http://project.dev.local:4300. Il faut d'abord ajouter `127.0.0.1 project.dev.local` à `/etc/hosts`. Le serveur reste sur 127.0.0.1 ; un autre nom n'est accepté que s'il figure dans `PM_ALLOWED_HOSTS` (noms exacts, séparés par des virgules).
 
-Behind the local Traefik (`~/Projects/adimeo_docker_local`), it answers at
-https://project.dev.local, with the proxy's certificate. Its `conf/config.yml` routes that
-name to `http://host.docker.internal:4300`, which Docker Desktop leads to the app on the
-host's 127.0.0.1. Consoles still connect straight to 127.0.0.1, and Claude consoles reach
-the app's MCP server there too, whatever name the page was opened by.
+Derrière le Traefik local (`~/Projects/adimeo_docker_local`), l'app répond sur https://project.dev.local, avec le certificat du proxy. Son `conf/config.yml` envoie ce nom vers `http://host.docker.internal:4300`, que Docker Desktop mène à l'app sur le 127.0.0.1 de la machine. Les consoles se connectent toujours directement à 127.0.0.1, et les consoles Claude y joignent aussi le serveur MCP de l'app, quel que soit le nom par lequel la page a été ouverte.
 
-Without the proxy, `./start.sh --https` answers at https://project.dev.local:4300 instead. Over plain http, a
-name other than localhost or 127.0.0.1 is not a secure context: the browser hides the
-clipboard API and `crypto.randomUUID`. The certificate is made once by `mkcert` in `.certs/`
-(git-ignored); run `mkcert -install` once so that the browser trusts it.
+Sans le proxy, `./start.sh --https` répond sur https://project.dev.local:4300. En http simple, un nom autre que localhost ou 127.0.0.1 n'est pas un contexte sécurisé : le navigateur y cache l'API du presse-papier et `crypto.randomUUID`. Le certificat est créé une fois par `mkcert` dans `.certs/` (ignoré par git) ; lance `mkcert -install` une fois pour que le navigateur lui fasse confiance.
