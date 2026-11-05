@@ -777,6 +777,8 @@ export const fr: Messages = {
       terminal: "Ouvrir un terminal",
       claude: "Console Claude",
       fetch: "Fetch",
+      exportConfig: "Exporter la configuration",
+      importConfig: "Importer une configuration (onglet Environnements)",
       console: "Console",
       logs: "Logs",
       restart: "Redémarrer",

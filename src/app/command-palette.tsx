@@ -66,7 +66,7 @@ function areaOf(entryId: string, actionId: string): Area {
   if (["console", "logs", "terminal"].includes(actionId)) return "console";
   if (actionId === "claude") return "claude";
   if (actionId === "fetch") return "git";
-  if (actionId === "ide" || actionId === "database") return "tools";
+  if (actionId === "ide" || actionId === "database" || actionId === "export") return "tools";
   return "nav";
 }
 
@@ -197,6 +197,8 @@ export function CommandPalette() {
         { id: "ide", label: a.ide, run: () => result(openIde(project.id)) },
         { id: "terminal", label: a.terminal, run: () => result(openTerminal(project.id)) },
         { id: "fetch", label: a.fetch, run: () => result(fetchProject(project.id)) },
+        { id: "export", label: a.exportConfig, run: () => window.location.assign(`/api/projects/${project.id}/config`) },
+        { id: "import", label: a.importConfig, run: () => router.push(`/projects/${project.id}?tab=environments`) },
         ...PROJECT_TABS.map((tab) => ({ id: `tab-${tab}`, label: a.tab(messages.sheet[tab]), run: () => router.push(`/projects/${project.id}?tab=${tab}`) })),
       ],
     }));

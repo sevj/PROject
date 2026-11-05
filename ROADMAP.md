@@ -93,7 +93,7 @@ Dans l'ordre proposé : du plus petit et du plus utile au quotidien vers ce qui 
 
 ## Pas encore décidé (review du 2026-11-05)
 - Merge requests et CI (GitLab d'abord) : demande un token et des appels réseau.
-- Fiabilité et ménage : tester `next build` et un mode production local, passer `pm.db` en `600`, renommer le README, menu « Outils ».
+- Fiabilité et ménage : fait le 2026-11-06. `next build` passe et `next start` sert les pages (essayé sur une copie de la base) ; `pm.db` et ses fichiers WAL étaient déjà en `600`, le dossier en `700` ; README titré PROject ; menu « Outils » en place.
 
 ## Idées Git (à documenter, pas décidé de les faire)
 Les actions Git restent volontairement limitées (voir README). À rediscuter avant tout développement :

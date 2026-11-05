@@ -784,6 +784,8 @@ export const en = {
       terminal: "Open a terminal",
       claude: "Claude console",
       fetch: "Fetch",
+      exportConfig: "Export the configuration",
+      importConfig: "Import a configuration (Environments tab)",
       console: "Console",
       logs: "Logs",
       restart: "Restart",
