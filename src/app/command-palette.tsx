@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMessages } from "@/i18n/provider";
-import { rank, remember } from "@/lib/palette";
+import { rank, rankActions, remember } from "@/lib/palette";
 import type { PaletteData } from "@/server/palette";
 import type { VpnFailure } from "@/server/vpn";
 import { analyzeAllProjects, controlContainers, fetchAllProjects, fetchProject, openIde, openTerminal, refreshEverything } from "./actions";
@@ -15,7 +15,7 @@ import { type Confirmation, useConfirm } from "./modal";
 import type { WindowTab } from "./projects/[id]/docker-window";
 import type { RemoteTab } from "./projects/[id]/remote-window";
 import { SECTIONS } from "./sections";
-import { BADGE, DATA } from "./ui";
+import { DATA } from "./ui";
 import { stopVpn } from "./vpn-actions";
 import { announceVpnChange } from "./vpn/vpn-events";
 
@@ -93,14 +93,12 @@ export function CommandPalette() {
   const [data, setData] = useState<PaletteData | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
-  const [focus, setFocus] = useState<Entry | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [opened, setOpened] = useState<Opened | null>(null);
 
   const show = useCallback(() => {
     setQuery("");
     setSelected(0);
-    setFocus(null);
     setRecent(readRecent());
     setOpen(true);
     void fetch("/api/palette", { cache: "no-store" })
@@ -249,29 +247,42 @@ export function CommandPalette() {
     return [...projects, ...pages, ...containers, ...accesses, ...vpns, ...servers, ...globals];
   }, [data, messages, a, m.done, router, flash, claude]);
 
-  /** With ">", every action of every entry, as an entry of its own. */
-  const actionMode = !focus && query.startsWith(">");
+  /** An action of an entry, listed as an entry of its own; its id keeps the entry's, for the recent ones. */
+  const actionEntry = (entry: Entry, action: Action): Entry => ({
+    id: `${entry.id}#${action.id}`,
+    kind: entry.kind,
+    title: `${entry.title} › ${action.label}`,
+    subtitle: entry.subtitle,
+    actions: [action],
+  });
+
   const shown = useMemo<Entry[]>(() => {
-    if (focus) return focus.actions.map((action) => ({ id: `${focus.id}/${action.id}`, kind: focus.kind, title: action.label, actions: [action] }));
-    if (actionMode) {
-      const flat: Entry[] = entries.flatMap((entry) =>
-        entry.kind === "action" ? [entry] : entry.actions.map((action) => ({ id: `${entry.id}/${action.id}`, kind: entry.kind, title: `${entry.title} › ${action.label}`, subtitle: entry.subtitle, actions: [action] })),
-      );
+    // ">": every action of every entry.
+    if (query.startsWith(">")) {
+      const flat = entries.flatMap((entry) => (entry.kind === "action" ? [entry] : entry.actions.map((action) => actionEntry(entry, action))));
       return rank(flat, query.slice(1), recent).slice(0, LIMIT);
+    }
+    // "quich / claude": the entry first, then one of its actions.
+    if (query.includes("/")) {
+      return rankActions(
+        entries.filter(({ kind }) => kind !== "action"),
+        query,
+        recent,
+      )
+        .map(({ entry, action }) => actionEntry(entry, action))
+        .slice(0, LIMIT);
     }
     return rank(
       entries.filter(({ kind }) => kind !== "action" || query.trim()),
       query,
       recent,
     ).slice(0, LIMIT);
-  }, [entries, focus, actionMode, query, recent]);
+  }, [entries, query, recent]);
 
   const close = () => dialog.current?.close();
 
   const run = (entry: Entry, action: Action) => {
-    const id = entry.id.split("/")[0];
-    const next = remember(readRecent(), id);
-    writeRecent(next);
+    writeRecent(remember(readRecent(), entry.id.split("#")[0]));
     close();
     if (action.confirm) confirm({ ...action.confirm, action: action.label, danger: true, onConfirm: () => void action.run() });
     else void action.run();
@@ -279,13 +290,14 @@ export function CommandPalette() {
 
   const choose = (index: number) => {
     const entry = shown[index];
-    if (entry) run(focus ?? entry, entry.actions[0]);
+    if (entry) run(entry, entry.actions[0]);
   };
 
-  const enterActions = (index: number) => {
+  /** Tab writes "Name / ": the list then holds its actions, to narrow by typing on. */
+  const toActions = (index: number) => {
     const entry = shown[index];
-    if (!entry || focus || entry.actions.length < 2) return false;
-    setFocus(entry);
+    if (!entry || entry.kind === "action" || entry.id.includes("#")) return false;
+    setQuery(`${entry.title} / `);
     setSelected(0);
     return true;
   };
@@ -299,16 +311,12 @@ export function CommandPalette() {
       event.preventDefault();
       choose(selected);
     } else if (event.key === "Tab" || (event.key === "ArrowRight" && event.currentTarget.selectionStart === query.length)) {
-      if (enterActions(selected)) event.preventDefault();
-      else if (event.key === "Tab") event.preventDefault();
-    } else if (focus && (event.key === "ArrowLeft" || (event.key === "Backspace" && query === ""))) {
+      if (toActions(selected) || event.key === "Tab") event.preventDefault();
+    } else if (event.key === "Escape" && query) {
+      // A first Escape empties the field, a second closes.
       event.preventDefault();
-      const index = shown.length;
-      setFocus(null);
-      setSelected(Math.max(0, Math.min(index, rank(entries, query, recent).findIndex(({ id }) => id === focus.id))));
-    } else if (event.key === "Escape" && focus) {
-      event.preventDefault();
-      setFocus(null);
+      setQuery("");
+      setSelected(0);
     }
   };
 
@@ -338,7 +346,6 @@ export function CommandPalette() {
           className="mx-auto mt-[12vh] w-[min(640px,calc(100vw-32px))] border border-rule-strong bg-panel font-sans text-[14px] text-ink shadow-2xl outline-none backdrop:bg-black/50"
         >
           <div className="flex items-center gap-2 border-b-2 border-rule-strong px-3 focus-within:border-accent">
-            {focus ? <span className={`${BADGE} shrink-0`}>{m.actionsOf(focus.title)}</span> : null}
             <input
               ref={input}
               autoFocus
@@ -348,7 +355,7 @@ export function CommandPalette() {
                 setSelected(0);
               }}
               onKeyDown={onKeyDown}
-              placeholder={focus ? "" : m.placeholder}
+              placeholder={m.placeholder}
               aria-label={m.placeholder}
               aria-controls="palette-list"
               aria-activedescendant={shown[selected] ? `palette-${selected}` : undefined}
@@ -374,12 +381,12 @@ export function CommandPalette() {
                 onClick={() => choose(index)}
                 className={`flex cursor-pointer items-center gap-3 px-3 py-1.5 ${index === selected ? "bg-accent-soft" : ""}`}
               >
-                {focus ? null : <KindBadge kind={entry.kind} label={m.kinds[entry.kind]} />}
+                <KindBadge kind={entry.kind} label={m.kinds[entry.kind]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{entry.title}</span>
                   {entry.subtitle ? <span className={`${DATA} block truncate text-mut`}>{entry.subtitle}</span> : null}
                 </span>
-                {!focus && entry.actions.length > 1 && index === selected ? <span className={`${DATA} text-mut`}>Tab →</span> : null}
+                {entry.actions.length > 1 && index === selected ? <span className={`${DATA} shrink-0 text-mut`}>Tab →</span> : null}
               </li>
             ))}
           </ul>

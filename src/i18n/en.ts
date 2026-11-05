@@ -708,11 +708,10 @@ export const en = {
     open: "Search",
     shortcut: "Ctrl K",
     label: "Command palette",
-    placeholder: "Go to a project, a server, a page… > for actions",
-    actionsOf: (title: string) => `Actions · ${title}`,
+    placeholder: "Project, server, page… · name / action · > every action",
     empty: "Nothing matches.",
     loading: "Loading…",
-    help: "↑↓ choose · Enter open · Tab or → actions · Esc back or close",
+    help: "↑↓ choose · Enter run · Tab: its actions (name / …) · Esc clear, then close",
     kinds: { page: "page", project: "project", container: "container", access: "console", server: "server", vpn: "VPN", action: "action" },
     actions: {
       open: "Open",

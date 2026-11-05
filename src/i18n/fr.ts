@@ -701,11 +701,10 @@ export const fr: Messages = {
     open: "Rechercher",
     shortcut: "Ctrl K",
     label: "Palette de commandes",
-    placeholder: "Aller à un projet, un serveur, une page… > pour les actions",
-    actionsOf: (title) => `Actions · ${title}`,
+    placeholder: "Projet, serveur, page… · nom / action · > toutes les actions",
     empty: "Rien ne correspond.",
     loading: "Chargement…",
-    help: "↑↓ choisir · Entrée ouvrir · Tab ou → actions · Échap retour ou fermer",
+    help: "↑↓ choisir · Entrée lancer · Tab : ses actions (nom / …) · Échap effacer, puis fermer",
     kinds: { page: "page", project: "projet", container: "conteneur", access: "console", server: "serveur", vpn: "VPN", action: "action" },
     actions: {
       open: "Ouvrir",

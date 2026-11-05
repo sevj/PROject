@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fuzzyScore, rank, remember } from "./palette";
+import { fuzzyScore, rank, rankActions, remember } from "./palette";
 
 describe("fuzzyScore", () => {
   it("finds letters in order, whatever accents and case", () => {
@@ -40,5 +40,23 @@ describe("remember", () => {
   it("puts the last one first, once, and keeps eight", () => {
     expect(remember(["a", "b"], "b")).toEqual(["b", "a"]);
     expect(remember(["1", "2", "3", "4", "5", "6", "7", "8"], "9")).toHaveLength(8);
+  });
+});
+
+describe("rankActions", () => {
+  const entries = [
+    { id: "p1", title: "QuichonsGM", actions: [{ label: "Open the sheet" }, { label: "Claude console" }, { label: "Start Docker" }] },
+    { id: "p2", title: "Quiz", actions: [{ label: "Open the sheet" }, { label: "Claude console" }] },
+  ];
+  const pairs = (query: string) => rankActions(entries, query).map(({ entry, action }) => `${entry.id}:${action.label}`);
+
+  it("takes the entry before the slash, then its action after it", () => {
+    expect(pairs("quich / claude")).toEqual(["p1:Claude console"]);
+    expect(pairs("qui / claude").sort()).toEqual(["p1:Claude console", "p2:Claude console"]);
+  });
+
+  it("keeps to the entry named exactly, and lists all its actions while nothing follows", () => {
+    expect(pairs("quiz / ")).toEqual(["p2:Open the sheet", "p2:Claude console"]);
+    expect(pairs("quichonsgm / dock")).toEqual(["p1:Start Docker"]);
   });
 });

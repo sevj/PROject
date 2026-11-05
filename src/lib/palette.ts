@@ -56,3 +56,24 @@ export const RECENT_LIMIT = 8;
 
 /** The one just used first, without doubles. */
 export const remember = (recent: string[], id: string) => [id, ...recent.filter((item) => item !== id)].slice(0, RECENT_LIMIT);
+
+/**
+ * "quich / claude": the entries named by what comes before the slash (the one whose title it is
+ * exactly, else the five closest), then their actions closest to what comes after, in that order.
+ */
+export function rankActions<T extends Searchable & { actions: { label: string }[] }>(entries: T[], query: string, recent: string[] = []): { entry: T; action: T["actions"][number] }[] {
+  const slash = query.indexOf("/");
+  const name = query.slice(0, slash).trim();
+  const wanted = query.slice(slash + 1).trim();
+  const exact = entries.filter(({ title }) => fold(title) === fold(name));
+  const targets = exact.length > 0 ? exact : rank(entries, name, recent).slice(0, 5);
+  return targets
+    .flatMap((entry, order) =>
+      entry.actions.flatMap((action, index) => {
+        const score = wanted ? fuzzyScore(wanted, action.label) : -index;
+        return score === null ? [] : [{ entry, action, order, score }];
+      }),
+    )
+    .sort((left, right) => left.order - right.order || right.score - left.score)
+    .map(({ entry, action }) => ({ entry, action }));
+}

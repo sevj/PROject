@@ -12,7 +12,7 @@ Application locale pour visualiser et organiser les projets qu'on y ajoute : ét
 - **Journal :** temps de travail par projet et par jour, déduit des commits et de l'activité de Claude Code.
 - **Claude :** consoles Claude Code dans l'app, coût par projet, jour et modèle, consignes par projet.
 - **Outils :** mot de passe, UUID, bcrypt, JWT, timestamp, base64, JSON et cron, calculés dans la page.
-- **Palette (Ctrl+K) :** aller à un projet, un conteneur, une console distante, un serveur, un VPN ou une page, et lancer ses actions au clavier. `>` ne cherche que les actions ; Tab ou → montre celles de l'élément choisi.
+- **Palette (Ctrl+K) :** aller à un projet, un conteneur, une console distante, un serveur, un VPN ou une page, et lancer ses actions au clavier. `nom / action` lance directement une action d'un élément (`quich / claude`, `villette / logs`) ; Tab écrit `Nom / ` pour l'élément choisi et liste ses actions ; `>` cherche dans toutes les actions.
 
 ## Lancer
 
