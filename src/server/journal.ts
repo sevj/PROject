@@ -7,55 +7,51 @@ import { activitySamples, claudeApiCalls, projectFacts, projectMeta, projects } 
 import { getSettings } from "./settings";
 
 const run = promisify(execFile);
-const CONCURRENCY = 8;
+const TIMEOUT_MS = 30_000;
 
-async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await run("git", ["-c", "core.fsmonitor=false", ...args], {
-    cwd,
-    timeout: 20_000,
-    maxBuffer: 16 * 1024 * 1024,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" },
-  });
-  return stdout;
-}
+/**
+ * Starting a process stops the whole server for as long as it takes to copy its memory
+ * map, which is a long time for a server this size: one shell goes through the
+ * repositories, rather than two processes started from here for each of them.
+ * `-F` takes the address as it is, whatever characters it holds.
+ */
+const COMMIT_MOMENTS = `
+since=$1; until=$2; shift 2
+index=0
+for dir in "$@"; do
+  echo ">$index"
+  index=$((index + 1))
+  cd -- "$dir" 2>/dev/null || continue
+  email=$(git -c core.fsmonitor=false config user.email 2>/dev/null)
+  git -c core.fsmonitor=false log --all --no-merges "--since=$since" "--until=$until" -F \${email:+"--author=$email"} --format=%at 2>/dev/null
+done
+`;
 
-const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** When the user wrote commits in this repository: author dates, merges left out. */
-export async function readCommitMoments(path: string, fromMs: number, toMs: number): Promise<number[]> {
-  try {
-    const email = (await git(path, ["config", "user.email"]).catch(() => "")).trim();
-    const out = await git(path, [
-      "log",
-      "--all",
-      "--no-merges",
-      `--since=${new Date(fromMs).toISOString()}`,
-      `--until=${new Date(toMs).toISOString()}`,
-      ...(email ? [`--author=${escapeRegex(email)}`] : []),
-      "--format=%at",
-    ]);
-    return out
-      .split("\n")
-      .map((line) => Number(line.trim()) * 1000)
-      .filter((moment) => Number.isFinite(moment) && moment > 0);
-  } catch {
-    // Not a repository, or one that cannot be read: no moments from it.
-    return [];
+export function parseCommitMoments(output: string, count: number): number[][] {
+  const moments: number[][] = Array.from({ length: count }, () => []);
+  let current: number[] | undefined;
+  for (const line of output.split("\n")) {
+    if (line.startsWith(">")) current = moments[Number(line.slice(1))];
+    else if (/^\d+$/.test(line) && Number(line) > 0) current?.push(Number(line) * 1000);
   }
+  return moments;
 }
 
-async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (next < items.length) {
-        const index = next++;
-        results[index] = await task(items[index]);
-      }
-    }),
-  );
-  return results;
+/** When the user wrote commits in each repository: author dates, merges left out. */
+export async function readCommitMoments(paths: string[], fromMs: number, toMs: number): Promise<number[][]> {
+  if (paths.length === 0) return [];
+  const args = ["-c", COMMIT_MOMENTS, "sh", new Date(fromMs).toISOString(), new Date(toMs).toISOString(), ...paths];
+  try {
+    const { stdout } = await run("sh", args, {
+      timeout: TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" },
+    });
+    return parseCommitMoments(stdout, paths.length);
+  } catch (error) {
+    // What was read before it stopped is still true: the rest simply shows no moments.
+    return parseCommitMoments((error as { stdout?: string }).stdout ?? "", paths.length);
+  }
 }
 
 /** Read when asked: nothing of it is kept apart from the optional file samples. */
@@ -76,10 +72,14 @@ export async function readJournal(db: Db, weekStart: number): Promise<JournalWee
     .where(and(eq(projects.kind, "project"), eq(projects.abandoned, false)))
     .all();
 
-  const inputs = await mapLimit(rows, CONCURRENCY, async (row) => ({
+  const withGit = config.commits ? rows.filter((row) => row.hasGit) : [];
+  const moments = await readCommitMoments(withGit.map((row) => row.path), from, to);
+  const commitsOf = new Map(withGit.map((row, index) => [row.id, moments[index]]));
+
+  const inputs = rows.map((row) => ({
     id: row.id,
     name: row.displayName ?? row.name,
-    commits: config.commits && row.hasGit ? await readCommitMoments(row.path, from, to) : [],
+    commits: commitsOf.get(row.id) ?? [],
     claude: config.claude
       ? db
           .select({ at: claudeApiCalls.calledAt })
