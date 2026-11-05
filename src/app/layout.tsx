@@ -3,6 +3,7 @@ import { DM_Mono, Schibsted_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DEFAULT_LOCALE } from "@/i18n";
+import { Logo, Wordmark } from "./brand";
 import { ClaudeConsolesProvider } from "./claude-consoles";
 import { DumpActivityProvider } from "./dump-activity";
 import { FlashProvider } from "./flash";
@@ -22,7 +23,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Project Manager",
+  title: "PROject",
   description: "See and organize the projects on this machine",
 };
 
@@ -35,9 +36,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <FlashProvider>
               <DumpActivityProvider>
               <header className="site-header flex min-h-12 flex-wrap items-center gap-x-5 px-4">
-                <Link href="/" className="inline-flex items-center gap-2 text-[14px] font-bold tracking-tight text-accent">
-                  Project Manager
-                  <span aria-hidden="true" className="size-1.5 bg-ink" />
+                <Link href="/" aria-label="PROject" className="inline-flex items-center gap-2 text-[15px]">
+                  <Logo />
+                  <Wordmark />
                 </Link>
                 <Suspense>
                   <NavLinks />
