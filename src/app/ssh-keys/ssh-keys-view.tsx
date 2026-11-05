@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useMessages } from "@/i18n/provider";
 import type { KeyTarget, SshKeys, SshKeyView } from "@/server/ssh-keys";
+import { copyText } from "../clipboard";
 import { useFlash } from "../flash";
 import { useConfirm } from "../modal";
 import { BADGE, BADGE_ALERT, BUTTON_SMALL, CARD, DATA, FIELD } from "../ui";
@@ -51,12 +52,7 @@ function KeyCard({ sshKey, servers }: { sshKey: SshKeyView; servers: KeyTarget[]
   };
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(sshKey.publicKey);
-      flash("success", m.copied);
-    } catch {
-      // Without the clipboard, the key stays selectable below.
-    }
+    if (await copyText(sshKey.publicKey)) flash("success", m.copied);
   };
 
   return (

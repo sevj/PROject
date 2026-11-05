@@ -37,6 +37,7 @@ export const SECTIONS: Section[] = [
   },
   { label: "journal", pages: [{ href: "/journal", label: "journal" }] },
   { label: "claude", pages: [{ href: "/claude", label: "claude" }] },
+  { label: "tools", pages: [{ href: "/tools", label: "tools" }] },
   { label: "settings", pages: [{ href: "/settings", label: "settings" }] },
 ];
 

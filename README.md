@@ -51,3 +51,14 @@ Node 26 (voir `.nvmrc`) : `better-sqlite3` 13 plante à l'ouverture d'une base s
 `./start.sh` runs the dev server so that it also answers at http://project.dev.local:4300.
 Add `127.0.0.1 project.dev.local` to `/etc/hosts` first. The server stays bound to 127.0.0.1;
 other names are accepted only when listed in `PM_ALLOWED_HOSTS` (comma-separated, exact names).
+
+Behind the local Traefik (`~/Projects/adimeo_docker_local`), it answers at
+https://project.dev.local, with the proxy's certificate. Its `conf/config.yml` routes that
+name to `http://host.docker.internal:4300`, which Docker Desktop leads to the app on the
+host's 127.0.0.1. Consoles still connect straight to 127.0.0.1, and Claude consoles reach
+the app's MCP server there too, whatever name the page was opened by.
+
+Without the proxy, `./start.sh --https` answers at https://project.dev.local:4300 instead. Over plain http, a
+name other than localhost or 127.0.0.1 is not a secure context: the browser hides the
+clipboard API and `crypto.randomUUID`. The certificate is made once by `mkcert` in `.certs/`
+(git-ignored); run `mkcert -install` once so that the browser trusts it.

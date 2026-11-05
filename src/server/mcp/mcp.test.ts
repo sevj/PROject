@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, openDb } from "../db/client";
 import { envValueHistory, environmentAccesses, projectEnvironments, remoteServers, projectFacts, projects } from "../db/schema";
 import { handleMcpMessage, MAX_RESULT_CHARS, type McpTool } from "./protocol";
-import { isMcpToken, mcpConfig, mcpToken } from "./token";
+import { directAppHost, isMcpToken, mcpConfig, mcpToken } from "./token";
 import { MCP_TOOLS } from "./tools";
 
 vi.mock("@/app/databases/actions", () => ({
@@ -65,6 +65,15 @@ describe("the token", () => {
       url: "http://127.0.0.1:4300/api/mcp",
       headers: { Authorization: `Bearer ${mcpToken()}`, "X-PM-Project": "7" },
     });
+  });
+});
+
+describe("directAppHost", () => {
+  it("keeps a loopback host, and goes around a name that may be a proxy", () => {
+    expect(directAppHost("127.0.0.1:4300", "4300")).toBe("127.0.0.1:4300");
+    expect(directAppHost("localhost:4300", "4300")).toBe("localhost:4300");
+    expect(directAppHost("project.dev.local", "4300")).toBe("127.0.0.1:4300");
+    expect(directAppHost("project.dev.local:4301", "4301")).toBe("127.0.0.1:4301");
   });
 });
 

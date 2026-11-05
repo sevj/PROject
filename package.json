@@ -20,6 +20,7 @@
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.12.1",
+    "bcryptjs": "3.0.3",
     "better-sqlite3": "13.0.3",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.5",

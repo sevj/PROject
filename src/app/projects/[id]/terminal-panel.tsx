@@ -5,6 +5,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
 import { type ComponentType, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
+import { copyText } from "@/app/clipboard";
 import { usePageLock } from "@/app/use-page-lock";
 import { useMessages } from "@/i18n/provider";
 import type { StateKind } from "@/lib/docker-state";
@@ -272,7 +273,7 @@ export function TerminalPanel({
 
       const copy = () => {
         const text = term.getSelection();
-        if (text) void navigator.clipboard.writeText(text);
+        if (text) void copyText(text);
       };
       term.attachCustomKeyEventHandler((event) => {
         if (event.type !== "keydown") return true;
