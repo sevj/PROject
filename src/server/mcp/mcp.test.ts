@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, openDb } from "../db/client";
-import { envValueHistory, projectFacts, projects } from "../db/schema";
+import { envValueHistory, environmentAccesses, projectEnvironments, remoteServers, projectFacts, projects } from "../db/schema";
 import { handleMcpMessage, MAX_RESULT_CHARS, type McpTool } from "./protocol";
 import { isMcpToken, mcpConfig, mcpToken } from "./token";
 import { MCP_TOOLS } from "./tools";
@@ -102,6 +102,14 @@ describe("MCP_TOOLS", () => {
     const all = JSON.stringify(await tool("get_project").run({}, { db, projectId: id }));
     expect(all).not.toContain("s3cret");
     expect(all).not.toContain("API_KEY");
+  });
+
+  it("says where a project runs, and nothing of how to reach it", async () => {
+    const serverId = db.insert(remoteServers).values({ name: "web-1", kind: "ssh", host: "secret-host", username: "deploy", auth: "password", passwordSecret: "v1:cipher" }).returning({ id: remoteServers.id }).get().id;
+    const environmentId = db.insert(projectEnvironments).values({ projectId: id, name: "Production", protected: true, urls: [{ label: "Site", url: "https://x.fr" }], notes: "vpn-note" }).returning({ id: projectEnvironments.id }).get().id;
+    db.insert(environmentAccesses).values({ environmentId, serverId, label: "Web", path: "/var/www/secret" }).run();
+    const answer = await tool("get_environments").run({}, { db, projectId: id });
+    expect(answer).toEqual([{ name: "Production", protected: true, urls: [{ label: "Site", url: "https://x.fr" }] }]);
   });
 
   it("offers no tool that reads rows or changes anything", () => {

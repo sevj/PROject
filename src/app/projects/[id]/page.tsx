@@ -19,6 +19,7 @@ import { readDockerStack } from "@/server/docker-stack";
 import { serverMessages } from "@/server/i18n";
 import { listProjectFolder, readProjectDoc } from "@/server/project-files";
 import { getProject } from "@/server/registry";
+import { listEnvironments, listServers, readSuggestions } from "@/server/remote-servers";
 import { readGitDetails, readRecentCommits } from "@/server/scan/git";
 import { ClaudeConsoleButton } from "../../claude-console-button";
 import { LoadingFallback } from "../../loading-fallback";
@@ -36,6 +37,7 @@ import { ClaudeUsageBlock } from "./claude-usage";
 import { DockerComponents } from "./docker-components";
 import { DockerTab } from "./docker-tab";
 import { EnvTab } from "./env-tab";
+import { EnvironmentsTab } from "./environments-tab";
 import { GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
 import { readDependencies } from "@/server/dependencies";
@@ -43,7 +45,7 @@ import { ProjectSites } from "./project-sites";
 import { ProjectTree } from "./project-tree";
 import { SecurityTab } from "./security-tab";
 
-const TABS = ["general", "docker", "git", "env", "claude", "security", "structure", "documentation"] as const;
+const TABS = ["general", "docker", "git", "env", "environments", "claude", "security", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 const TAB =
   "-mb-px inline-flex min-h-11 items-center border-b-2 border-transparent px-3.5 font-medium text-mut hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink";
@@ -285,6 +287,16 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
                 <p className="text-mut">{m.unreadableFolder}</p>
               </section>
             )
+          ) : null}
+
+          {tab === "environments" ? (
+            <EnvironmentsTab
+              projectId={row.id}
+              environments={listEnvironments(getDb(), projectId)}
+              servers={listServers(getDb())}
+              suggestions={await readSuggestions()}
+              readOnly={row.abandoned}
+            />
           ) : null}
 
           {tab === "security" ? (

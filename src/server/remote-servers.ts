@@ -1,0 +1,414 @@
+import { spawn } from "node:child_process";
+import { readdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { and, eq } from "drizzle-orm";
+import { cleanLogText } from "@/lib/container-logs";
+import {
+  isContainerName,
+  isHost,
+  isJumpHost,
+  isKeyPath,
+  isKubeContext,
+  isKubeTarget,
+  isNamespace,
+  isPort,
+  isRemotePath,
+  isUsername,
+  isWebUrl,
+  kubeClusterArguments,
+  kubeTargetArguments,
+  parseSshAliases,
+  privateKeysAmong,
+  readKubeExit,
+  readSshExit,
+  type SshAuth,
+  sshArguments,
+  sshProbe,
+  type TestFailure,
+  type TestResult,
+} from "@/lib/remote-servers";
+import type { Db } from "./db/client";
+import { environmentAccesses, type EnvironmentUrl, projectEnvironments, projects, projectMeta, remoteServers } from "./db/schema";
+import { decryptSecret, encryptSecret } from "./secrets";
+
+export type ServerKind = "ssh" | "kubernetes";
+
+export type ServerInput = {
+  name: string;
+  kind: ServerKind;
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  auth: SshAuth | null;
+  keyPath: string | null;
+  jumpHost: string | null;
+  context: string | null;
+};
+
+/** What leaves the server. The password stays behind: only whether one is kept. */
+export type ServerView = ServerInput & {
+  id: number;
+  hasPassword: boolean;
+  usedBy: { projectId: number; projectName: string; environment: string }[];
+};
+
+export type EnvironmentInput = { name: string; protected: boolean; urls: EnvironmentUrl[]; notes: string | null };
+
+export type AccessInput = {
+  serverId: number;
+  label: string;
+  path: string | null;
+  namespace: string | null;
+  target: string | null;
+  container: string | null;
+};
+
+export type AccessView = AccessInput & { id: number; serverName: string; serverKind: ServerKind; serverAuth: SshAuth | null; serverHasPassword: boolean };
+export type EnvironmentView = EnvironmentInput & { id: number; accesses: AccessView[] };
+
+export type Problem =
+  | "nameMissing"
+  | "nameTaken"
+  | "hostInvalid"
+  | "portInvalid"
+  | "usernameInvalid"
+  | "authInvalid"
+  | "keyInvalid"
+  | "jumpInvalid"
+  | "contextInvalid"
+  | "serverInUse"
+  | "serverMissing"
+  | "urlInvalid"
+  | "pathInvalid"
+  | "namespaceInvalid"
+  | "targetInvalid"
+  | "containerInvalid"
+  | "environmentMissing"
+  | "accessMissing"
+  | "projectMissing";
+
+export type Saved = { id: number } | { problem: Problem };
+
+const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value.trim() : null);
+
+/** Everything that comes from a form is checked here, since it ends up on a command line. */
+function readServerInput(raw: ServerInput): ServerInput | Problem {
+  const name = text(raw.name);
+  if (!name) return "nameMissing";
+  const empty = { host: null, port: null, username: null, auth: null, keyPath: null, jumpHost: null, context: null };
+  if (raw.kind === "kubernetes") {
+    const context = text(raw.context);
+    if (!context || !isKubeContext(context)) return "contextInvalid";
+    return { ...empty, name, kind: "kubernetes", context };
+  }
+  if (raw.kind !== "ssh") return "authInvalid";
+  const host = text(raw.host);
+  if (!host || !isHost(host)) return "hostInvalid";
+  const auth = raw.auth;
+  if (auth !== "alias" && auth !== "agent" && auth !== "key" && auth !== "password") return "authInvalid";
+  // An alias says all of this in ~/.ssh/config.
+  if (auth === "alias") return { ...empty, name, kind: "ssh", host, auth };
+  const username = text(raw.username);
+  if (username && !isUsername(username)) return "usernameInvalid";
+  if (raw.port !== null && !isPort(raw.port)) return "portInvalid";
+  const jumpHost = text(raw.jumpHost);
+  if (jumpHost && !isJumpHost(jumpHost)) return "jumpInvalid";
+  const keyPath = auth === "key" ? text(raw.keyPath) : null;
+  if (auth === "key" && (!keyPath || !isKeyPath(keyPath))) return "keyInvalid";
+  return { ...empty, name, kind: "ssh", host, port: raw.port, username, auth, keyPath, jumpHost };
+}
+
+const displayName = (db: Db, projectId: number) => {
+  const meta = db.select({ name: projectMeta.displayName }).from(projectMeta).where(eq(projectMeta.projectId, projectId)).get();
+  return meta?.name ?? db.select({ name: projects.name }).from(projects).where(eq(projects.id, projectId)).get()?.name ?? "";
+};
+
+export function listServers(db: Db): ServerView[] {
+  const usage = db
+    .select({ serverId: environmentAccesses.serverId, projectId: projectEnvironments.projectId, environment: projectEnvironments.name })
+    .from(environmentAccesses)
+    .innerJoin(projectEnvironments, eq(environmentAccesses.environmentId, projectEnvironments.id))
+    .all();
+  return db
+    .select()
+    .from(remoteServers)
+    .all()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((server) => {
+      const seen = new Set<string>();
+      return {
+        // Field by field, so that the secret, or one added later, cannot leave by accident.
+        id: server.id,
+        name: server.name,
+        kind: server.kind,
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        auth: server.auth,
+        keyPath: server.keyPath,
+        jumpHost: server.jumpHost,
+        context: server.context,
+        hasPassword: server.passwordSecret !== null,
+        usedBy: usage
+          .filter(({ serverId, projectId, environment }) => {
+            const key = `${projectId}/${environment}`;
+            if (serverId !== server.id || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .map(({ projectId, environment }) => ({ projectId, environment, projectName: displayName(db, projectId) })),
+      };
+    });
+}
+
+export function saveServer(db: Db, id: number | null, raw: ServerInput): Saved {
+  const input = readServerInput(raw);
+  if (typeof input === "string") return { problem: input };
+  const taken = db.select({ id: remoteServers.id }).from(remoteServers).where(eq(remoteServers.name, input.name)).get();
+  if (taken && taken.id !== id) return { problem: "nameTaken" };
+  if (id === null) return { id: db.insert(remoteServers).values(input).returning({ id: remoteServers.id }).get().id };
+  const current = db.select().from(remoteServers).where(eq(remoteServers.id, id)).get();
+  if (!current) return { problem: "serverMissing" };
+  // A kept password must not follow to another machine or account, where the next test would send it.
+  const samePlace = current.host === input.host && current.username === input.username && input.auth === "password";
+  db.update(remoteServers)
+    .set({ ...input, passwordSecret: samePlace ? current.passwordSecret : null })
+    .where(eq(remoteServers.id, id))
+    .run();
+  return { id };
+}
+
+export function deleteServer(db: Db, id: number): Problem | null {
+  const used = db.select({ id: environmentAccesses.id }).from(environmentAccesses).where(eq(environmentAccesses.serverId, id)).get();
+  if (used) return "serverInUse";
+  db.delete(remoteServers).where(eq(remoteServers.id, id)).run();
+  return null;
+}
+
+export function forgetPassword(db: Db, id: number): void {
+  db.update(remoteServers).set({ passwordSecret: null }).where(eq(remoteServers.id, id)).run();
+}
+
+export function listEnvironments(db: Db, projectId: number): EnvironmentView[] {
+  const accesses = db
+    .select({ access: environmentAccesses, server: remoteServers })
+    .from(environmentAccesses)
+    .innerJoin(projectEnvironments, eq(environmentAccesses.environmentId, projectEnvironments.id))
+    .innerJoin(remoteServers, eq(environmentAccesses.serverId, remoteServers.id))
+    .where(eq(projectEnvironments.projectId, projectId))
+    .orderBy(environmentAccesses.id)
+    .all();
+  return db
+    .select()
+    .from(projectEnvironments)
+    .where(eq(projectEnvironments.projectId, projectId))
+    .orderBy(projectEnvironments.id)
+    .all()
+    .map(({ id, name, protected: isProtected, urls, notes }) => ({
+      id,
+      name,
+      protected: isProtected,
+      urls,
+      notes,
+      accesses: accesses
+        .filter(({ access }) => access.environmentId === id)
+        .map(({ access, server }) => ({
+          id: access.id,
+          serverId: access.serverId,
+          label: access.label,
+          path: access.path,
+          namespace: access.namespace,
+          target: access.target,
+          container: access.container,
+          serverName: server.name,
+          serverKind: server.kind,
+          serverAuth: server.auth,
+          serverHasPassword: server.passwordSecret !== null,
+        })),
+    }));
+}
+
+export function saveEnvironment(db: Db, projectId: number, id: number | null, raw: EnvironmentInput): Saved {
+  const name = text(raw.name);
+  if (!name) return { problem: "nameMissing" };
+  if (!db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).get()) return { problem: "projectMissing" };
+  const urls = (Array.isArray(raw.urls) ? raw.urls : [])
+    .map(({ label, url }) => ({ label: text(label) ?? "", url: text(url) ?? "" }))
+    .filter(({ label, url }) => label !== "" || url !== "");
+  if (urls.some(({ url }) => !isWebUrl(url))) return { problem: "urlInvalid" };
+  const values = { name, protected: raw.protected === true, urls, notes: text(raw.notes) };
+  const taken = db
+    .select({ id: projectEnvironments.id })
+    .from(projectEnvironments)
+    .where(and(eq(projectEnvironments.projectId, projectId), eq(projectEnvironments.name, name)))
+    .get();
+  if (taken && taken.id !== id) return { problem: "nameTaken" };
+  if (id === null) return { id: db.insert(projectEnvironments).values({ ...values, projectId }).returning({ id: projectEnvironments.id }).get().id };
+  const owned = and(eq(projectEnvironments.id, id), eq(projectEnvironments.projectId, projectId));
+  if (!db.select({ id: projectEnvironments.id }).from(projectEnvironments).where(owned).get()) return { problem: "environmentMissing" };
+  db.update(projectEnvironments).set(values).where(owned).run();
+  return { id };
+}
+
+export function deleteEnvironment(db: Db, projectId: number, id: number): void {
+  db.delete(projectEnvironments).where(and(eq(projectEnvironments.id, id), eq(projectEnvironments.projectId, projectId))).run();
+}
+
+function readAccessInput(db: Db, raw: AccessInput): AccessInput | Problem {
+  const label = text(raw.label);
+  if (!label) return "nameMissing";
+  const server = Number.isInteger(raw.serverId) ? db.select().from(remoteServers).where(eq(remoteServers.id, raw.serverId)).get() : null;
+  if (!server) return "serverMissing";
+  const empty = { path: null, namespace: null, target: null, container: null };
+  if (server.kind === "ssh") {
+    const path = text(raw.path);
+    if (path && !isRemotePath(path)) return "pathInvalid";
+    return { ...empty, serverId: server.id, label, path };
+  }
+  const namespace = text(raw.namespace);
+  if (namespace && !isNamespace(namespace)) return "namespaceInvalid";
+  const target = text(raw.target);
+  if (target && !isKubeTarget(target)) return "targetInvalid";
+  const container = text(raw.container);
+  if (container && (!isContainerName(container) || !target)) return "containerInvalid";
+  return { ...empty, serverId: server.id, label, namespace, target, container };
+}
+
+/** Always within one project, so that a stale page cannot reach an access of another one. */
+function ownedEnvironment(db: Db, projectId: number, environmentId: number) {
+  return db
+    .select({ id: projectEnvironments.id })
+    .from(projectEnvironments)
+    .where(and(eq(projectEnvironments.id, environmentId), eq(projectEnvironments.projectId, projectId)))
+    .get();
+}
+
+export function saveAccess(db: Db, projectId: number, environmentId: number, id: number | null, raw: AccessInput): Saved {
+  if (!ownedEnvironment(db, projectId, environmentId)) return { problem: "environmentMissing" };
+  const input = readAccessInput(db, raw);
+  if (typeof input === "string") return { problem: input };
+  if (id === null) return { id: db.insert(environmentAccesses).values({ ...input, environmentId }).returning({ id: environmentAccesses.id }).get().id };
+  const owned = and(eq(environmentAccesses.id, id), eq(environmentAccesses.environmentId, environmentId));
+  if (!db.select({ id: environmentAccesses.id }).from(environmentAccesses).where(owned).get()) return { problem: "accessMissing" };
+  db.update(environmentAccesses).set(input).where(owned).run();
+  return { id };
+}
+
+export function deleteAccess(db: Db, projectId: number, environmentId: number, id: number): void {
+  if (!ownedEnvironment(db, projectId, environmentId)) return;
+  db.delete(environmentAccesses).where(and(eq(environmentAccesses.id, id), eq(environmentAccesses.environmentId, environmentId))).run();
+}
+
+export type Suggestions = { aliases: string[]; keys: string[]; contexts: string[] };
+
+export type Ran = { code: number | null; stdout: string; stderr: string; notInstalled: boolean };
+export type CommandRunner = (command: string, args: string[], password?: string) => Promise<Ran>;
+
+const TEST_TIMEOUT_MS = 20_000;
+const OUTPUT_LIMIT = 64 * 1024;
+
+/**
+ * `sshpass -d 3` reads the password from a pipe of its own: on a command line or in the
+ * environment, `ps` or /proc would show it. Nothing can be typed in: stdin is closed.
+ */
+export const runCommand: CommandRunner = (command, args, password) =>
+  new Promise((resolve) => {
+    const child = spawn(command, args, {
+      stdio: password === undefined ? ["ignore", "pipe", "pipe"] : ["ignore", "pipe", "pipe", "pipe"],
+      timeout: TEST_TIMEOUT_MS,
+      env: { ...process.env, LC_ALL: "C" },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => { stdout = (stdout + chunk.toString()).slice(-OUTPUT_LIMIT); });
+    child.stderr?.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-OUTPUT_LIMIT); });
+    if (password !== undefined) {
+      const pipe = child.stdio[3] as NodeJS.WritableStream;
+      // The child may be gone before it reads: its exit code tells more than this error.
+      pipe.on("error", () => undefined);
+      pipe.end(`${password}\n`);
+    }
+    let notInstalled = false;
+    child.once("error", (error: NodeJS.ErrnoException) => {
+      notInstalled = error.code === "ENOENT";
+      if (notInstalled) resolve({ code: 127, stdout, stderr, notInstalled });
+    });
+    child.once("close", (code, signal) => resolve({ code: signal ? null : code, stdout, stderr, notInstalled }));
+  });
+
+export async function readSuggestions(run: CommandRunner = runCommand, home = homedir()): Promise<Suggestions> {
+  const sshDir = join(home, ".ssh");
+  const [config, files, contexts] = await Promise.all([
+    readFile(join(sshDir, "config"), "utf8").catch(() => ""),
+    readdir(sshDir).catch(() => [] as string[]),
+    run("kubectl", ["config", "get-contexts", "-o", "name"]).catch(() => null),
+  ]);
+  return {
+    aliases: parseSshAliases(config),
+    keys: privateKeysAmong(files).map((name) => `~/.ssh/${name}`),
+    contexts: contexts?.code === 0 ? contexts.stdout.split("\n").map((line) => line.trim()).filter(Boolean).sort() : [],
+  };
+}
+
+export type TestRequest = { serverId: number; accessId?: number; password?: string; remember?: boolean };
+
+const failed = (failure: TestFailure, stderr: string, password?: string): TestResult => {
+  const last = stderr.split(/\r?\n/).map(cleanLogText).filter(Boolean).at(-1) ?? "";
+  // Nothing prints it today, and it must stay so whatever a remote banner or a tool does.
+  const detail = password ? last.replaceAll(password, "***") : last;
+  return { ok: false, failure, detail: detail.slice(0, 300) };
+};
+
+/** A connection, on request only, that runs nothing but a look. A password is only kept once it has worked. */
+export async function testConnection(db: Db, request: TestRequest, run: CommandRunner = runCommand, home = homedir()): Promise<TestResult> {
+  const server = db.select().from(remoteServers).where(eq(remoteServers.id, request.serverId)).get();
+  if (!server) return { ok: false, failure: "gone", detail: "" };
+  let access = null;
+  if (request.accessId !== undefined) {
+    access = db
+      .select()
+      .from(environmentAccesses)
+      .where(and(eq(environmentAccesses.id, request.accessId), eq(environmentAccesses.serverId, server.id)))
+      .get();
+    if (!access) return { ok: false, failure: "gone", detail: "" };
+  }
+
+  if (server.kind === "kubernetes") {
+    const context = server.context ?? "";
+    const ran = access?.target
+      ? await run("kubectl", kubeTargetArguments(context, access.namespace, access.target))
+      : await run("kubectl", kubeClusterArguments(context));
+    if (ran.notInstalled) return { ok: false, failure: "kubectlMissing", detail: "" };
+    const failure = readKubeExit(ran.code, ran.stderr);
+    if (failure) return failed(failure, ran.stderr);
+    if (access?.container && !ran.stdout.split(/\s+/).includes(access.container)) {
+      return { ok: false, failure: "containerMissing", detail: ran.stdout.trim() };
+    }
+    return { ok: true };
+  }
+
+  const auth = server.auth ?? "agent";
+  const target = { host: server.host ?? "", port: server.port, username: server.username, auth, keyPath: server.keyPath, jumpHost: server.jumpHost };
+  const path = access?.path ?? null;
+  const args = sshArguments(target, sshProbe(path), home);
+
+  if (auth !== "password") {
+    const ran = await run("ssh", args);
+    if (ran.notInstalled) return { ok: false, failure: "sshMissing", detail: "" };
+    const failure = readSshExit(ran.code, ran.stderr, false, path !== null);
+    return failure ? failed(failure, ran.stderr) : { ok: true };
+  }
+
+  const given = request.password ? request.password : undefined;
+  const password = given ?? (server.passwordSecret ? (decryptSecret(server.passwordSecret) ?? undefined) : undefined);
+  if (!password) return { ok: false, failure: "passwordNeeded", detail: "" };
+  const ran = await run("sshpass", ["-d", "3", "ssh", ...args], password);
+  if (ran.notInstalled) return { ok: false, failure: "sshpassMissing", detail: "" };
+  const failure = readSshExit(ran.code, ran.stderr, true, path !== null);
+  if (failure) return failed(failure, ran.stderr, password);
+  if (given && request.remember === true) {
+    db.update(remoteServers).set({ passwordSecret: encryptSecret(given) }).where(eq(remoteServers.id, server.id)).run();
+  }
+  return { ok: true };
+}

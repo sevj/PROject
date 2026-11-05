@@ -8,6 +8,7 @@ import { listDatabaseContainers } from "../dumps/containers";
 import { listDumps } from "../dumps/store";
 import { readPorts } from "../ports";
 import { getProject, getRegistry } from "../registry";
+import { listEnvironments } from "../remote-servers";
 import type { McpTool } from "./protocol";
 
 export type McpContext = {
@@ -51,7 +52,7 @@ const summary = (row: RegistryRow) => ({
   missing: row.missing,
 });
 
-/** Read-only, and without what the app holds but must not hand out: env values and database rows. */
+/** Read-only, and without what the app holds but must not hand out: env values, database rows, and how to reach a server. */
 export const MCP_TOOLS: McpTool<McpContext>[] = [
   {
     name: "list_projects",
@@ -107,6 +108,14 @@ export const MCP_TOOLS: McpTool<McpContext>[] = [
       const stored = readDependencies(context.db, resolve(input, context).id);
       return stored && { ...stored, analyzedAt: new Date(stored.analyzedAt).toISOString() };
     },
+  },
+  {
+    name: "get_environments",
+    description: "Where a project is deployed: the name of each environment (integration, staging, production…), whether it is protected, and its web addresses. Never how to connect to it.",
+    inputSchema: PROJECT_INPUT,
+    // Picked field by field: a new field of an environment is not handed out by accident. Notes can hold anything.
+    run: async (input, context) =>
+      listEnvironments(context.db, resolve(input, context).id).map(({ name, protected: isProtected, urls }) => ({ name, protected: isProtected, urls })),
   },
   {
     name: "get_claude_setup",

@@ -16,6 +16,7 @@ export function NavLinks() {
     { href: "/dumps", label: m.dumps },
     { href: "/resources", label: m.resources },
     { href: "/ports", label: m.ports },
+    { href: "/servers", label: m.servers },
     { href: "/databases", label: m.databases },
     { href: "/journal", label: m.journal },
     { href: "/map", label: m.map },

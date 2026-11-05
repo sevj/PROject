@@ -277,3 +277,71 @@ export const activitySamples = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.projectId, table.at] })],
 );
+
+export const SERVER_KINDS = ["ssh", "kubernetes"] as const;
+export const SSH_AUTHS = ["alias", "agent", "key", "password"] as const;
+
+export type EnvironmentUrl = { label: string; url: string };
+
+/**
+ * A machine or a cluster, shared between projects: a password changes in one place. What is
+ * read from the user's own SSH and Kubernetes files stays there; only its name is kept here.
+ */
+export const remoteServers = sqliteTable("remote_servers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  kind: text("kind", { enum: SERVER_KINDS }).notNull(),
+  /** SSH: a host name, or with `alias` a Host of ~/.ssh/config. */
+  host: text("host"),
+  port: integer("port"),
+  username: text("username"),
+  auth: text("auth", { enum: SSH_AUTHS }),
+  /** The path of a key, never the key. */
+  keyPath: text("key_path"),
+  jumpHost: text("jump_host"),
+  /** Kubernetes: a context of ~/.kube/config. */
+  context: text("context"),
+  /** Encrypted by `src/server/secrets.ts`. Null means it is asked at each connection. */
+  passwordSecret: text("password_secret"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+});
+
+/** Integration, staging, production… of one project. */
+export const projectEnvironments = sqliteTable(
+  "project_environments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Asks before anything is opened on it. */
+    protected: integer("protected", { mode: "boolean" }).notNull().default(false),
+    urls: text("urls", { mode: "json" }).$type<EnvironmentUrl[]>().notNull().default([]),
+    notes: text("notes"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (table) => [uniqueIndex("project_environments_project_name").on(table.projectId, table.name)],
+);
+
+/** Where an environment runs on a server. A server still in use cannot be deleted. */
+export const environmentAccesses = sqliteTable(
+  "environment_accesses",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    environmentId: integer("environment_id")
+      .notNull()
+      .references(() => projectEnvironments.id, { onDelete: "cascade" }),
+    serverId: integer("server_id")
+      .notNull()
+      .references(() => remoteServers.id, { onDelete: "restrict" }),
+    label: text("label").notNull(),
+    /** SSH: the folder of the project on the machine. */
+    path: text("path"),
+    namespace: text("namespace"),
+    /** `deployment/api`, `statefulset/db`, `daemonset/x` or a label such as `app=api`: a pod's name changes at each deployment. */
+    target: text("target"),
+    container: text("container"),
+  },
+  (table) => [index("environment_accesses_environment").on(table.environmentId)],
+);
