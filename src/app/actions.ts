@@ -64,6 +64,7 @@ import {
 import { startRefresh, startSizing } from "@/server/scan/jobs";
 import { refreshProjects, rescanProject } from "@/server/scan/run";
 import { getSettings, saveSettings } from "@/server/settings";
+import { type AliasProblem, checkAliases, type CommandAlias } from "@/lib/aliases";
 
 export async function refreshEverything(): Promise<{ error: string | null }> {
   try {
@@ -407,6 +408,19 @@ export async function saveSettingsForm(form: Record<string, string>): Promise<st
     ...(isLocale(form.locale) ? { locale: form.locale } : {}),
   });
   refreshAll();
+  return null;
+}
+
+/** Shown in local consoles: read when one opens, so a change in the settings reaches the next console. */
+export async function readConsoleAliases(): Promise<CommandAlias[]> {
+  return getSettings(getDb()).aliases;
+}
+
+export async function saveConsoleAliases(rows: { name: string; command: string }[]): Promise<AliasProblem | null> {
+  const aliases = checkAliases(Array.isArray(rows) ? rows : []);
+  if (!Array.isArray(aliases)) return aliases;
+  saveSettings(getDb(), { aliases });
+  revalidatePath("/settings");
   return null;
 }
 

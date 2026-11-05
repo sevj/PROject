@@ -9,7 +9,7 @@ import { SettingsForm } from "./settings-form";
 async function Settings() {
   await connection();
   const db = getDb();
-  const { ideCommands, terminalCommand, locale } = getSettings(db);
+  const { ideCommands, terminalCommand, locale, aliases } = getSettings(db);
   const { rows, knownTags } = getRegistry(db);
   const stacks = [...new Set([...rows.flatMap((row) => row.stacks), ...Object.keys(ideCommands)])]
     .filter((stack) => stack !== "default")
@@ -20,6 +20,7 @@ async function Settings() {
       locale={locale}
       ideCommands={ideCommands}
       terminalCommand={terminalCommand}
+      aliases={aliases}
       stacks={stacks}
       tags={knownTags.map((name) => ({ name, count: rows.filter((row) => row.tags.includes(name)).length }))}
     />

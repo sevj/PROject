@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { openConsole } from "@/app/actions";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { openConsole, readConsoleAliases } from "@/app/actions";
+import { type CommandAlias, expandAlias } from "@/lib/aliases";
 import { BUTTON, BUTTON_PRIMARY, DATA, FIELD, LABEL } from "@/app/ui";
 import { useMessages } from "@/i18n/provider";
 import { CONSOLE_SHELLS, type ConsoleOptions, DEFAULT_CONSOLE_OPTIONS } from "@/lib/console-options";
+import { AliasBox, ConsoleAliases } from "./alias-box";
 import { TerminalPanel } from "./terminal-panel";
 
 export function ConsolePanel({
@@ -22,15 +24,39 @@ export function ConsolePanel({
   const [options, setOptions] = useState<ConsoleOptions>(DEFAULT_CONSOLE_OPTIONS);
   const [showOptions, setShowOptions] = useState(false);
   const [connectKey, setConnectKey] = useState(0);
+  const [aliases, setAliases] = useState<CommandAlias[]>([]);
   const set = (patch: Partial<ConsoleOptions>) => setOptions((current) => ({ ...current, ...patch }));
+  const expand = useCallback((line: string) => expandAlias(aliases, line), [aliases]);
+
+  const [reads, setReads] = useState(0);
+  const reload = useCallback(() => setReads((count) => count + 1), []);
+  const shared = useMemo(() => ({ aliases, reload }), [aliases, reload]);
+
+  // Read as the console opens, after an edit, and when the window comes back, as after editing them in another tab.
+  useEffect(() => {
+    let live = true;
+    const read = () =>
+      void readConsoleAliases().then((list) => {
+        if (live) setAliases(list);
+      });
+    read();
+    window.addEventListener("focus", read);
+    return () => {
+      live = false;
+      window.removeEventListener("focus", read);
+    };
+  }, [reads]);
 
   return (
+    <ConsoleAliases value={shared}>
     <TerminalPanel
       title={m.title(containerName)}
       open={() => openConsole(projectId, containerId, options)}
       connectKey={connectKey}
       reconnectLabel={m.reconnect}
       onClose={onClose}
+      overlay={AliasBox}
+      expand={expand}
       controls={
         <button type="button" aria-expanded={showOptions} onClick={() => setShowOptions((open) => !open)} className={BUTTON}>
           {m.options}
@@ -103,5 +129,6 @@ export function ConsolePanel({
         ) : null
       }
     />
+    </ConsoleAliases>
   );
 }

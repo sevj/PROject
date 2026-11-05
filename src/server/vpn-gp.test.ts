@@ -32,7 +32,7 @@ const idOf = (saved: { id: number } | { problem: string }) => {
 };
 
 /** Each read of the log gives the next one; it stays alive until it is stopped, or `dies` says otherwise. */
-function fakeGp(logs: string[], options: { running?: boolean; dies?: boolean; script?: string } = {}) {
+function fakeGp(logs: string[], options: { running?: boolean; dies?: boolean; script?: string; ended?: boolean } = {}) {
   let running = options.running ?? false;
   const driver: GpDriver & { launched: { command: string[]; secret: string; slug: string }[]; stopped: string[] } = {
     launched: [],
@@ -42,6 +42,7 @@ function fakeGp(logs: string[], options: { running?: boolean; dies?: boolean; sc
       running = !options.dies;
     },
     alive: async () => running,
+    ended: async () => !running && (options.ended ?? false),
     stop: async (slug) => {
       driver.stopped.push(slug);
       const was = running;
@@ -104,6 +105,16 @@ describe("listing", () => {
     await saved();
     expect(await readActiveVpns(db, run, sudo, fakeGp(["POST …\n"], { running: true }))).toMatchObject([{ state: "connecting" }]);
     expect(await readActiveVpns(db, run, sudo, fakeGp(["Configured as 10.0.0.2\n"]))).toEqual([]);
+  });
+
+  it("says the session ended when it was up and stopped by itself, not after a failed attempt", async () => {
+    await saved();
+    const state = async (log: string, ended: boolean) => (await listVpns(db, machine(), sudo, fakeGp([log], { ended })))[0].state;
+    expect(await state("Configured as 10.0.0.2\nSession terminated by server; exiting.\n", true)).toBe("lost");
+    expect(await state("Configured as 10.0.0.2\nFailed to reconnect to host vpn.corp.fr\n", true)).toBe("lost");
+    expect(await state("Could not resolve host vpn.corp.fr\n", true)).toBe("off");
+    expect(await state("Configured as 10.0.0.2\n", false)).toBe("off");
+    expect(await readActiveVpns(db, run, sudo, fakeGp(["Configured as 10.0.0.2\n"], { ended: true }))).toEqual([]);
   });
 });
 

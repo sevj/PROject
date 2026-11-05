@@ -19,7 +19,8 @@ const EVERY_MS = 10_000;
 const isUp = (state: VpnState) => state === "connected" || state === "connecting";
 
 function Dot({ state }: { state: VpnState }) {
-  const color = state === "connected" ? "bg-ok" : state === "connecting" ? "animate-pulse bg-alert" : "border border-rule-strong";
+  const color =
+    state === "connected" ? "bg-ok" : state === "connecting" ? "animate-pulse bg-alert" : state === "lost" ? "bg-alert" : "border border-rule-strong";
   return <span aria-hidden className={`size-2 shrink-0 rounded-full ${color}`} />;
 }
 
@@ -33,15 +34,24 @@ export function VpnTopbar() {
   const [open, setOpen] = useState(false);
   const [stopping, setStopping] = useState<number | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  // What was last seen, to tell when a session ends while it is watched; null before the first look.
+  const seen = useRef<Map<number, VpnState> | null>(null);
 
   const read = useCallback(async () => {
     try {
       const response = await fetch("/api/vpns/status");
-      if (response.ok) setVpns((await response.json()) as VpnStatus[]);
+      if (!response.ok) return;
+      const next = (await response.json()) as VpnStatus[];
+      const before = seen.current;
+      seen.current = new Map(next.map(({ id, state }) => [id, state]));
+      for (const vpn of next) {
+        if (vpn.state === "lost" && before && before.get(vpn.id) !== "lost") flash("error", m.lostNotice(vpn.name));
+      }
+      setVpns(next);
     } catch {
       // The app is restarting: what was shown stays until the next look.
     }
-  }, []);
+  }, [flash, m]);
 
   useEffect(() => {
     const look = () => {
@@ -76,14 +86,14 @@ export function VpnTopbar() {
     };
   }, [open]);
 
-  const stop = async ({ id, name }: VpnStatus) => {
+  const stop = async ({ id, name }: VpnStatus, quietly = false) => {
     setStopping(id);
     try {
       const failure = await stopVpn(id);
       if (failure) {
         const reason = m.problems[failure.problem];
         flash("error", failure.detail ? `${reason} (${failure.detail})` : reason);
-      } else {
+      } else if (!quietly) {
         flash("success", m.disconnected(name));
       }
     } catch {
@@ -98,7 +108,9 @@ export function VpnTopbar() {
   if (vpns.length === 0) return null;
 
   const up = vpns.filter(({ state }) => isUp(state));
-  const summary: VpnState = up.some(({ state }) => state === "connected") ? "connected" : up.length > 0 ? "connecting" : "off";
+  const lost = vpns.filter(({ state }) => state === "lost");
+  const summary: VpnState = up.some(({ state }) => state === "connected") ? "connected" : up.length > 0 ? "connecting" : lost.length > 0 ? "lost" : "off";
+  const named = up.length > 0 ? up : lost;
 
   return (
     <div ref={root} className="relative ml-auto self-stretch">
@@ -111,7 +123,12 @@ export function VpnTopbar() {
       >
         <Dot state={summary} />
         <span>{m.title}</span>
-        {up.length > 0 ? <span className="max-w-[220px] truncate text-ink">{up.map(({ name }) => name).join(", ")}</span> : null}
+        {named.length > 0 ? (
+          <span className={`max-w-[220px] truncate ${up.length > 0 ? "text-ink" : "text-alert"}`}>
+            {named.map(({ name }) => name).join(", ")}
+            {up.length > 0 ? null : ` · ${m.states.lost}`}
+          </span>
+        ) : null}
         <span aria-hidden>{open ? "▴" : "▾"}</span>
       </button>
       {open ? (
@@ -127,7 +144,7 @@ export function VpnTopbar() {
                 <Dot state={vpn.state} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-semibold">{vpn.name}</span>
-                  <span className={`${DATA} block ${vpn.state === "unavailable" ? "text-alert" : "text-mut"}`}>
+                  <span className={`${DATA} block ${vpn.state === "unavailable" || vpn.state === "lost" ? "text-alert" : "text-mut"}`}>
                     {m.kinds[vpn.kind]} · {m.states[vpn.state]}
                     {vpn.loggedIn === false ? ` · ${m.notLoggedIn}` : null}
                   </span>
@@ -149,6 +166,17 @@ export function VpnTopbar() {
                 ) : vpn.state === "unavailable" ? null : (
                   <VpnConnectButton vpn={vpn} vpns={vpns} />
                 )}
+                {vpn.state === "lost" ? (
+                  <button
+                    type="button"
+                    disabled={stopping === vpn.id}
+                    aria-label={m.dismissOne(vpn.name)}
+                    onClick={() => void stop(vpn, true)}
+                    className={BUTTON_SMALL}
+                  >
+                    {m.dismiss}
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>

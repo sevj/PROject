@@ -83,7 +83,7 @@ export function VpnConnectButton({ vpn, vpns }: { vpn: VpnStatus; vpns: Pick<Vpn
   return (
     <>
       <button type="button" disabled={busy || vpn.state === "connecting"} onClick={start} className={BUTTON_SMALL}>
-        {busy ? m.connecting : m.connect}
+        {busy ? m.connecting : vpn.state === "lost" ? m.reconnect : m.connect}
       </button>
       {asking ? (
         <Modal title={m.connectTitle(vpn.name)} onClose={close}>

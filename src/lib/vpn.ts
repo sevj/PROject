@@ -66,7 +66,8 @@ export const NM_ACTIVE_ARGUMENTS = ["-t", "-f", "UUID,STATE", "connection", "sho
 /** What the server is sent as a password: its own rule for a token from the phone. */
 export const fullPassword = (password: string, token: string | null) => `${password}${token ?? ""}`;
 
-export type VpnState = "connected" | "connecting" | "off" | "unavailable";
+/** `lost`: it was up, then ended without being told to, such as when the gateway ends the session. */
+export type VpnState = "connected" | "connecting" | "off" | "unavailable" | "lost";
 
 export function parseNmActive(stdout: string): Map<string, VpnState> {
   const states = new Map<string, VpnState>();
@@ -298,6 +299,9 @@ export function readGpLog(log: string): GpLogEnd {
   if (/^Configured as /m.test(log)) return "connected";
   return null;
 }
+
+/** Whether openconnect got as far as being up: an end after that was not a failed attempt. */
+export const gpWasConnected = (log: string) => /^Configured as /m.test(log);
 
 /** `/proc/<pid>/cmdline` of a sudo the app started for GlobalProtect: anything else with that pid is not it. */
 export const isOwnSudo = (cmdline: string) => cmdline.startsWith(["sudo", "-n", gpScriptPath("")].join("\0"));

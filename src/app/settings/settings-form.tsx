@@ -3,7 +3,10 @@
 import { useTransition } from "react";
 import { type Locale, LANGUAGES } from "@/i18n";
 import { useMessages } from "@/i18n/provider";
+import { useRouter } from "next/navigation";
+import type { CommandAlias } from "@/lib/aliases";
 import { deleteTagByName, renameTagByName, saveSettingsForm } from "../actions";
+import { AliasEditor } from "../alias-editor";
 import { useFlash } from "../flash";
 import { useConfirm } from "../modal";
 import { BUTTON, BUTTON_PRIMARY, CARD, DATA, FIELD, LABEL, SECTION_TITLE } from "../ui";
@@ -12,14 +15,16 @@ type Props = {
   locale: Locale;
   ideCommands: Record<string, string>;
   terminalCommand: string;
+  aliases: CommandAlias[];
   stacks: string[];
   tags: { name: string; count: number }[];
 };
 
-export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tags }: Props) {
+export function SettingsForm({ locale, ideCommands, terminalCommand, aliases, stacks, tags }: Props) {
   const messages = useMessages();
   const m = messages.settings;
   const flash = useFlash();
+  const router = useRouter();
   const [pending, start] = useTransition();
   const { confirm, confirmation } = useConfirm();
 
@@ -77,6 +82,18 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, stacks, tag
             </button>
           </div>
         </form>
+
+        <section id="aliases" className={`${CARD} grid scroll-mt-4 gap-3`}>
+          <h2 className={SECTION_TITLE}>{m.aliases}</h2>
+          <p className="text-mut">{m.aliasesHint}</p>
+          <AliasEditor
+            aliases={aliases}
+            onSaved={() => {
+              flash("success", m.aliasesSaved);
+              router.refresh();
+            }}
+          />
+        </section>
 
         <section className={`${CARD} grid gap-2`}>
           <h2 className={SECTION_TITLE}>{m.tags}</h2>

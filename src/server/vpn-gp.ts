@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { gpScriptPath, isOwnSudo } from "@/lib/vpn";
 import { sudoLogFile } from "./vpn-sudo";
 
@@ -9,7 +9,9 @@ export type GpDriver = {
   launch(command: string[], secret: string, slug: string): Promise<void>;
   /** Whether the sudo started for this VPN still runs. */
   alive(slug: string): Promise<boolean>;
-  /** False when nothing ran, or it could not be told to stop. */
+  /** Started since the machine booted and gone without being told to stop. */
+  ended(slug: string): Promise<boolean>;
+  /** False when nothing ran, or it could not be told to stop. One that ended by itself is forgotten. */
   stop(slug: string): Promise<boolean>;
   readLog(slug: string): Promise<string>;
   /** The root script as it lies, to tell whether it is still the one to paste. Empty when missing. */
@@ -24,6 +26,19 @@ async function runningPid(slug: string): Promise<number | null> {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   const cmdline = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "");
   return isOwnSudo(cmdline) ? pid : null;
+}
+
+/** When the machine booted, in ms: a pid file older than that is from before, its process cannot have run since. */
+async function bootedAt(): Promise<number> {
+  const uptime = Number((await readFile("/proc/uptime", "utf8").catch(() => "0")).split(" ")[0]);
+  return Date.now() - uptime * 1000;
+}
+
+/** The pid file stays when sudo ends by itself: only `stop` removes it. */
+async function endedOnItsOwn(slug: string): Promise<boolean> {
+  const written = await stat(pidFile(slug)).catch(() => null);
+  if (!written || written.mtimeMs < (await bootedAt())) return false;
+  return (await runningPid(slug)) === null;
 }
 
 export const realGpDriver: GpDriver = {
@@ -50,9 +65,15 @@ export const realGpDriver: GpDriver = {
   alive: async (slug) => (await runningPid(slug)) !== null,
 
   /** SIGTERM: openconnect logs off from the portal before leaving. */
+  ended: endedOnItsOwn,
+
   async stop(slug) {
     const pid = await runningPid(slug);
-    if (pid === null) return false;
+    if (pid === null) {
+      if (!(await endedOnItsOwn(slug))) return false;
+      await rm(pidFile(slug), { force: true });
+      return true;
+    }
     try {
       process.kill(pid, "SIGTERM");
     } catch {

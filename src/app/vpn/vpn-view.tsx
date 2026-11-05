@@ -150,7 +150,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <div className="min-w-0">
           <h2 className="inline font-semibold break-words">{vpn.name}</h2> <span className={BADGE}>{m.kinds[vpn.kind]}</span>{" "}
-          <span className={up ? BADGE : vpn.state === "unavailable" ? BADGE_ALERT : BADGE}>{m.states[vpn.state]}</span>
+          <span className={vpn.state === "unavailable" || vpn.state === "lost" ? BADGE_ALERT : BADGE}>{m.states[vpn.state]}</span>
           {vpn.loggedIn === false ? <> <span className={BADGE_ALERT}>{m.notLoggedIn}</span></> : null}
           <p className={`${DATA} break-all text-mut`}>
             {[vpn.configPath, vpn.username, vpn.organization, vpn.gateway, vpn.routes, vpn.hasPassword ? m.passwordKept : null].filter(Boolean).join(" · ")}
@@ -168,6 +168,14 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
           ) : (
             <VpnConnectButton vpn={vpn} vpns={vpns} />
           )}
+          {vpn.state === "lost" ? (
+            <button type="button" disabled={pending} aria-label={m.dismissOne(vpn.name)} onClick={() =>
+                start(async () => {
+                  say(await stopVpn(vpn.id));
+                  announceVpnChange();
+                })
+              } className={BUTTON_SMALL}>{m.dismiss}</button>
+          ) : null}
           <button type="button" onClick={() => setEditing(true)} className={BUTTON_SMALL}>{m.edit}</button>
           <button
             type="button"

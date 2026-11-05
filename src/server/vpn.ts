@@ -12,6 +12,7 @@ import {
   gpSamlArguments,
   gpScript,
   gpSetupCommands,
+  gpWasConnected,
   hasAuthFailure,
   isGateway,
   isOneLine,
@@ -139,8 +140,9 @@ const slugOf = (row: Row) => row.sudoSlug ?? vpnSlug(row.name);
 const pathsOf = (row: Row, uid: number) => sudoVpnPaths(slugOf(row), uid);
 
 async function gpState(row: Row, gp: GpDriver): Promise<VpnState> {
-  if (!(await gp.alive(slugOf(row)))) return "off";
-  return readGpLog(await gp.readLog(slugOf(row))) === "connected" ? "connected" : "connecting";
+  const slug = slugOf(row);
+  if (!(await gp.alive(slug))) return (await gp.ended(slug)) && gpWasConnected(await gp.readLog(slug)) ? "lost" : "off";
+  return readGpLog(await gp.readLog(slug)) === "connected" ? "connected" : "connecting";
 }
 
 async function readStates(rows: Row[], run: CommandRunner, driver: SudoDriver, gp: GpDriver) {

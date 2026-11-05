@@ -3,6 +3,9 @@
  * `Messages` type enforces. Wording that depends on a number or a name is a function,
  * so that each language can handle its own plurals and word order.
  */
+
+import type { AliasProblem } from "@/lib/aliases";
+
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 export const en = {
@@ -596,6 +599,11 @@ export const en = {
       workingDirPlaceholder: "container default, or /var/www…",
       shortcuts:
         "Ctrl+Shift+C / Ctrl+Shift+V copy and paste · Ctrl+C copies when text is selected · Ctrl+W, Ctrl+T and Ctrl+N belong to the browser unless you use full screen",
+      aliases: "Aliases",
+      showAliases: "Show the aliases",
+      hideAliases: "Hide the aliases",
+      runAlias: (command: string) => `Run ${command}`,
+      editAliases: "Edit",
     },
     tabs: "Project sections",
     environments: "Environments",
@@ -979,7 +987,7 @@ export const en = {
     edit: "Change",
     delete: "Delete",
     kinds: { sudo_openvpn: "OpenVPN with sudo", openvpn: "OpenVPN by NetworkManager", nordlayer: "NordLayer", globalprotect: "GlobalProtect" },
-    states: { connected: "connected", connecting: "connecting", off: "off", unavailable: "unavailable" },
+    states: { connected: "connected", connecting: "connecting", off: "off", unavailable: "unavailable", lost: "session ended" },
     sudoHint: "Runs the same openvpn as a terminal, without a password thanks to a sudo rule you add once, and for this command only.",
     sudoConfigHint: "Copied once for root by the commands shown after saving. To use another file, delete this VPN and add it again.",
     gpHint: "On Connect, the Microsoft login opens in a window: type your password and the code you receive there. Nothing is kept here. Then openconnect starts, thanks to a sudo rule you add once. The openconnect and gp-saml-gui packages are needed.",
@@ -997,6 +1005,10 @@ export const en = {
     loginOnPage: "Open the VPN page to log in to the NordLayer account.",
     disconnectOne: (name: string) => `Disconnect ${name}`,
     disconnected: (name: string) => `${name} is disconnected.`,
+    lostNotice: (name: string) => `The session of ${name} ended: reconnect it to reach its servers again.`,
+    reconnect: "Reconnect",
+    dismiss: "Dismiss",
+    dismissOne: (name: string) => `Dismiss the ended session of ${name}`,
     organization: "Organization",
     organizationHint: "Optional: goes straight to its login link, instead of asking which one.",
     name: "Name",
@@ -1313,6 +1325,19 @@ export const en = {
       title: `Delete the tag "${name}"?`,
       body: count > 0 ? `It is removed from ${plural(count, "project")}.` : undefined,
     }),
+    aliases: "Console aliases",
+    aliasesHint: "Shown in Docker consoles: a click runs the command, and so does the name typed alone on a line then Enter.",
+    aliasesSaved: "Aliases saved.",
+    aliasesSaveFailed: "The aliases could not be saved.",
+    aliasName: "Name",
+    aliasCommand: "Command",
+    addAlias: "Add an alias",
+    removeAlias: (name: string) => (name ? `Remove ${name}` : "Remove this alias"),
+    noAliases: "No alias yet.",
+    aliasProblem: (problem: AliasProblem) =>
+      "row" in problem
+        ? `Alias ${problem.row}: ${{ name: "the name takes letters, digits and : . _ - (32 at most)", command: "the command is missing, too long or on several lines", twice: "this name is already used" }[problem.reason]}.`
+        : "50 aliases at most.",
   },
   errors: {
     nameRequired: "The name is required (80 characters at most).",

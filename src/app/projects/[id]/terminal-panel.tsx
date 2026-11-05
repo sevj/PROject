@@ -3,11 +3,12 @@
 import "@xterm/xterm/css/xterm.css";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { type ComponentType, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { BUTTON, BUTTON_PRIMARY, DATA } from "@/app/ui";
 import { usePageLock } from "@/app/use-page-lock";
 import { useMessages } from "@/i18n/provider";
 import type { StateKind } from "@/lib/docker-state";
+import { followLine } from "@/lib/aliases";
 import { StateGlyph } from "./state-badge";
 
 type Status = "connecting" | "connected" | "closed" | "exited" | "failed";
@@ -52,6 +53,9 @@ const keyboard = () => (navigator as Navigator & { keyboard?: KeyboardLock }).ke
 
 const encoder = new TextEncoder();
 
+/** Ctrl+U: empties the line being typed, in bash as in a plain sh. */
+export const KILL_LINE = "\u0015";
+
 /**
  * A terminal in the browser, whatever runs behind it: `open` asks the server for the right
  * to connect, each time it connects. Changing `connectKey` connects again.
@@ -68,6 +72,8 @@ export function TerminalPanel({
   controls,
   below,
   info,
+  overlay: Overlay,
+  expand,
   embedded,
   onStatusChange,
   onClose,
@@ -80,6 +86,10 @@ export function TerminalPanel({
   controls?: ReactNode;
   below?: ReactNode;
   info?: ReactNode;
+  /** Laid over the top right of the terminal; `type` sends text as if it were typed. */
+  overlay?: ComponentType<{ type: (text: string) => void; connected: boolean }>;
+  /** The command a line typed by hand stands for, sent in its place on Enter; null to send it as is. */
+  expand?: (line: string) => string | null;
   embedded?: { shown: boolean; frame: RefObject<HTMLElement | null> };
   onStatusChange?: (kind: StateKind) => void;
   onClose: () => void;
@@ -97,6 +107,9 @@ export function TerminalPanel({
   const connectedKey = useRef(connectKey);
   // Old output replayed holds questions to the terminal, whose answers must not reach the program.
   const replaying = useRef(false);
+  // The line typed so far, while it can be known: see followLine.
+  const line = useRef<string | null>("");
+  const expander = useRef(expand);
   const [status, setStatus] = useState<Status>("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
@@ -105,6 +118,10 @@ export function TerminalPanel({
   useEffect(() => {
     opener.current = open;
   }, [open]);
+
+  useEffect(() => {
+    expander.current = expand;
+  }, [expand]);
 
   useEffect(() => {
     onStatusChange?.(GLYPH[status]);
@@ -130,6 +147,7 @@ export function TerminalPanel({
     setDetail(null);
     setExitCode(null);
     replaying.current = false;
+    line.current = "";
     term.reset();
 
     const grant = await opener.current();
@@ -232,7 +250,19 @@ export function TerminalPanel({
         const ws = socket.current;
         if (ws?.readyState === WebSocket.OPEN && !replaying.current) ws.send(data);
       };
-      term.onData((data) => send(encoder.encode(data)));
+      term.onData((data) => {
+        if (data === "\r") {
+          const typed = line.current;
+          line.current = "";
+          // In a full-screen program such as vim, Enter is not the shell's.
+          const command = typed !== null && term.buffer.active.type === "normal" ? expander.current?.(typed) : null;
+          // Ctrl+U first: the shell drops the alias it echoed, then shows and keeps the real command.
+          if (command) return send(encoder.encode(`${KILL_LINE}${command}\r`));
+        } else {
+          line.current = followLine(line.current, data);
+        }
+        send(encoder.encode(data));
+      });
       // Mouse reports for programs such as htop or vim are bytes, not text.
       term.onBinary((data) => send(Uint8Array.from(data, (char) => char.charCodeAt(0))));
       term.onResize(({ cols, rows }) => {
@@ -309,6 +339,13 @@ export function TerminalPanel({
     terminal.current?.focus();
   };
 
+  const type = useCallback((text: string) => {
+    const ws = socket.current;
+    if (ws?.readyState === WebSocket.OPEN && !replaying.current) ws.send(encoder.encode(text));
+    line.current = "";
+    terminal.current?.focus();
+  }, []);
+
   const label =
     status === "connecting"
       ? m.connecting
@@ -362,7 +399,14 @@ export function TerminalPanel({
         </p>
       ) : null}
 
-      <div ref={host} onClick={() => terminal.current?.focus()} className="min-h-0 flex-1 bg-[#0c0c0f] p-2" />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={host} onClick={() => terminal.current?.focus()} className="min-h-0 flex-1 bg-[#0c0c0f] p-2" />
+        {Overlay ? (
+          <div className="absolute top-2 right-5 z-10 max-w-[45%]">
+            <Overlay type={type} connected={status === "connected"} />
+          </div>
+        ) : null}
+      </div>
 
       <p className={`${DATA} border-t border-rule px-3 py-1.5 text-mut`}>{m.shortcuts}</p>
     </section>
