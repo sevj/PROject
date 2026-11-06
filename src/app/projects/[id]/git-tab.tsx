@@ -1,14 +1,20 @@
+import Link from "next/link";
+import { Suspense } from "react";
 import type { Messages } from "@/i18n";
 import { weekLabels } from "@/lib/git-activity";
 import { formatAge, type RegistryRow, runningCount } from "@/lib/registry";
 import { parseRemote } from "@/lib/remote";
-import { type GitDetails, HISTORY_WEEKS } from "@/server/scan/git";
+import type { MergeRequest, MergeRequestsView } from "@/server/gitlab";
+import { type GitDetails, HISTORY_WEEKS, WORK_DAYS } from "@/server/scan/git";
 import { GitFacts } from "../../project-facts";
-import { BADGE, CARD, DATA, SECTION_TITLE } from "../../ui";
+import { BADGE, BADGE_ALERT, CARD, DATA, LINK, SECTION_TITLE } from "../../ui";
 import { CheckOutAllRemotes, CheckOutRemote, CleanUpBranches, FetchControl, NewBranch, PullButton, SwitchBranch } from "./branch-actions";
 import { CommitChart } from "./commit-chart";
 import { CommitList } from "./commit-list";
 import { StashDiffLink, WorkingDiffLink } from "./diff-links";
+
+export const GIT_SECTIONS = ["general", "commits", "branches", "edits", "pr"] as const;
+export type GitSection = (typeof GIT_SECTIONS)[number];
 
 const COLUMNS = "grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]";
 
@@ -24,6 +30,7 @@ function Changes({ details, projectId, messages }: { details: GitDetails; projec
   return (
     <section className={CARD}>
       <h2 className={`${SECTION_TITLE} mb-1`}>{m.changes(details.dirtyCount)}</h2>
+      {details.dirtyCount === 0 ? <p className="text-mut">{m.noChanges}</p> : null}
       <div className={LIST}>
         {details.changes.map((file) => (
           <div key={`${file.path}${file.from}`} className="flex items-baseline justify-between gap-3 border-b border-rule py-1.5 last:border-b-0">
@@ -77,6 +84,7 @@ function Stashes({ details, projectId, now, messages }: { details: GitDetails; p
   return (
     <section className={CARD}>
       <h2 className={`${SECTION_TITLE} mb-1`}>{messages.gitTab.stashes(details.stashes.length)}</h2>
+      {details.stashes.length === 0 ? <p className="text-mut">{messages.gitTab.noStashes}</p> : null}
       <div className={LIST}>
         {details.stashes.map((stash) => (
           <div key={stash.ref} className="border-b border-rule py-[7px] last:border-b-0">
@@ -244,47 +252,213 @@ function Tags({ details, now, messages }: { details: GitDetails; now: number; me
   );
 }
 
+function Workers({ details, now, messages }: { details: GitDetails; now: number; messages: Messages }) {
+  const m = messages.gitTab;
+  return (
+    <section className={CARD}>
+      <h2 className={`${SECTION_TITLE} mb-1`}>{m.workers}</h2>
+      <p className={`${DATA} pb-2 text-mut`}>{m.workersHint(WORK_DAYS)}</p>
+      {details.workers.length === 0 ? <p className="text-mut">{m.noWorkers(WORK_DAYS)}</p> : null}
+      <div className="grid gap-x-8 md:grid-cols-2">
+        {details.workers.map((person) => (
+          <div key={person.name} className="min-w-0 border-b border-rule py-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0 truncate font-semibold">{person.name}</span>
+              <span className={`${DATA} shrink-0 text-mut`}>{formatAge(person.at, now, messages.age)}</span>
+            </div>
+            {person.branches.map((branch) => (
+              <div key={branch.name} className="pt-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className={`${DATA} min-w-0 font-medium break-words`}>
+                    {branch.name}
+                    {branch.remote ? null : <span className={`${BADGE} ml-2`}>{m.localOnly}</span>}
+                  </span>
+                  <span className={`${DATA} shrink-0 text-mut`}>{formatAge(branch.at, now, messages.age)}</span>
+                </div>
+                {branch.subject ? <div className="truncate text-mut" title={branch.subject}>{branch.subject}</div> : null}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MergeRequestRow({ request, sign, now, messages }: { request: MergeRequest; sign: string; now: number; messages: Messages }) {
+  const m = messages.gitTab;
+  const failed = request.pipeline?.status === "failed";
+  return (
+    <div className="border-b border-rule py-[7px] last:border-b-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <a href={request.url} target="_blank" rel="noreferrer" className={`${LINK} min-w-0 break-words`}>
+          <span className={DATA}>
+            {sign}
+            {request.iid}
+          </span> {request.title}
+        </a>
+        <span className={`${DATA} shrink-0 text-mut`}>
+          {m.prUpdated(formatAge(request.mergedAt ?? request.updatedAt, now, messages.age))}
+        </span>
+      </div>
+      <div className={`${DATA} mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-mut`}>
+        <span>{request.author}</span>
+        {request.mine ? <span className={BADGE}>{m.prMine}</span> : null}
+        <span className="min-w-0 break-words">
+          {request.source} → {request.target}
+        </span>
+        {request.draft ? <span className={BADGE}>{m.prDraft}</span> : null}
+        {request.conflicts ? <span className={BADGE_ALERT}>{m.prConflicts}</span> : null}
+        {request.pipeline && request.mergedAt === null ? (
+          <a href={request.pipeline.url} target="_blank" rel="noreferrer" className={failed ? BADGE_ALERT : BADGE}>
+            {m.prPipeline(request.pipeline.status)}
+          </a>
+        ) : null}
+        {request.comments > 0 && request.mergedAt === null ? <span>{m.prComments(request.comments)}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+async function MergeRequests({ view, now, messages }: { view: Promise<MergeRequestsView>; now: number; messages: Messages }) {
+  const m = messages.gitTab;
+  const read = await view;
+  const forgeName = read.forge === "github" ? "GitHub" : "GitLab";
+  const sign = read.forge === "github" ? "#" : "!";
+  if ("problem" in read) {
+    const { problem, host } = read;
+    const text = problem === "noRemote" ? m.prProblems.noRemote : m.prProblems[problem](host ?? "", forgeName);
+    return (
+      <section className={CARD}>
+        <h2 className={`${SECTION_TITLE} mb-1`}>{m.prTitle}</h2>
+        <p className={`pb-2 ${problem === "noRemote" ? "text-mut" : "text-alert"}`}>{text}</p>
+        {problem === "noRemote" ? null : (
+          <Link href={`/settings#${read.forge}`} className={LINK}>
+            {m.prSettings}
+          </Link>
+        )}
+      </section>
+    );
+  }
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <section className={CARD}>
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-4">
+          <h2 className={SECTION_TITLE}>{m.prOpenTitle(read.open.length, read.forge === "github")}</h2>
+          <a href={read.listUrl} target="_blank" rel="noreferrer" className={`${DATA} ${LINK}`}>
+            {m.prOpen(forgeName)}
+          </a>
+        </div>
+        {read.open.length === 0 ? <p className="text-mut">{m.prNone}</p> : null}
+        {read.open.map((request) => (
+          <MergeRequestRow key={request.iid} request={request} sign={sign} now={now} messages={messages} />
+        ))}
+      </section>
+      <section className={CARD}>
+        <h2 className={`${SECTION_TITLE} mb-1`}>{m.prMergedTitle}</h2>
+        {read.merged.map((request) => (
+          <MergeRequestRow key={request.iid} request={request} sign={sign} now={now} messages={messages} />
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function SectionNav({
+  section,
+  row,
+  details,
+  messages,
+}: {
+  section: GitSection;
+  row: RegistryRow;
+  details: GitDetails | null;
+  messages: Messages;
+}) {
+  const m = messages.gitTab;
+  const counts: Partial<Record<GitSection, number | null>> = {
+    commits: row.commitCount,
+    branches: details ? details.branchCount + details.remoteBranchCount : row.branchCount,
+    edits: details ? details.dirtyCount + details.stashes.length : null,
+  };
+  return (
+    <nav aria-label={m.sections} className={`${DATA} mb-4 flex flex-wrap gap-x-5 gap-y-1`}>
+      {GIT_SECTIONS.map((item) => {
+        const count = counts[item];
+        return (
+          <Link
+            key={item}
+            href={`/projects/${row.id}?tab=git${item === "general" ? "" : `&git=${item}`}`}
+            scroll={false}
+            aria-current={item === section ? "page" : undefined}
+            className="-mx-1 inline-flex min-h-8 items-center gap-1.5 px-1 text-mut hover:text-ink aria-[current=page]:bg-sel aria-[current=page]:text-ink"
+          >
+            {m.sectionNames[item]}
+            {count ? <span className="text-mut">{count}</span> : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 /** `details` is null when the repository was not read: what the last refresh stored is still there. */
 export function GitTab({
   row,
   now,
   details,
   fetchRemote,
+  section,
+  mergeRequests,
   messages,
 }: {
   row: RegistryRow;
   now: number;
   details: GitDetails | null;
   fetchRemote: string | null;
+  section: GitSection;
+  /** Only asked for when the PR part is open: it calls GitLab. */
+  mergeRequests: Promise<MergeRequestsView> | null;
   messages: Messages;
 }) {
   const hasHistory = details !== null && details.authors.length > 0;
+  const notRead = (
+    <section className={CARD}>
+      <p className="text-mut">{row.hasGit ? messages.gitTab.notRead : messages.sheet.noActivity}</p>
+    </section>
+  );
   return (
-    <div className="grid gap-4">
-      <div className={COLUMNS}>
-        <section className={CARD}>
-          {hasHistory ? (
-            <CommitChart
-              authors={details.authors}
-              lines={details.lines}
-              labels={weekLabels(now, HISTORY_WEEKS, messages.gitTab.dateLocale)}
-            />
-          ) : (
-            <>
-              <h2 className={`${SECTION_TITLE} mb-3`}>{messages.gitTab.commitsByAuthor}</h2>
-              <p className="text-mut">{details === null && row.hasGit ? messages.gitTab.notRead : messages.sheet.noActivity}</p>
-            </>
-          )}
-        </section>
-        <div className="grid min-w-0 gap-4">
-          <GitFacts row={row} now={now} card />
-          {details !== null && details.unpushed.total > 0 ? <Unpushed details={details} now={now} messages={messages} /> : null}
-          {details !== null && details.dirtyCount > 0 ? <Changes details={details} projectId={row.id} messages={messages} /> : null}
-          {details !== null && details.stashes.length > 0 ? <Stashes details={details} projectId={row.id} now={now} messages={messages} /> : null}
+    <>
+      <SectionNav section={section} row={row} details={details} messages={messages} />
+
+      {section === "general" ? (
+        <div className="grid gap-4">
+          <div className={COLUMNS}>
+            <section className={CARD}>
+              {hasHistory ? (
+                <CommitChart
+                  authors={details.authors}
+                  lines={details.lines}
+                  labels={weekLabels(now, HISTORY_WEEKS, messages.gitTab.dateLocale)}
+                />
+              ) : (
+                <>
+                  <h2 className={`${SECTION_TITLE} mb-3`}>{messages.gitTab.commitsByAuthor}</h2>
+                  <p className="text-mut">{details === null && row.hasGit ? messages.gitTab.notRead : messages.sheet.noActivity}</p>
+                </>
+              )}
+            </section>
+            <div className="grid min-w-0 gap-4">
+              <GitFacts row={row} now={now} card />
+              {details !== null && details.unpushed.total > 0 ? <Unpushed details={details} now={now} messages={messages} /> : null}
+            </div>
+          </div>
+          {details !== null ? <Workers details={details} now={now} messages={messages} /> : null}
         </div>
-      </div>
-      {details !== null ? (
-        <div className={COLUMNS}>
+      ) : null}
+
+      {section === "commits" ? (
+        details !== null ? (
           <section className={CARD}>
             <h2 className={`${SECTION_TITLE} mb-1`}>
               {messages.gitTab.recentCommitsOn(currentBranchLabel(details, row, messages))}
@@ -300,19 +474,53 @@ export function GitTab({
               now={now}
             />
           </section>
-          <div className="grid min-w-0 gap-4">
+        ) : (
+          notRead
+        )
+      ) : null}
+
+      {section === "branches" ? (
+        details !== null ? (
+          <div className="grid items-start gap-4 lg:grid-cols-2">
             <section className={CARD}>
               <Branches details={details} fetchRemote={fetchRemote} row={row} now={now} messages={messages} />
             </section>
-            {details.remoteBranchCount > 0 ? (
-              <RemoteBranches details={details} row={row} now={now} messages={messages} />
-            ) : null}
-            <section className={CARD}>
-              <Tags details={details} now={now} messages={messages} />
-            </section>
+            <div className="grid min-w-0 gap-4">
+              {details.remoteBranchCount > 0 ? (
+                <RemoteBranches details={details} row={row} now={now} messages={messages} />
+              ) : null}
+              <section className={CARD}>
+                <Tags details={details} now={now} messages={messages} />
+              </section>
+            </div>
           </div>
-        </div>
+        ) : (
+          notRead
+        )
       ) : null}
-    </div>
+
+      {section === "edits" ? (
+        details !== null ? (
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <Changes details={details} projectId={row.id} messages={messages} />
+            <Stashes details={details} projectId={row.id} now={now} messages={messages} />
+          </div>
+        ) : (
+          notRead
+        )
+      ) : null}
+
+      {section === "pr" && mergeRequests ? (
+        <Suspense
+          fallback={
+            <section className={CARD}>
+              <p className="text-mut">{messages.gitTab.prLoading}</p>
+            </section>
+          }
+        >
+          <MergeRequests view={mergeRequests} now={now} messages={messages} />
+        </Suspense>
+      ) : null}
+    </>
   );
 }

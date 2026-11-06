@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { ENGINES } from "../../lib/db-engines";
 import type { CommandAlias } from "../../lib/aliases";
 import type { JournalConfig } from "../../lib/journal";
+import type { GithubToken, GitlabToken } from "../settings";
 import type { Release } from "../../lib/versions";
 import {
   type AnySQLiteColumn,
@@ -228,7 +229,7 @@ export const claudeTranscripts = sqliteTable("claude_transcripts", {
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   value: text("value", { mode: "json" })
-    .$type<{ locale?: string; ideCommands: Record<string, string>; terminalCommand: string; journal?: JournalConfig; aliases?: CommandAlias[] }>()
+    .$type<{ locale?: string; ideCommands: Record<string, string>; terminalCommand: string; journal?: JournalConfig; aliases?: CommandAlias[]; gitlabTokens?: GitlabToken[]; githubTokens?: GithubToken[] }>()
     .notNull(),
 });
 

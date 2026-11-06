@@ -18,9 +18,11 @@ type Props = {
   aliases: CommandAlias[];
   stacks: string[];
   tags: { name: string; count: number }[];
+  /** Rendered by the page: its accounts are read on the server. */
+  forges: React.ReactNode;
 };
 
-export function SettingsForm({ locale, ideCommands, terminalCommand, aliases, stacks, tags }: Props) {
+export function SettingsForm({ locale, ideCommands, terminalCommand, aliases, stacks, tags, forges }: Props) {
   const messages = useMessages();
   const m = messages.settings;
   const flash = useFlash();
@@ -94,6 +96,8 @@ export function SettingsForm({ locale, ideCommands, terminalCommand, aliases, st
             }}
           />
         </section>
+
+        {forges}
 
         <section className={`${CARD} grid gap-2`}>
           <h2 className={SECTION_TITLE}>{m.tags}</h2>

@@ -16,6 +16,8 @@ import {
   setStatus,
 } from "@/server/classification";
 import { getDb } from "@/server/db/client";
+import { normalizeHost, removeGitlabToken, saveGitlabToken } from "@/server/gitlab";
+import { removeGithubToken, saveGithubToken } from "@/server/github";
 import { type DirectoryListing, listDirectories } from "@/server/directory-browser";
 import { serverMessages } from "@/server/i18n";
 import type { ProjectStatus } from "@/server/db/schema";
@@ -409,6 +411,36 @@ export async function saveSettingsForm(form: Record<string, string>): Promise<st
   });
   refreshAll();
   return null;
+}
+
+/** The token never comes back: only who it belongs to, or what is wrong with it. */
+export async function saveGitlabTokenForm(
+  host: string,
+  token: string,
+): Promise<{ host: string; user: string } | { problem: "host" | "token" | "refused" | "unreachable" }> {
+  const saved = await saveGitlabToken(getDb(), String(host ?? ""), String(token ?? ""));
+  if ("problem" in saved) return saved;
+  revalidatePath("/settings");
+  return { host: normalizeHost(String(host))!, user: saved.user };
+}
+
+export async function removeGitlabTokenForm(host: string): Promise<void> {
+  removeGitlabToken(getDb(), String(host ?? ""));
+  revalidatePath("/settings");
+}
+
+export async function saveGithubTokenForm(
+  owner: string,
+  token: string,
+): Promise<{ owner: string; user: string } | { problem: "host" | "token" | "refused" | "unreachable" }> {
+  const saved = await saveGithubToken(getDb(), String(owner ?? ""), String(token ?? ""));
+  if (!("problem" in saved)) revalidatePath("/settings");
+  return saved;
+}
+
+export async function removeGithubTokenForm(owner: string): Promise<void> {
+  removeGithubToken(getDb(), String(owner ?? ""));
+  revalidatePath("/settings");
 }
 
 /** Shown in local consoles: read when one opens, so a change in the settings reaches the next console. */

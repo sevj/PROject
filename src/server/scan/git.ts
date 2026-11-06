@@ -288,6 +288,8 @@ export type GitDetails = {
   trackedChangeCount: number;
   tags: TagDetail[];
   tagCount: number;
+  /** Who moved which branch lately, local and remote ones together. */
+  workers: Worker[];
 };
 
 type LogRecord = { fields: string[]; insertions: number; deletions: number };
@@ -537,6 +539,54 @@ export async function readRemoteBranches(path: string, locals: BranchDetail[]): 
   return parseRemoteBranches(output ?? "", locals);
 }
 
+/** How far back a branch still counts as being worked on. */
+export const WORK_DAYS = 30;
+
+export type WorkBranch = { name: string; at: number; subject: string; local: boolean; remote: boolean };
+export type Worker = { name: string; at: number; branches: WorkBranch[] };
+
+/**
+ * From a `for-each-ref` over local and remote branches: who made the last commit of each
+ * branch moved within WORK_DAYS. A branch here and on a remote under the same name is one
+ * branch, credited to whoever moved it last.
+ */
+export function buildWorkers(output: string, nowMs: number, days = WORK_DAYS): Worker[] {
+  const since = nowMs - days * 24 * 3600 * 1000;
+  const branches = new Map<string, WorkBranch & { author: string }>();
+  for (const line of output.split("\n").filter(Boolean)) {
+    const [ref, symref, timestamp, author, subject] = line.split("\0");
+    if (symref || !timestamp || !author) continue;
+    const local = ref.startsWith("refs/heads/");
+    const rest = ref.replace(/^refs\/(?:heads|remotes)\//, "");
+    const name = local ? rest : rest.slice(rest.indexOf("/") + 1);
+    const at = Number(timestamp) * 1000;
+    const known = branches.get(name);
+    const flags = { local: local || (known?.local ?? false), remote: !local || (known?.remote ?? false) };
+    if (!known || at > known.at) branches.set(name, { name, at, subject: subject ?? "", author, ...flags });
+    else branches.set(name, { ...known, ...flags });
+  }
+  // The same person often commits as both "Sevj" and "sevj". The most recent spelling stays.
+  const people = new Map<string, Worker>();
+  for (const { author, ...branch } of [...branches.values()].sort((a, b) => b.at - a.at)) {
+    if (branch.at < since) continue;
+    const key = author.toLowerCase();
+    const person = people.get(key) ?? { name: author, at: branch.at, branches: [] };
+    person.branches.push(branch);
+    people.set(key, person);
+  }
+  return [...people.values()];
+}
+
+async function readWorkers(path: string, nowMs: number): Promise<Worker[]> {
+  const output = await gitOptional(path, [
+    "for-each-ref",
+    "--format=%(refname)%00%(symref)%00%(committerdate:unix)%00%(authorname)%00%(contents:subject)",
+    "refs/heads",
+    "refs/remotes",
+  ]);
+  return buildWorkers(output ?? "", nowMs);
+}
+
 export type CommitPage = { commits: CommitDetail[]; hasMore: boolean };
 
 /**
@@ -758,10 +808,11 @@ export async function readGitDetails(path: string, now = new Date()): Promise<Gi
     gitOptional(path, ["status", "--porcelain=v1", "-z"]),
     gitOptional(path, ["stash", "list", "--format=%gd%x00%ct%x00%gs"]),
   ]);
-  const [allRemote, remotes, unpushed] = await Promise.all([
+  const [allRemote, remotes, unpushed, workers] = await Promise.all([
     readRemoteBranches(path, allBranches),
     readRemotes(path),
     readUnpushed(path),
+    readWorkers(path, now.getTime()),
   ]);
 
   const allTags = parseTags(tags ?? "");
@@ -789,5 +840,6 @@ export async function readGitDetails(path: string, now = new Date()): Promise<Gi
     remoteBranchCount: allRemote.length,
     tags: allTags.slice(0, TAG_LIMIT),
     tagCount: allTags.length,
+    workers,
   };
 }

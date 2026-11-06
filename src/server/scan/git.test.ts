@@ -8,6 +8,7 @@ import {
   attachPatches,
   bucketWeeks,
   buildAuthorHistory,
+  buildWorkers,
   HISTORY_WEEKS,
   MAX_NAMED_AUTHORS,
   parseBranches,
@@ -235,6 +236,7 @@ describe("readGitDetails", () => {
       hasMoreCommits: false,
       tags: [],
       tagCount: 0,
+      workers: [],
     });
     expect(await lines).toEqual([]);
   });
@@ -312,6 +314,43 @@ describe("parseRemoteBranches", () => {
     const output = [line("origin/HEAD", "refs/remotes/origin/main"), line("origin/main"), line("origin/other-name"), line("origin/feat/new")].join("\n");
     expect(parseRemoteBranches(output, [...local, ...tracked])).toEqual([
       { name: "origin/feat/new", at: 100_000, author: "Ann", subject: "s" },
+    ]);
+  });
+});
+
+describe("buildWorkers", () => {
+  const DAY = 24 * 3600;
+  const now = 100 * DAY * 1000;
+  const line = (ref: string, daysAgo: number, author: string, symref = "") =>
+    [ref, symref, String(100 * DAY - daysAgo * DAY), author, `s ${ref}`].join("\0");
+
+  it("credits each recent branch to its last author, most recent first", () => {
+    const output = [
+      line("refs/heads/main", 1, "Ann"),
+      line("refs/remotes/origin/main", 3, "Bob"),
+      line("refs/remotes/origin/HEAD", 1, "Ann", "refs/remotes/origin/main"),
+      line("refs/remotes/origin/feat/login", 2, "bob"),
+      line("refs/heads/old", 60, "Ann"),
+      line("refs/remotes/upstream/fix", 5, "Cleo"),
+    ].join("\n");
+    expect(buildWorkers(output, now)).toEqual([
+      {
+        name: "Ann",
+        at: now - DAY * 1000,
+        branches: [{ name: "main", at: now - DAY * 1000, subject: "s refs/heads/main", local: true, remote: true }],
+      },
+      {
+        name: "bob",
+        at: now - 2 * DAY * 1000,
+        branches: [
+          { name: "feat/login", at: now - 2 * DAY * 1000, subject: "s refs/remotes/origin/feat/login", local: false, remote: true },
+        ],
+      },
+      {
+        name: "Cleo",
+        at: now - 5 * DAY * 1000,
+        branches: [{ name: "fix", at: now - 5 * DAY * 1000, subject: "s refs/remotes/upstream/fix", local: false, remote: true }],
+      },
     ]);
   });
 });

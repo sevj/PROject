@@ -22,6 +22,7 @@ import { getProject } from "@/server/registry";
 import { listEnvironments, listServers, readSuggestions } from "@/server/remote-servers";
 import { listVpns } from "@/server/vpn";
 import { readGitDetails, readRecentCommits } from "@/server/scan/git";
+import { readProjectRequests } from "@/server/github";
 import { ClaudeConsoleButton } from "../../claude-console-button";
 import { LoadingFallback } from "../../loading-fallback";
 import { ProjectDescription } from "../../project-description";
@@ -41,7 +42,7 @@ import { EnvTab } from "./env-tab";
 import { listHttp } from "@/server/http-requests";
 import { HttpTab } from "./http-tab";
 import { EnvironmentsTab } from "./environments-tab";
-import { GitTab } from "./git-tab";
+import { GIT_SECTIONS, GitTab } from "./git-tab";
 import { MarkdownDoc } from "./markdown-doc";
 import { readDependencies } from "@/server/dependencies";
 import { ConfigShare } from "./config-share";
@@ -92,8 +93,9 @@ function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) 
 async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   await connection();
   const { id } = await params;
-  const { doc, tab: requestedTab } = await searchParams;
+  const { doc, tab: requestedTab, git: requestedGit } = await searchParams;
   const tab: Tab = TABS.find((item) => item === requestedTab) ?? "general";
+  const gitSection = GIT_SECTIONS.find((item) => item === requestedGit) ?? "general";
   const projectId = Number(id);
   const project = Number.isInteger(projectId) ? getProject(getDb(), projectId) : null;
   if (!project) notFound();
@@ -270,7 +272,7 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
             />
           ) : null}
 
-          {tab === "git" ? <GitTab row={row} now={now} details={gitDetails} fetchRemote={getFetchRemote(getDb(), projectId)} messages={messages} /> : null}
+          {tab === "git" ? <GitTab row={row} now={now} details={gitDetails} fetchRemote={getFetchRemote(getDb(), projectId)} section={gitSection} mergeRequests={gitSection === "pr" ? readProjectRequests(getDb(), row.remoteUrl) : null} messages={messages} /> : null}
 
           {tab === "docker" ? (
             <DockerTab
