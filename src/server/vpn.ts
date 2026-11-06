@@ -1,5 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -18,6 +19,7 @@ import {
   isOneLine,
   isOrganization,
   isOvpnPath,
+  isWireguardPath,
   isVpnUsername,
   NM_ACTIVE_ARGUMENTS,
   nmDeleteArguments,
@@ -30,13 +32,14 @@ import {
   nmJournalArguments,
   nmSetupArguments,
   nmUpArguments,
-  ovpnFilesAmong,
+  nmWireguardSetupArguments,
   ovpnForImport,
   parseImportedUuid,
   parseNmActive,
   formatGpRoutes,
   parseGpRoutes,
   parseGpSaml,
+  parseDnsDomains,
   parseNordStatus,
   readGpLog,
   readSudoLog,
@@ -49,6 +52,7 @@ import {
   sudoVpnPaths,
   vpnSlug,
   type VpnState,
+  wireguardInterface,
   withoutCookies,
 } from "@/lib/vpn";
 import type { Db } from "./db/client";
@@ -58,7 +62,7 @@ import { decryptSecret, encryptSecret } from "./secrets";
 import { type GpDriver, realGpDriver } from "./vpn-gp";
 import { realSudoDriver, type SudoDriver, sudoLogFile } from "./vpn-sudo";
 
-export type VpnKind = "openvpn" | "sudo_openvpn" | "nordlayer" | "globalprotect";
+export type VpnKind = "openvpn" | "sudo_openvpn" | "nordlayer" | "globalprotect" | "wireguard";
 
 export type VpnInput = {
   name: string;
@@ -71,6 +75,7 @@ export type VpnInput = {
   gateway: string | null;
   organization?: string | null;
   routes?: string | null;
+  dnsDomains?: string | null;
 };
 
 /** What leaves the server: never a password, or the profile's id. */
@@ -83,6 +88,7 @@ export type VpnView = {
   gateway: string | null;
   organization: string | null;
   routes: string | null;
+  dnsDomains: string | null;
   hasPassword: boolean;
   tokenAppended: boolean;
   state: VpnState;
@@ -103,6 +109,7 @@ export type VpnProblem =
   | "gatewayInvalid"
   | "portalInvalid"
   | "routesInvalid"
+  | "domainsInvalid"
   | "gpSamlMissing"
   | "samlFailed"
   | "organizationInvalid"
@@ -115,6 +122,8 @@ export type VpnProblem =
   | "importFailed"
   | "authRefused"
   | "connectFailed"
+  | "noAnswer"
+  | "tunnelFailed"
   | "disconnectFailed"
   | "timeout";
 
@@ -147,7 +156,7 @@ async function gpState(row: Row, gp: GpDriver): Promise<VpnState> {
 
 async function readStates(rows: Row[], run: CommandRunner, driver: SudoDriver, gp: GpDriver) {
   const [nm, nord, sudo, globalprotect] = await Promise.all([
-    rows.some(({ kind }) => kind === "openvpn") ? run("nmcli", NM_ACTIVE_ARGUMENTS) : null,
+    rows.some(({ kind }) => kind === "openvpn" || kind === "wireguard") ? run("nmcli", NM_ACTIVE_ARGUMENTS) : null,
     rows.some(({ kind }) => kind === "nordlayer") ? run("nordlayer", ["status"]) : null,
     Promise.all(
       rows.filter(({ kind }) => kind === "sudo_openvpn").map(async (row) => [row.id, await driver.state(pathsOf(row, driver.uid).socket)] as const),
@@ -203,6 +212,7 @@ export async function listVpns(db: Db, run: CommandRunner = runCommand, driver: 
     gateway: row.gateway,
     organization: row.organization,
     routes: row.routes,
+    dnsDomains: row.dnsDomains,
     hasPassword: row.passwordSecret !== null,
     tokenAppended: row.tokenAppended,
     state: stateOf(row, states),
@@ -265,6 +275,52 @@ async function importCopy(file: string, run: CommandRunner) {
   }
 }
 
+/**
+ * Under a name NetworkManager makes the interface's: the user's file keeps its own. It holds the
+ * private key, so the copy lies in a folder only this user can open, and goes at once.
+ */
+async function importWireguardCopy(file: string, slug: string, run: CommandRunner) {
+  const folder = await mkdtemp(join(tmpdir(), "pm-wg-"));
+  try {
+    const copy = join(folder, `${wireguardInterface(slug, randomBytes(2).toString("hex"))}.conf`);
+    await writeFile(copy, await readFile(file, "utf8"), { mode: 0o600 });
+    return await run("nmcli", nmImportArguments(copy, "wireguard"));
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+
+async function saveWireguard(db: Db, name: string, current: Row | null, raw: VpnInput, run: CommandRunner, home: string): Promise<{ id: number } | VpnFailure> {
+  const domains = parseDnsDomains(typeof raw.dnsDomains === "string" ? raw.dnsDomains : "");
+  if (!domains) return fail("domainsInvalid");
+  let uuid = current?.connectionUuid ?? null;
+  let configPath = current?.configPath ?? null;
+  if (!current) {
+    configPath = text(raw.configPath);
+    if (!configPath || !isWireguardPath(configPath)) return fail("fileInvalid");
+    const file = expandHome(configPath, home);
+    if (!existsSync(file)) return fail("fileMissing");
+    const imported = await importWireguardCopy(file, vpnSlug(name), run);
+    if (imported.notInstalled) return fail("nmcliMissing");
+    uuid = imported.code === 0 ? parseImportedUuid(imported.stdout) : null;
+    if (!uuid) return fail("importFailed", lastLine(imported.stderr || imported.stdout));
+  }
+  const setup = await run("nmcli", nmWireguardSetupArguments(uuid ?? "", name, domains));
+  if (setup.code !== 0) {
+    // Left there, it would come up on every boot with no way to it from here.
+    if (!current && uuid) await run("nmcli", nmDeleteArguments(uuid));
+    return fail("importFailed", lastLine(setup.stderr));
+  }
+  const dnsDomains = domains.length > 0 ? domains.join(" ") : null;
+  if (current) {
+    db.update(vpns).set({ name, dnsDomains }).where(eq(vpns.id, current.id)).run();
+    return { id: current.id };
+  }
+  // NetworkManager brings an imported tunnel up at once: connecting is for the user to ask.
+  await run("nmcli", nmDownArguments(uuid ?? ""));
+  return { id: db.insert(vpns).values({ name, kind: "wireguard", configPath, connectionUuid: uuid, dnsDomains }).returning({ id: vpns.id }).get().id };
+}
+
 export async function saveVpn(db: Db, id: number | null, raw: VpnInput, run: CommandRunner = runCommand, home = homedir()): Promise<{ id: number } | VpnFailure> {
   const name = text(raw.name);
   if (!name) return fail("nameMissing");
@@ -275,6 +331,8 @@ export async function saveVpn(db: Db, id: number | null, raw: VpnInput, run: Com
   const password = typeof raw.password === "string" ? raw.password : "";
   if (!isOneLine(password)) return fail("passwordInvalid");
   const passwordSecret = password !== "" ? encryptSecret(password) : (current?.passwordSecret ?? null);
+
+  if ((current?.kind ?? raw.kind) === "wireguard") return saveWireguard(db, name, current ?? null, raw, run, home);
 
   if ((current?.kind ?? raw.kind) === "nordlayer") {
     const gateway = text(raw.gateway);
@@ -427,6 +485,13 @@ export async function connectVpn(
   const row = db.select().from(vpns).where(eq(vpns.id, id)).get();
   if (!row) return fail("gone");
   if (row.kind === "globalprotect") return connectGlobalProtect(db, row, run, gp, now, pause);
+  if (row.kind === "wireguard") {
+    // Its keys are in the profile: nothing to type, nor any password to blame.
+    const ran = await run("nmcli", nmUpArguments(row.connectionUuid ?? "", CONNECT_WAIT_SECONDS), undefined, CONNECT_TIMEOUT_MS);
+    if (ran.notInstalled) return fail("nmcliMissing");
+    if (ran.code === null) return fail("timeout");
+    return ran.code === 0 ? { ok: true } : fail("tunnelFailed", lastLine(ran.stderr || ran.stdout));
+  }
   if (row.kind === "nordlayer") {
     const ran = await run("nordlayer", ["--assume-yes", "connect", row.gateway ?? ""], undefined, CONNECT_TIMEOUT_MS);
     if (ran.notInstalled) return fail("nordlayerMissing");
@@ -501,15 +566,4 @@ export async function deleteVpn(db: Db, id: number, run: CommandRunner = runComm
   db.update(remoteServers).set({ vpnId: null }).where(eq(remoteServers.vpnId, id)).run();
   db.delete(vpns).where(eq(vpns.id, id)).run();
   return null;
-}
-
-/** Where such files usually lie: nothing deep, and only their names. */
-export async function readOvpnSuggestions(home = homedir()): Promise<string[]> {
-  const found = await Promise.all(
-    ["", "Projects", "Downloads", "Téléchargements"].map(async (folder) => {
-      const files = await readdir(join(home, folder)).catch(() => [] as string[]);
-      return ovpnFilesAmong(files).map((file) => `~/${folder ? `${folder}/` : ""}${file}`);
-    }),
-  );
-  return found.flat();
 }

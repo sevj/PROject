@@ -8,8 +8,7 @@ import type { VpnState } from "@/lib/vpn";
 import type { VpnStatus } from "@/server/vpn";
 import { useFlash } from "../flash";
 import { BUTTON_SMALL, DATA } from "../ui";
-import { stopVpn } from "../vpn-actions";
-import { VpnConnectButton } from "./vpn-controls";
+import { stopVpnSafely, VpnConnectButton } from "./vpn-controls";
 import { VPN_CHANGED } from "./vpn-events";
 
 export { announceVpnChange } from "./vpn-events";
@@ -89,7 +88,7 @@ export function VpnTopbar() {
   const stop = async ({ id, name }: VpnStatus, quietly = false) => {
     setStopping(id);
     try {
-      const failure = await stopVpn(id);
+      const failure = await stopVpnSafely(id);
       if (failure) {
         const reason = m.problems[failure.problem];
         flash("error", failure.detail ? `${reason} (${failure.detail})` : reason);

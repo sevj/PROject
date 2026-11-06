@@ -1,14 +1,53 @@
 "use client";
 
+import { asksPassword } from "@/lib/vpn";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import type { Messages } from "@/i18n";
 import { useMessages } from "@/i18n/provider";
 import type { VpnFailure, VpnStatus, VpnView } from "@/server/vpn";
-import { useFlash } from "../flash";
+import { type Flash, useFlash } from "../flash";
 import { Modal, useConfirm } from "../modal";
 import { BADGE, BADGE_ALERT, BUTTON, BUTTON_PRIMARY, BUTTON_SMALL, FIELD } from "../ui";
 import { stopVpn } from "../vpn-actions";
 import { announceVpnChange } from "./vpn-events";
+
+/**
+ * Bringing a tunnel up changes the machine's network, and the browser then drops the requests it
+ * was waiting on, the one that asked for it included. What NetworkManager did is read again instead.
+ */
+export async function stateAfterLostAnswer(id: number): Promise<VpnStatus["state"] | null> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const statuses = (await (await fetch("/api/vpns/status", { cache: "no-store" })).json()) as VpnStatus[];
+      const state = statuses.find((status) => status.id === id)?.state ?? null;
+      if (state !== "connecting") return state;
+    } catch {
+      // Still settling: the next attempt says.
+    }
+  }
+  return null;
+}
+
+/** Said once the state is known, whatever the answer to the request became. */
+export function sayLostAnswer(state: VpnStatus["state"] | null, name: string, flash: Flash, m: Messages["vpn"]) {
+  if (state === "connected") flash("success", m.connected(name));
+  else flash("error", m.problems.noAnswer);
+}
+
+/**
+ * Cutting a tunnel changes the network too, and the browser drops the request on its way back:
+ * an error would then reach the page. The state read again says whether it went down.
+ */
+export async function stopVpnSafely(id: number): Promise<VpnFailure | null> {
+  try {
+    return await stopVpn(id);
+  } catch {
+    const state = await stateAfterLostAnswer(id);
+    return state === "off" || state === "lost" ? null : { problem: "disconnectFailed", detail: "" };
+  }
+}
 
 /** Connects on a click, asking only for what is not known: a token is typed each time. */
 export function VpnConnectButton({ vpn, vpns }: { vpn: VpnStatus; vpns: Pick<VpnStatus, "id" | "name" | "state">[] }) {
@@ -21,8 +60,7 @@ export function VpnConnectButton({ vpn, vpns }: { vpn: VpnStatus; vpns: Pick<Vpn
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const { confirm, confirmation } = useConfirm();
-  // NordLayer has its own login, and GlobalProtect shows Microsoft's in a window.
-  const asksHere = vpn.kind !== "nordlayer" && vpn.kind !== "globalprotect";
+  const asksHere = asksPassword(vpn.kind);
   const needsPassword = asksHere && !vpn.hasPassword;
   const needsToken = asksHere && vpn.tokenAppended;
 
@@ -40,7 +78,7 @@ export function VpnConnectButton({ vpn, vpns }: { vpn: VpnStatus; vpns: Pick<Vpn
       if ("problem" in result) say(result);
       else flash("success", m.connected(vpn.name));
     } catch {
-      flash("error", m.problems.connectFailed);
+      sayLostAnswer(await stateAfterLostAnswer(vpn.id), vpn.name, flash, m);
     } finally {
       setBusy(false);
       router.refresh();
@@ -58,7 +96,7 @@ export function VpnConnectButton({ vpn, vpns }: { vpn: VpnStatus; vpns: Pick<Vpn
       action: m.switchAction,
       onConfirm: async () => {
         for (const other of others) {
-          const failure = await stopVpn(other.id);
+          const failure = await stopVpnSafely(other.id);
           if (failure) return say(failure);
         }
         announceVpnChange();

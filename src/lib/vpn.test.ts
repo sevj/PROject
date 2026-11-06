@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editorKeepsIntact, formatGpRoutes, parseGpRoutes, gpRemovalCommand, gpRuleCommand, gpScript, gpSetupCommands, isOwnSudo, parseGpSaml, readGpLog, sudoGpCommand, sudoRuleAllows, withoutCookies, parseManagementState, readSudoLog, sudoOpenvpnCommand, sudoRemovalCommand, sudoRuleInPlace, sudoSetupCommands, sudoVpnPaths, vpnSlug, fullPassword, hasAuthFailure, isGateway, isOneLine, isOrganization, isOvpnPath, isVpnUsername, nordLoginArguments, NM_RELEASE_SECRET_SCRIPT, nmEditArguments, nmEditWorked, nmHoldSecretScript, nmSetupArguments, nmUpArguments, ovpnFilesAmong, ovpnForImport, parseImportedUuid, parseNmActive, parseNordStatus } from "./vpn";
+import { editorKeepsIntact, formatGpRoutes, parseGpRoutes, gpRemovalCommand, gpRuleCommand, gpScript, gpSetupCommands, isOwnSudo, parseGpSaml, readGpLog, sudoGpCommand, sudoRuleAllows, withoutCookies, parseManagementState, readSudoLog, sudoOpenvpnCommand, sudoRemovalCommand, sudoRuleInPlace, sudoSetupCommands, sudoVpnPaths, vpnSlug, fullPassword, hasAuthFailure, isGateway, isOneLine, isOrganization, isOvpnPath, isVpnUsername, nordLoginArguments, NM_RELEASE_SECRET_SCRIPT, nmEditArguments, nmEditWorked, nmHoldSecretScript, nmSetupArguments, nmUpArguments, nmWireguardSetupArguments, asksPassword, parseDnsDomains, wireguardInterface, isWireguardPath, ovpnForImport, parseImportedUuid, parseNmActive, parseNordStatus } from "./vpn";
 
 describe("what can be declared", () => {
   it("wants a .ovpn file, from the root or home", () => {
@@ -96,10 +96,6 @@ describe("parseNordStatus", () => {
     expect(parseNordStatus("Login: me\nVPN: Disconnected\n").state).toBe("off");
     expect(parseNordStatus("").state).toBe("off");
   });
-});
-
-describe("ovpnFilesAmong", () => {
-  it("offers only these", () => expect(ovpnFilesAmong(["b.ovpn", "a.OVPN", "x.txt"])).toEqual(["a.OVPN", "b.ovpn"]));
 });
 
 describe("OpenVPN through sudo", () => {
@@ -217,5 +213,38 @@ describe("GlobalProtect", () => {
     expect(script).toContain("CISCO_SPLIT_INC=1\n  CISCO_SPLIT_INC_0_ADDR=192.168.200.0\n  CISCO_SPLIT_INC_0_MASK=255.255.255.0\n  CISCO_SPLIT_INC_0_MASKLEN=24\n");
     expect(script).toContain("unset INTERNAL_IP4_DNS");
     expect(script.indexOf("exec /usr/share/vpnc-scripts/vpnc-script")).toBeLessThan(script.indexOf("read -r user"));
+  });
+});
+
+describe("WireGuard", () => {
+  it("wants a .conf file, from the root or home", () => {
+    expect(isWireguardPath("~/Downloads/patrinat.conf")).toBe(true);
+    expect(isWireguardPath("patrinat.conf")).toBe(false);
+    expect(isWireguardPath("~/a.ovpn")).toBe(false);
+  });
+
+  it("names an interface in 15 characters at most", () => {
+    expect(wireguardInterface("patrinat-intranet", "a1b2c3")).toBe("wg-patrinat-a1b");
+    expect(wireguardInterface("ab-cdefghij", "fff")).toBe("wg-ab-cdefg-fff");
+    expect(wireguardInterface("x", "123").length).toBeLessThanOrEqual(15);
+  });
+
+  it("reads internal domains, however they are written", () => {
+    expect(parseDnsDomains(" ~intranet.patrinat.fr, *.other.fr intranet.patrinat.fr ")).toEqual(["intranet.patrinat.fr", "other.fr"]);
+    expect(parseDnsDomains("")).toEqual([]);
+    expect(parseDnsDomains("not a domain!")).toBeNull();
+  });
+
+  it("keeps the tunnel down until asked, and sends only internal domains to its DNS", () => {
+    expect(nmWireguardSetupArguments("u", "PatriNat", ["intranet.patrinat.fr"])).toEqual([
+      "connection", "modify", "u", "connection.id", "PatriNat", "connection.autoconnect", "no", "ipv4.dns-search", "~intranet.patrinat.fr",
+    ]);
+    expect(nmWireguardSetupArguments("u", "PatriNat", []).at(-1)).toBe("~");
+  });
+});
+
+describe("asksPassword", () => {
+  it("is only for OpenVPN", () => {
+    expect(["openvpn", "sudo_openvpn", "wireguard", "nordlayer", "globalprotect"].filter(asksPassword)).toEqual(["openvpn", "sudo_openvpn"]);
   });
 });

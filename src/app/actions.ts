@@ -19,7 +19,7 @@ import { getDb } from "@/server/db/client";
 import { highlightSource } from "@/server/highlight";
 import { normalizeHost, removeGitlabToken, saveGitlabToken } from "@/server/gitlab";
 import { removeGithubToken, saveGithubToken } from "@/server/github";
-import { type DirectoryListing, listDirectories } from "@/server/directory-browser";
+import { type DirectoryListing, downloadsFolder, listDirectories } from "@/server/directory-browser";
 import { serverMessages } from "@/server/i18n";
 import type { ProjectStatus } from "@/server/db/schema";
 import { isLocale } from "@/i18n";
@@ -122,6 +122,15 @@ export async function addSubProject(groupId: number, input: SubProjectInput): Pr
 
 export async function browseDirectories(path: string, root?: string): Promise<DirectoryListing> {
   return listDirectories(String(path ?? ""), root === undefined ? undefined : String(root));
+}
+
+const PICKABLE = new Set(["ovpn", "conf"]);
+
+/** For a field that holds a file's path: the browser never gives a page the path of a file it picked. */
+export async function browseFiles(path: string, extensions: string[]): Promise<DirectoryListing> {
+  const wanted = (Array.isArray(extensions) ? extensions : []).map(String).filter((extension) => PICKABLE.has(extension));
+  const start = String(path ?? "").trim();
+  return listDirectories(start || downloadsFolder(), undefined, wanted);
 }
 
 export async function moveProject(projectId: number, directory: string): Promise<string | null> {

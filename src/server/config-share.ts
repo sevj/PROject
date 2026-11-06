@@ -26,7 +26,8 @@ type SharedServer = {
   context: string | null;
   vpn: string | null;
 };
-type SharedVpn = { name: string; kind: "openvpn" | "sudo_openvpn" | "nordlayer" | "globalprotect"; gateway: string | null; organization: string | null; routes: string | null };
+/** `dnsDomains` came with WireGuard: older files lack it. */
+type SharedVpn = { name: string; kind: "openvpn" | "sudo_openvpn" | "nordlayer" | "globalprotect" | "wireguard"; gateway: string | null; organization: string | null; routes: string | null; dnsDomains?: string | null };
 type SharedAccess = { server: string; label: string; path: string | null; namespace: string | null; target: string | null; container: string | null };
 type SharedEnvironment = { name: string; protected: boolean; urls: { label: string; url: string }[]; notes: string | null; accesses: SharedAccess[] };
 type SharedRequest = { name: string; method: string; url: string; headers: { name: string; value: string; secret: boolean }[]; body: string };
@@ -79,7 +80,7 @@ export function exportConfig(db: Db, projectId: number, sheet: SharedSheet, now 
       context: server.context,
       vpn: vpnName(server.vpnId),
     })),
-    vpns: usedVpns.map((vpn) => ({ name: vpn.name, kind: vpn.kind, gateway: vpn.gateway, organization: vpn.organization, routes: vpn.routes })),
+    vpns: usedVpns.map((vpn) => ({ name: vpn.name, kind: vpn.kind, gateway: vpn.gateway, organization: vpn.organization, routes: vpn.routes, dnsDomains: vpn.dnsDomains })),
     environments: environments.map((environment) => ({
       name: environment.name,
       protected: environment.protected,
@@ -165,7 +166,7 @@ export function readConfig(raw: unknown, nested = false): SharedConfig | null {
   const file = raw as Record<string, unknown>;
   if (file.format !== CONFIG_FORMAT || file.version !== CONFIG_VERSION) return null;
   const http = (file.http && typeof file.http === "object" ? file.http : {}) as Record<string, unknown>;
-  const kinds = ["openvpn", "sudo_openvpn", "nordlayer", "globalprotect"] as const;
+  const kinds = ["openvpn", "sudo_openvpn", "nordlayer", "globalprotect", "wireguard"] as const;
   const auths = ["alias", "agent", "password"] as const;
   return {
     format: CONFIG_FORMAT,
@@ -193,7 +194,7 @@ export function readConfig(raw: unknown, nested = false): SharedConfig | null {
     vpns: list(file.vpns).flatMap((item) => {
       const name = text(item.name, 80);
       const kind = kinds.find((value) => value === item.kind);
-      return name && kind ? [{ name, kind, gateway: text(item.gateway, 255), organization: text(item.organization, 80), routes: text(item.routes, 1000) }] : [];
+      return name && kind ? [{ name, kind, gateway: text(item.gateway, 255), organization: text(item.organization, 80), routes: text(item.routes, 1000), dnsDomains: text(item.dnsDomains, 1000) }] : [];
     }),
     environments: list(file.environments).flatMap((item) => {
       const name = text(item.name, 80);
@@ -291,12 +292,12 @@ export async function importConfig(db: Db, projectId: number, config: SharedConf
     }
   }
 
-  // VPNs, by name. An OpenVPN one needs its file, which only its owner has.
+  // VPNs, by name. An OpenVPN or WireGuard one needs its file, which only its owner has: it holds their keys.
   const vpnIds = new Map(db.select({ id: vpns.id, name: vpns.name }).from(vpns).all().map(({ id, name }) => [name, id] as const));
   for (const vpn of config.vpns) {
     if (vpnIds.has(vpn.name)) {
       items.push({ kind: "vpn", name: vpn.name, action: "keep", reason: "exists" });
-    } else if (vpn.kind === "openvpn" || vpn.kind === "sudo_openvpn") {
+    } else if (vpn.kind === "openvpn" || vpn.kind === "sudo_openvpn" || vpn.kind === "wireguard") {
       items.push({ kind: "vpn", name: vpn.name, action: "skip", reason: "needsFile" });
     } else if (!apply) {
       items.push({ kind: "vpn", name: vpn.name, action: "create" });

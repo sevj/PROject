@@ -1,5 +1,7 @@
 "use client";
 
+import { asksPassword } from "@/lib/vpn";
+import { sayLostAnswer, stateAfterLostAnswer, stopVpnSafely } from "./vpn/vpn-controls";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +18,6 @@ import type { WindowTab } from "./projects/[id]/docker-window";
 import type { RemoteTab } from "./projects/[id]/remote-window";
 import { SECTIONS } from "./sections";
 import { DATA } from "./ui";
-import { stopVpn } from "./vpn-actions";
 import { announceVpnChange } from "./vpn/vpn-events";
 
 // Terminals are heavy, and most uses of the palette do not open one.
@@ -255,7 +256,7 @@ export function CommandPalette() {
       const up = vpn.state === "connected" || vpn.state === "connecting";
       const others = data.vpns.some((other) => other.id !== vpn.id && other.state === "connected");
       // What asks for a password or a token, or would cut another VPN, is done on its page.
-      const asksHere = vpn.kind !== "nordlayer" && vpn.kind !== "globalprotect" && (!vpn.hasPassword || vpn.tokenAppended);
+      const asksHere = asksPassword(vpn.kind) && (!vpn.hasPassword || vpn.tokenAppended);
       const connect = () =>
         void fetch(`/api/vpns/${vpn.id}/connect`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
           .then((response) => response.json() as Promise<{ ok: true } | VpnFailure>)
@@ -265,7 +266,11 @@ export function CommandPalette() {
             announceVpnChange();
             router.refresh();
           })
-          .catch(() => flash("error", messages.vpn.problems.connectFailed));
+          .catch(async () => {
+            sayLostAnswer(await stateAfterLostAnswer(vpn.id), vpn.name, flash, messages.vpn);
+            announceVpnChange();
+            router.refresh();
+          });
       return {
         id: `vpn:${vpn.id}`,
         kind: "vpn",
@@ -273,7 +278,7 @@ export function CommandPalette() {
         subtitle: `${messages.vpn.kinds[vpn.kind]} · ${messages.vpn.states[vpn.state]}`,
         actions: [
           ...(up
-            ? [{ id: "disconnect", label: a.disconnect, run: () => void stopVpn(vpn.id).then(() => (announceVpnChange(), router.refresh())) }]
+            ? [{ id: "disconnect", label: a.disconnect, run: () => void stopVpnSafely(vpn.id).then(() => (announceVpnChange(), router.refresh())) }]
             : vpn.state === "unavailable" || vpn.loggedIn === false || asksHere || others
               ? []
               : [{ id: "connect", label: vpn.state === "lost" ? a.reconnect : a.connect, run: connect }]),

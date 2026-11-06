@@ -55,3 +55,15 @@ describe("listDirectories", () => {
     chmodSync(join(root, "a"), 0o755);
   });
 });
+
+describe("files", () => {
+  it("lists the files with the extensions asked for, beside the folders", () => {
+    writeFileSync(join(root, "wg.CONF"), "");
+    writeFileSync(join(root, "v.ovpn"), "");
+    writeFileSync(join(root, ".hidden.conf"), "");
+    const listing = listDirectories(join(root, "wg.CONF"), undefined, ["conf", "ovpn"]);
+    expect(listing.path).toBe(root);
+    expect(listing.files.map(({ name }) => name)).toEqual(["v.ovpn", "wg.CONF"]);
+    expect(listDirectories(root).files).toEqual([]);
+  });
+});

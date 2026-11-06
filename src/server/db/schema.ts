@@ -281,7 +281,7 @@ export const activitySamples = sqliteTable(
   (table) => [primaryKey({ columns: [table.projectId, table.at] })],
 );
 
-export const VPN_KINDS = ["openvpn", "sudo_openvpn", "nordlayer", "globalprotect"] as const;
+export const VPN_KINDS = ["openvpn", "sudo_openvpn", "nordlayer", "globalprotect", "wireguard"] as const;
 
 /**
  * A VPN the user connects to from here. An OpenVPN file becomes a NetworkManager profile, which
@@ -291,9 +291,9 @@ export const vpns = sqliteTable("vpns", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
   kind: text("kind", { enum: VPN_KINDS }).notNull(),
-  /** OpenVPN: the file it was made from. */
+  /** OpenVPN and WireGuard: the file it was made from. */
   configPath: text("config_path"),
-  /** OpenVPN: the profile in NetworkManager. */
+  /** OpenVPN and WireGuard: the profile in NetworkManager. */
   connectionUuid: text("connection_uuid"),
   username: text("username"),
   /** Encrypted by `src/server/secrets.ts`. */
@@ -308,6 +308,8 @@ export const vpns = sqliteTable("vpns", {
   organization: text("organization"),
   /** GlobalProtect: the only networks sent through it, as `10.0.0.0/8 192.168.1.0/24`. Empty: all of them. */
   routes: text("routes"),
+  /** WireGuard: the only domains its DNS answers for, as `intranet.example.fr other.fr`. Empty: all of them. */
+  dnsDomains: text("dns_domains"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
 });
 

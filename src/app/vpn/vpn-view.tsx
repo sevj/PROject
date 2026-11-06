@@ -9,13 +9,14 @@ import { PlusIcon } from "../icons";
 import { Modal, useConfirm } from "../modal";
 import { MENU_ITEM_DANGER, MoreMenu } from "../more-menu";
 import { TerminalPanel } from "../projects/[id]/terminal-panel";
+import { FileInput } from "../directory-input";
 import { FormField } from "../server-form";
 import { BADGE, BADGE_ALERT, BUTTON, BUTTON_PRIMARY, BUTTON_SMALL, CARD, CHECKBOX, DATA, FIELD, PAGE_TITLE, SEGMENT_SMALL } from "../ui";
-import { openNordLogin, removeVpn, stopVpn } from "../vpn-actions";
-import { VpnConnectButton } from "./vpn-controls";
+import { openNordLogin, removeVpn } from "../vpn-actions";
+import { stopVpnSafely, VpnConnectButton } from "./vpn-controls";
 import { announceVpnChange } from "./vpn-topbar";
 
-function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[]; onClose: () => void }) {
+function VpnFormModal({ vpn, onClose }: { vpn: Vpn | null; onClose: () => void }) {
   const messages = useMessages();
   const m = messages.vpn;
   const router = useRouter();
@@ -28,12 +29,13 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
   const [gateway, setGateway] = useState(vpn?.gateway ?? "");
   const [organization, setOrganization] = useState(vpn?.organization ?? "");
   const [routes, setRoutes] = useState(vpn?.routes ?? "");
+  const [dnsDomains, setDnsDomains] = useState(vpn?.dnsDomains ?? "");
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const input: VpnInput = { name, kind, configPath, username, password, tokenAppended, gateway, organization, routes };
+    const input: VpnInput = { name, kind, configPath, username, password, tokenAppended, gateway, organization, routes, dnsDomains };
     setPending(true);
     try {
       const response = await fetch(vpn ? `/api/vpns/${vpn.id}` : "/api/vpns", {
@@ -65,7 +67,7 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
       <form onSubmit={(event) => void submit(event)} className="grid gap-3">
         {vpn ? null : (
           <div className="flex flex-wrap gap-1" role="group">
-            {(["sudo_openvpn", "openvpn", "globalprotect", "nordlayer"] as const).map((item) => (
+            {(["sudo_openvpn", "openvpn", "wireguard", "globalprotect", "nordlayer"] as const).map((item) => (
               <button key={item} type="button" aria-pressed={kind === item} onClick={() => setKind(item)} className={SEGMENT_SMALL}>
                 {m.kinds[item]}
               </button>
@@ -75,7 +77,17 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
         <FormField label={m.name}>
           <input required value={name} onChange={(event) => setName(event.target.value)} className={FIELD} />
         </FormField>
-        {kind === "globalprotect" ? (
+        {kind === "wireguard" ? (
+          <>
+            <p className="text-[12px] text-mut">{m.wgHint}</p>
+            <FormField label={m.wgConfigPath} hint={m.wgConfigHint}>
+              <FileInput value={configPath} onChange={setConfigPath} extensions={["conf"]} placeholder="~/Downloads/patrinat.conf" disabled={vpn !== null} />
+            </FormField>
+            <FormField label={m.dnsDomains} hint={m.dnsDomainsHint}>
+              <input placeholder="intranet.patrinat.fr" value={dnsDomains} onChange={(event) => setDnsDomains(event.target.value)} className={FIELD} />
+            </FormField>
+          </>
+        ) : kind === "globalprotect" ? (
           <>
             <p className="text-[12px] text-mut">{m.gpHint}</p>
             <FormField label={m.portal} hint={m.portalHint}>
@@ -89,12 +101,7 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
           <>
             {kind === "sudo_openvpn" ? <p className="text-[12px] text-mut">{m.sudoHint}</p> : null}
             <FormField label={m.configPath} hint={kind === "sudo_openvpn" ? m.sudoConfigHint : m.configHint}>
-              <input required disabled={vpn !== null} list="vpn-files" placeholder="~/Projects/villette.ovpn" value={configPath} onChange={(event) => setConfigPath(event.target.value)} className={FIELD} />
-              <datalist id="vpn-files">
-                {files.map((file) => (
-                  <option key={file} value={file} />
-                ))}
-              </datalist>
+              <FileInput value={configPath} onChange={setConfigPath} extensions={["ovpn"]} placeholder="~/Projects/villette.ovpn" disabled={vpn !== null} />
             </FormField>
             <FormField label={m.username}>
               <input autoComplete="off" value={username} onChange={(event) => setUsername(event.target.value)} className={FIELD} />
@@ -132,7 +139,7 @@ function VpnFormModal({ vpn, files, onClose }: { vpn: Vpn | null; files: string[
   );
 }
 
-function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }) {
+function VpnRow({ vpn, vpns }: { vpn: Vpn; vpns: Vpn[] }) {
   const messages = useMessages();
   const m = messages.vpn;
   const flash = useFlash();
@@ -154,7 +161,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
           <span className={vpn.state === "unavailable" || vpn.state === "lost" ? BADGE_ALERT : BADGE}>{m.states[vpn.state]}</span>
           {vpn.loggedIn === false ? <> <span className={BADGE_ALERT}>{m.notLoggedIn}</span></> : null}
           <p className={`${DATA} break-all text-mut`}>
-            {[vpn.configPath, vpn.username, vpn.organization, vpn.gateway, vpn.routes, vpn.hasPassword ? m.passwordKept : null].filter(Boolean).join(" · ")}
+            {[vpn.configPath, vpn.username, vpn.organization, vpn.gateway, vpn.routes, vpn.dnsDomains, vpn.hasPassword ? m.passwordKept : null].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -162,7 +169,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
           {up ? (
             <button type="button" disabled={pending} onClick={() =>
                 start(async () => {
-                  say(await stopVpn(vpn.id));
+                  say(await stopVpnSafely(vpn.id));
                   announceVpnChange();
                 })
               } className={BUTTON_SMALL}>{m.disconnect}</button>
@@ -172,7 +179,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
           {vpn.state === "lost" ? (
             <button type="button" disabled={pending} aria-label={m.dismissOne(vpn.name)} onClick={() =>
                 start(async () => {
-                  say(await stopVpn(vpn.id));
+                  say(await stopVpnSafely(vpn.id));
                   announceVpnChange();
                 })
               } className={BUTTON_SMALL}>{m.dismiss}</button>
@@ -188,7 +195,16 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
                 body: !vpn.setup ? m.deleteBody : vpn.kind === "globalprotect" ? m.deleteRuleBody(vpn.setup.removal) : m.deleteSudoBody(vpn.setup.removal),
                 action: m.delete,
                 danger: true,
-                onConfirm: () => start(async () => say(await removeVpn(vpn.id))),
+                onConfirm: () =>
+                  start(async () => {
+                    try {
+                      say(await removeVpn(vpn.id));
+                    } catch {
+                      // A connected tunnel goes with it, and the answer with the network: the list says.
+                      router.refresh();
+                      announceVpnChange();
+                    }
+                  }),
               })
             }
             className={MENU_ITEM_DANGER}
@@ -208,7 +224,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
         </details>
       ) : null}
       {vpn.usedBy.length > 0 ? <p className="text-[12px] text-mut">{m.usedBy} {vpn.usedBy.join(", ")}</p> : null}
-      {editing ? <VpnFormModal vpn={vpn} files={files} onClose={() => setEditing(false)} /> : null}
+      {editing ? <VpnFormModal vpn={vpn} onClose={() => setEditing(false)} /> : null}
       {login ? (
         <TerminalPanel
           title={m.loginTitle}
@@ -225,7 +241,7 @@ function VpnRow({ vpn, vpns, files }: { vpn: Vpn; vpns: Vpn[]; files: string[] }
   );
 }
 
-export function VpnView({ vpns, files }: { vpns: Vpn[]; files: string[] }) {
+export function VpnView({ vpns }: { vpns: Vpn[] }) {
   const m = useMessages().vpn;
   const [adding, setAdding] = useState(false);
   return (
@@ -241,11 +257,11 @@ export function VpnView({ vpns, files }: { vpns: Vpn[]; files: string[] }) {
         {vpns.length === 0 ? <p className="text-mut">{m.none}</p> : null}
         <ul>
           {vpns.map((vpn) => (
-            <VpnRow key={vpn.id} vpn={vpn} vpns={vpns} files={files} />
+            <VpnRow key={vpn.id} vpn={vpn} vpns={vpns} />
           ))}
         </ul>
       </div>
-      {adding ? <VpnFormModal vpn={null} files={files} onClose={() => setAdding(false)} /> : null}
+      {adding ? <VpnFormModal vpn={null} onClose={() => setAdding(false)} /> : null}
     </section>
   );
 }

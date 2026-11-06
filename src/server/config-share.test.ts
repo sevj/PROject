@@ -48,7 +48,7 @@ describe("exporting", () => {
     const text = JSON.stringify(config);
     for (const secret of ["sealed", "s3cret", "id_me", "villette.ovpn"]) expect(text).not.toContain(secret);
     expect(config.servers).toEqual([{ name: "Prod", kind: "ssh", host: "192.168.200.38", port: null, username: "adimeo", auth: "agent", jumpHost: null, context: null, vpn: "GT" }]);
-    expect(config.vpns).toEqual([{ name: "GT", kind: "globalprotect", gateway: "vpn.gt.fr", organization: null, routes: "192.168.200.0/24" }]);
+    expect(config.vpns).toEqual([{ name: "GT", kind: "globalprotect", gateway: "vpn.gt.fr", organization: null, routes: "192.168.200.0/24", dnsDomains: null }]);
     expect(config.http.variables).toEqual([
       { environment: "Prod", name: "token", value: "", secret: true },
       { environment: "Prod", name: "user", value: "ada", secret: false },

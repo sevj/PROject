@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { type Db, openDb } from "./db/client";
 import { remoteServers, vpns } from "./db/schema";
 import { type CommandRunner, saveServer, testConnection } from "./remote-servers";
-import { connectVpn, deleteVpn, disconnectVpn, listVpns, readOvpnSuggestions, saveVpn, type VpnInput } from "./vpn";
+import { connectVpn, deleteVpn, disconnectVpn, listVpns, saveVpn, type VpnInput } from "./vpn";
 
 const UUID = "6f1b0c3e-1a2b-4c3d-8e4f-0123456789ab";
 const input: VpnInput = { name: "Villette", kind: "openvpn", configPath: "~/v.ovpn", username: "me", password: "secret", tokenAppended: true, gateway: null };
@@ -293,8 +293,54 @@ describe("a server behind a VPN", () => {
   });
 });
 
-describe("readOvpnSuggestions", () => {
-  it("offers the files of the usual folders", async () => {
-    expect(await readOvpnSuggestions(dir)).toEqual(["~/v.ovpn"]);
+describe("WireGuard", () => {
+  const wg: VpnInput = { name: "PatriNat", kind: "wireguard", configPath: "~/patrinat.conf", username: null, password: "", tokenAppended: false, gateway: null, dnsDomains: "intranet.patrinat.fr" };
+  beforeAll(() => writeFileSync(join(dir, "patrinat.conf"), "[Interface]\nPrivateKey = abc\n"));
+
+  it("imports a private copy under a short interface name, then leaves the tunnel down until asked", async () => {
+    let seen = { name: "", mode: 0, content: "" };
+    const run = vi.fn<CommandRunner>(async (_command, args) => {
+      if (args.includes("import")) {
+        const path = args.at(-1) ?? "";
+        seen = { name: path.split("/").pop() ?? "", mode: statSync(path).mode & 0o777, content: readFileSync(path, "utf8") };
+      }
+      return { code: 0, stderr: "", notInstalled: false, stdout: args.includes("import") ? `Connection 'x' (${UUID}) successfully added.` : "" };
+    });
+    const id = idOf(await saveVpn(db, null, wg, run, dir));
+    const calls = run.mock.calls.map(([, args]) => args);
+    expect(calls[0].slice(0, 4)).toEqual(["connection", "import", "type", "wireguard"]);
+    expect(seen.name).toMatch(/^wg-patrinat-[0-9a-f]{3}\.conf$/);
+    expect(seen.mode).toBe(0o600);
+    expect(seen.content).toContain("PrivateKey");
+    expect(calls[1]).toEqual(expect.arrayContaining(["connection.autoconnect", "no", "ipv4.dns-search", "~intranet.patrinat.fr"]));
+    expect(calls[2]).toEqual(["connection", "down", UUID]);
+    expect(db.select().from(vpns).where(eq(vpns.id, id)).get()).toMatchObject({ kind: "wireguard", connectionUuid: UUID, dnsDomains: "intranet.patrinat.fr" });
+  });
+
+  it("refuses a file that is not a .conf, or domains that are not domains", async () => {
+    const run = nmcli();
+    expect(await saveVpn(db, null, { ...wg, configPath: "~/v.ovpn" }, run, dir)).toMatchObject({ problem: "fileInvalid" });
+    expect(await saveVpn(db, null, { ...wg, dnsDomains: "not a domain!" }, run, dir)).toMatchObject({ problem: "domainsInvalid" });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("changes its domains on the profile it already has", async () => {
+    const id = idOf(await saveVpn(db, null, wg, nmcli(), dir));
+    const run = nmcli();
+    idOf(await saveVpn(db, id, { ...wg, dnsDomains: "" }, run, dir));
+    expect(run.mock.calls.map(([, args]) => args)).toEqual([["connection", "modify", UUID, "connection.id", "PatriNat", "connection.autoconnect", "no", "ipv4.dns-search", "~"]]);
+  });
+
+  it("connects without any password, and reads its state from NetworkManager", async () => {
+    const id = idOf(await saveVpn(db, null, wg, nmcli(), dir));
+    const run = nmcli(`${UUID}:activated`);
+    expect(await connectVpn(db, id, {}, run)).toEqual({ ok: true });
+    expect(run.mock.calls[0][1]).toEqual(expect.arrayContaining(["connection", "up", UUID]));
+    expect((await listVpns(db, run))[0].state).toBe("connected");
+  });
+
+  it("blames the tunnel, not a password, when NetworkManager cannot bring it up", async () => {
+    const id = idOf(await saveVpn(db, null, wg, nmcli(), dir));
+    expect(await connectVpn(db, id, {}, refusing("Error: Connection activation failed"))).toEqual({ problem: "tunnelFailed", detail: "Error: Connection activation failed" });
   });
 });

@@ -1,12 +1,18 @@
 /** What can be declared about a VPN, and how the commands that drive it are built. No I/O here. */
 
 export const isOvpnPath = (value: string) => /^(~\/|\/)[^\0\n]+\.ovpn$/i.test(value);
+export const isWireguardPath = (value: string) => /^(~\/|\/)[^\0\n]+\.conf$/i.test(value);
 /** It goes in a `key=value` list of nmcli, which gives these characters a meaning. */
 export const isVpnUsername = (value: string) => /^[^\s,=\\'"]+$/.test(value);
 export const isGateway = (value: string) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value);
 export const isOrganization = isGateway;
 /** Without an organization, `nordlayer login` asks which one, in its terminal. */
 export const nordLoginArguments = (organization: string | null) => ["login", ...(organization ? ["--organization", organization] : [])];
+/**
+ * Only OpenVPN takes a password from this app. NordLayer has its own login, GlobalProtect shows
+ * Microsoft's in a window, and WireGuard's keys are in its profile.
+ */
+export const asksPassword = (kind: string) => kind === "openvpn" || kind === "sudo_openvpn";
 export const isOneLine = (value: string) => !/[\r\n\0]/.test(value);
 
 /**
@@ -16,7 +22,39 @@ export const isOneLine = (value: string) => !/[\r\n\0]/.test(value);
  */
 export const ovpnForImport = (content: string) => content.replace(/^[ \t]*route[ \t]+remote_host\b.*$/gim, "# removed: NetworkManager keeps the way to the server by itself");
 
-export const nmImportArguments = (file: string) => ["connection", "import", "type", "openvpn", "file", file];
+export const nmImportArguments = (file: string, type: "openvpn" | "wireguard" = "openvpn") => ["connection", "import", "type", type, "file", file];
+
+/**
+ * NetworkManager names the interface after the file it imports, in 15 characters at most. A
+ * random end keeps two tunnels apart: NetworkManager 1.46 crashes when a profile comes back
+ * under the name of one just deleted.
+ */
+export const wireguardInterface = (slug: string, random: string) => `wg-${slug.slice(0, 8).replace(/-+$/, "")}-${random.slice(0, 3)}`;
+
+/** `intranet.example.fr, *.other.fr` gives both names. Null when one of them is not a domain. */
+export function parseDnsDomains(input: string): string[] | null {
+  const names = input
+    .split(/[\s,]+/)
+    .map((name) => name.trim().toLowerCase().replace(/^~/, "").replace(/^\*\./, "").replace(/\.$/, ""))
+    .filter(Boolean);
+  return names.every((name) => /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) ? [...new Set(names)] : null;
+}
+
+/**
+ * Imported, a tunnel comes up at once and on every boot, and takes all DNS queries (`~`). Here it
+ * waits to be asked, and with internal domains only these go to its DNS: split DNS.
+ */
+export const nmWireguardSetupArguments = (uuid: string, name: string, domains: string[]) => [
+  "connection",
+  "modify",
+  uuid,
+  "connection.id",
+  name,
+  "connection.autoconnect",
+  "no",
+  "ipv4.dns-search",
+  domains.length > 0 ? domains.map((domain) => `~${domain}`).join(",") : "~",
+];
 
 const IMPORTED = /\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/i;
 export const parseImportedUuid = (stdout: string) => IMPORTED.exec(stdout)?.[1] ?? null;
@@ -90,7 +128,6 @@ export function parseNordStatus(stdout: string): { loggedIn: boolean; state: Vpn
 }
 
 /** `.ovpn` files lying in a folder, to be offered. */
-export const ovpnFilesAmong = (files: string[]) => files.filter((file) => /\.ovpn$/i.test(file)).sort();
 
 /** A name for files and for a sudo rule, whose names only take these characters. */
 export function vpnSlug(name: string): string {
