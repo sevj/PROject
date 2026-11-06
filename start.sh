@@ -11,6 +11,9 @@ cd "$(dirname "$0")" || exit 1
 # The Node of .nvmrc, whatever the default of this shell is.
 [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" && nvm use >/dev/null
 export PM_ALLOWED_HOSTS=project.dev.local
+# Calls made by the app (APM, GitLab…) also trust the certificates of this machine, such as those
+# of mkcert for the local sites (https://apm.dev.local), on top of Node's own.
+export NODE_USE_SYSTEM_CA=1
 
 args=()
 if [ "$1" = "--https" ]; then

@@ -93,7 +93,7 @@ function KindBadge({ kind, label }: { kind: Kind; label: string }) {
   );
 }
 
-const PROJECT_TABS = ["docker", "git", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
+const PROJECT_TABS = ["docker", "git", "tickets", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
 
 /** A file to save, not a page to open: a link with `download`, clicked once. */
 function download(href: string) {

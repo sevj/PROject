@@ -25,7 +25,7 @@ export function isStatus(value: unknown): value is ProjectStatus {
   return PROJECT_STATUSES.includes(value as ProjectStatus);
 }
 
-type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "fetchRemote" | "status" | "favorite" | "note" | "displayName" | "description">>;
+type MetaPatch = Partial<Pick<typeof projectMeta.$inferInsert, "fetchRemote" | "apmProjectId" | "status" | "favorite" | "note" | "displayName" | "description">>;
 
 function patchMeta(db: Db, projectIds: number[], patch: MetaPatch) {
   db.transaction((tx) => {
@@ -60,6 +60,16 @@ export function getFetchRemote(db: Db, projectId: number): string | null {
     .where(eq(projectMeta.projectId, projectId))
     .get();
   return meta?.fetchRemote ?? null;
+}
+
+/** Null unlinks the project from APM. */
+export function setApmProjectId(db: Db, projectId: number, apmProjectId: number | null) {
+  patchMeta(db, [projectId], { apmProjectId });
+}
+
+export function getApmProjectId(db: Db, projectId: number): number | null {
+  const meta = db.select({ apmProjectId: projectMeta.apmProjectId }).from(projectMeta).where(eq(projectMeta.projectId, projectId)).get();
+  return meta?.apmProjectId ?? null;
 }
 
 export function setNote(db: Db, projectId: number, note: string) {

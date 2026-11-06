@@ -1,11 +1,13 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { DEFAULT_APM_URL, getApmAccount } from "@/server/apm";
 import { getDb } from "@/server/db/client";
 import { listGithubAccounts } from "@/server/github";
 import { listGitlabAccounts } from "@/server/gitlab";
 import { getRegistry } from "@/server/registry";
 import { getSettings } from "@/server/settings";
 import { LoadingFallback } from "../loading-fallback";
+import { ApmSettings } from "./apm-settings";
 import { ForgeTokens } from "./forge-tokens";
 import { SettingsForm } from "./settings-form";
 
@@ -13,6 +15,7 @@ import { SettingsForm } from "./settings-form";
 const readForges = (db: ReturnType<typeof getDb>) => ({
   gitlab: listGitlabAccounts(db).map(({ host, ...account }) => ({ name: host, ...account })),
   github: listGithubAccounts(db).map(({ owner, ...account }) => ({ name: owner, ...account })),
+  apm: getApmAccount(db),
   now: Date.now(),
 });
 
@@ -37,6 +40,7 @@ async function Settings() {
         <>
           <ForgeTokens forge="gitlab" accounts={forges.gitlab} now={forges.now} />
           <ForgeTokens forge="github" accounts={forges.github} now={forges.now} />
+          <ApmSettings account={forges.apm} defaultUrl={DEFAULT_APM_URL} now={forges.now} />
         </>
       }
       tags={knownTags.map((name) => ({ name, count: rows.filter((row) => row.tags.includes(name)).length }))}

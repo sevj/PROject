@@ -1,0 +1,1 @@
+ALTER TABLE `project_meta` ADD `apm_project_id` integer;

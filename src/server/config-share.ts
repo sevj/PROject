@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { type CommandAlias, normalizeAliases } from "@/lib/aliases";
 import { isHttpMethod, VARIABLE_NAME } from "@/lib/http-requests";
-import { addTag, isStatus, setDescription, setNote, setStatus } from "./classification";
+import { addTag, isStatus, setApmProjectId, setDescription, setNote, setStatus } from "./classification";
 import type { Db } from "./db/client";
 import { environmentAccesses, httpRequests, httpVariables, projectEnvironments, projectMeta, projects, type ProjectStatus, projectTags, remoteServers, tags, vpns } from "./db/schema";
 import { checkDirectory, checkSubdirectory, registerMultiProject, registerProject, registerSubProject } from "./projects";
@@ -34,7 +34,16 @@ type SharedRequest = { name: string; method: string; url: string; headers: { nam
 type SharedVariable = { environment: string | null; name: string; value: string; secret: boolean };
 
 /** The project's sheet. `folder` is only a hint for where the importer cloned it. */
-export type SharedSheet = { name: string; folder: string; description: string | null; tags: string[]; status: ProjectStatus | null; note: string | null };
+export type SharedSheet = {
+  name: string;
+  folder: string;
+  description: string | null;
+  tags: string[];
+  status: ProjectStatus | null;
+  note: string | null;
+  /** The linked APM project, when there is one. Absent from files written before it was added. */
+  apmProjectId?: number;
+};
 
 /** What a file holds: names and addresses, never a password, a key, a token or a secret's value. */
 export type SharedConfig = {
@@ -122,7 +131,7 @@ export function sheetOf(db: Db, projectId: number): SharedSheet | null {
   if (!project) return null;
   const meta = db.select().from(projectMeta).where(eq(projectMeta.projectId, projectId)).get();
   const tagNames = db.select({ name: tags.name }).from(projectTags).innerJoin(tags, eq(tags.id, projectTags.tagId)).where(eq(projectTags.projectId, projectId)).all().map(({ name }) => name).sort();
-  return { name: meta?.displayName ?? project.name, folder: basename(project.path), description: meta?.description ?? null, tags: tagNames, status: meta?.status ?? null, note: meta?.note ?? null };
+  return { name: meta?.displayName ?? project.name, folder: basename(project.path), description: meta?.description ?? null, tags: tagNames, status: meta?.status ?? null, note: meta?.note ?? null, ...(meta?.apmProjectId ? { apmProjectId: meta.apmProjectId } : {}) };
 }
 
 /** A project's file; a multi-project's holds each of its sub-projects too. */
@@ -157,6 +166,7 @@ function readSheet(raw: unknown): SharedSheet | null {
     tags: Array.isArray(sheet.tags) ? [...new Set(sheet.tags.flatMap((tag) => (typeof tag === "string" && tag.trim() ? [tag.trim().slice(0, 80)] : [])))].slice(0, 50) : [],
     status: isStatus(sheet.status) ? sheet.status : null,
     note: text(sheet.note, 8000),
+    ...(Number.isSafeInteger(sheet.apmProjectId) && (sheet.apmProjectId as number) > 0 ? { apmProjectId: sheet.apmProjectId as number } : {}),
   };
 }
 
@@ -249,7 +259,7 @@ export type PlanAction = "create" | "keep" | "skip";
 export type PlanItem = {
   /** The sub-project it belongs to, for a multi-project. */
   group?: string;
-  kind: "project" | "description" | "tag" | "status" | "note" | "server" | "vpn" | "environment" | "access" | "alias" | "request" | "variable";
+  kind: "project" | "description" | "tag" | "status" | "note" | "apm" | "server" | "vpn" | "environment" | "access" | "alias" | "request" | "variable";
   name: string;
   action: PlanAction;
   reason?: "exists" | "needsFile" | "noServer" | "invalid" | "filled" | "missingFolder";
@@ -289,6 +299,12 @@ export async function importConfig(db: Db, projectId: number, config: SharedConf
       const filled = !!meta?.note;
       items.push({ kind: "note", name: note.slice(0, 80), action: filled ? "keep" : "create", reason: filled ? "filled" : undefined });
       if (apply && !filled) setNote(db, projectId, note);
+    }
+    const { apmProjectId } = config.sheet;
+    if (apmProjectId) {
+      const filled = meta?.apmProjectId != null;
+      items.push({ kind: "apm", name: `#${apmProjectId}`, action: filled ? "keep" : "create", reason: filled ? "filled" : undefined });
+      if (apply && !filled) setApmProjectId(db, projectId, apmProjectId);
     }
   }
 

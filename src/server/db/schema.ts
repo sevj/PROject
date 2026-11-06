@@ -102,6 +102,8 @@ export const projectMeta = sqliteTable("project_meta", {
   description: text("description"),
   /** The remote that Fetch reads. Null reads them all. */
   fetchRemote: text("fetch_remote"),
+  /** The project of APM whose tickets the Tickets tab lists. */
+  apmProjectId: integer("apm_project_id"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
 });
 

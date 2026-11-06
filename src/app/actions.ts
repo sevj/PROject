@@ -19,6 +19,7 @@ import { getDb } from "@/server/db/client";
 import { highlightSource } from "@/server/highlight";
 import { normalizeHost, removeGitlabToken, saveGitlabToken } from "@/server/gitlab";
 import { removeGithubToken, saveGithubToken } from "@/server/github";
+import { type ApmProblem, type ApmProject, listApmProjects, removeApmConnection, saveApmConnection } from "@/server/apm";
 import { type DirectoryListing, downloadsFolder, listDirectories } from "@/server/directory-browser";
 import { serverMessages } from "@/server/i18n";
 import type { ProjectStatus } from "@/server/db/schema";
@@ -26,7 +27,7 @@ import { isLocale } from "@/i18n";
 import { ideCommandFor } from "@/lib/commands";
 import { randomUUID } from "node:crypto";
 import { type ClaudeConsoleGrant, isClaudeTask, isSessionId, MAX_CLAUDE_CONSOLES, type RunningClaudeConsole } from "@/lib/claude-console";
-import { getFetchRemote, setFetchRemote } from "@/server/classification";
+import { getFetchRemote, setApmProjectId, setFetchRemote } from "@/server/classification";
 import { readRemotes } from "@/server/scan/git";
 import { parseConsoleOptions } from "@/lib/console-options";
 import { findSessionStart, readClaudeUsage } from "@/server/claude-usage/report";
@@ -482,6 +483,39 @@ export async function saveGithubTokenForm(
 export async function removeGithubTokenForm(owner: string): Promise<void> {
   removeGithubToken(getDb(), String(owner ?? ""));
   revalidatePath("/settings");
+}
+
+/** The token never comes back: only who it belongs to, or what is wrong with it. */
+export async function saveApmConnectionForm(
+  url: string,
+  token: string,
+): Promise<{ url: string; user: string } | { problem: "url" | "token" | "refused" | "unreachable" }> {
+  const saved = await saveApmConnection(getDb(), String(url ?? ""), String(token ?? ""));
+  if (!("problem" in saved)) revalidatePath("/", "layout");
+  return saved;
+}
+
+export async function removeApmConnectionForm(): Promise<void> {
+  removeApmConnection(getDb());
+  revalidatePath("/", "layout");
+}
+
+/** For the picker of the Tickets tab: asked when it opens. */
+export async function readApmProjects(): Promise<{ projects: ApmProject[] } | { problem: ApmProblem }> {
+  const read = await listApmProjects(getDb());
+  return "problem" in read ? { problem: read.problem } : read;
+}
+
+/** Null unlinks. Any positive id is kept: APM tells in the tab whether the token can see it. */
+export async function linkApmProject(projectId: number, apmProjectId: unknown): Promise<string | null> {
+  const db = getDb();
+  if (!getProject(db, projectId)) return serverMessages(db).tickets.projectGone;
+  if (apmProjectId !== null && (!Number.isSafeInteger(apmProjectId) || (apmProjectId as number) <= 0)) {
+    return serverMessages(db).tickets.invalidId;
+  }
+  setApmProjectId(db, projectId, apmProjectId as number | null);
+  revalidatePath(`/projects/${projectId}`);
+  return null;
 }
 
 /** Shown in local consoles: read when one opens, so a change in the settings reaches the next console. */

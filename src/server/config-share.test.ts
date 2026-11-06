@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { exportConfig, exportProject, importConfig, importInto, importProject, readConfig } from "./config-share";
 import { projectMeta } from "./db/schema";
-import { setDescription } from "./classification";
+import { getApmProjectId, setApmProjectId, setDescription } from "./classification";
 import { type Db, openDb } from "./db/client";
 import { environmentAccesses, httpRequests, httpVariables, projectEnvironments, projects, remoteServers, vpns } from "./db/schema";
 import { saveRequest } from "./http-requests";
@@ -140,6 +140,30 @@ describe("the sheet", () => {
     expect(db.select().from(projectMeta).where(eq(projectMeta.projectId, done.projectId)).get()).toMatchObject({ displayName: "Site", description: "The site", status: "active", note: "Deploy on Fridays" });
     expect(db.select().from(projectEnvironments).all()).toHaveLength(1);
     expect(await importProject(db, folder, config, false)).toHaveProperty("error");
+  });
+});
+
+describe("the APM project", () => {
+  it("goes with the sheet, and only fills a project not linked yet", async () => {
+    const source = mine();
+    setApmProjectId(source.db, source.projectId, 665);
+    const config = readConfig(JSON.parse(JSON.stringify(exportProject(source.db, source.projectId))));
+    expect(config?.sheet?.apmProjectId).toBe(665);
+
+    const db = openDb(":memory:");
+    const fresh = db.insert(projects).values({ path: "/c", name: "c" }).returning({ id: projects.id }).get().id;
+    const linked = db.insert(projects).values({ path: "/d", name: "d" }).returning({ id: projects.id }).get().id;
+    setApmProjectId(db, linked, 12);
+    const plan = await importConfig(db, fresh, config!, true);
+    expect(plan.items).toContainEqual({ kind: "apm", name: "#665", action: "create", reason: undefined });
+    await importConfig(db, linked, config!, true);
+    expect([getApmProjectId(db, fresh), getApmProjectId(db, linked)]).toEqual([665, 12]);
+  });
+
+  it("is left aside when it is not a positive id", () => {
+    const file = JSON.parse(JSON.stringify(exportConfig(mine().db, 1, { ...SHEET, apmProjectId: 1 })));
+    file.sheet.apmProjectId = "665; drop";
+    expect(readConfig(file)?.sheet).not.toHaveProperty("apmProjectId");
   });
 });
 

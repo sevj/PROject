@@ -23,6 +23,8 @@ import { listEnvironments, listServers, readSuggestions } from "@/server/remote-
 import { listVpns } from "@/server/vpn";
 import { readGitDetails, readRecentCommits } from "@/server/scan/git";
 import { readProjectRequests } from "@/server/github";
+import { readApmTickets, readTicketsQuery } from "@/server/apm";
+import { getApmProjectId } from "@/server/classification";
 import { ClaudeConsoleButton } from "../../claude-console-button";
 import { LoadingFallback } from "../../loading-fallback";
 import { ProjectDescription } from "../../project-description";
@@ -49,8 +51,9 @@ import { ConfigShare } from "./config-share";
 import { ProjectSites } from "./project-sites";
 import { ProjectExplorer } from "./project-tree";
 import { SecurityTab } from "./security-tab";
+import { TicketsTab } from "./tickets-tab";
 
-const TABS = ["general", "docker", "git", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
+const TABS = ["general", "docker", "git", "tickets", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
 type Tab = (typeof TABS)[number];
 
 function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) {
@@ -93,7 +96,7 @@ function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) 
 async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   await connection();
   const { id } = await params;
-  const { doc, file, tab: requestedTab, git: requestedGit } = await searchParams;
+  const { doc, file, tab: requestedTab, git: requestedGit, state, assignee, q, page } = await searchParams;
   const tab: Tab = TABS.find((item) => item === requestedTab) ?? "general";
   const gitSection = GIT_SECTIONS.find((item) => item === requestedGit) ?? "general";
   const projectId = Number(id);
@@ -119,6 +122,10 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   const dockerStack = readsDocker ? await readDockerStack(absolutePath) : null;
   const dockerLive = tab === "docker" && !row.missing && !row.abandoned ? await listProjectContainers(getDb(), projectId) : null;
   const envView = tab === "env" && !row.missing ? await readEnvView(getDb(), projectId, absolutePath, row.hasGit) : null;
+  const apmProjectId = tab === "tickets" ? getApmProjectId(getDb(), projectId) : null;
+  const ticketsQuery = readTicketsQuery({ state, assignee, q, page });
+  // A promise: the rest of the page shows while APM answers.
+  const apmTickets = apmProjectId !== null ? readApmTickets(getDb(), apmProjectId, ticketsQuery) : null;
   const dependencies = tab === "security" ? readDependencies(getDb(), projectId) : null;
   const tree = tab === "structure" && !row.missing ? await listProjectFolder(absolutePath, ".") : null;
   const defaultDoc = docs.find((file) => /^readme/i.test(file)) ?? docs[0];
@@ -273,6 +280,18 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
           ) : null}
 
           {tab === "git" ? <GitTab row={row} now={now} details={gitDetails} fetchRemote={getFetchRemote(getDb(), projectId)} section={gitSection} mergeRequests={gitSection === "pr" ? readProjectRequests(getDb(), row.remoteUrl) : null} messages={messages} /> : null}
+
+          {tab === "tickets" ? (
+            <TicketsTab
+              projectId={row.id}
+              linkedId={apmProjectId}
+              view={apmTickets}
+              query={ticketsQuery}
+              now={now}
+              readOnly={row.abandoned}
+              messages={messages}
+            />
+          ) : null}
 
           {tab === "docker" ? (
             <DockerTab

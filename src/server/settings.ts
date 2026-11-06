@@ -12,6 +12,16 @@ export type GitlabToken = { host: string; user: string; tokenSecret: string; sav
 /** One per GitHub account or organization: a fine-grained token only reaches the repositories of one owner. */
 export type GithubToken = { owner: string; user: string; tokenSecret: string; savedAt: number };
 
+/** The APM instance whose tickets the projects show, with a personal token made in APM. Only the encrypted token is kept. */
+export type ApmConnection = {
+  url: string;
+  user: string;
+  /** The token owner's id in APM, to tell their tickets apart. Absent from connections saved before it was kept. */
+  userId?: number;
+  tokenSecret: string;
+  savedAt: number;
+};
+
 export type Settings = {
   locale: Locale;
   ideCommands: Record<string, string>;
@@ -20,6 +30,7 @@ export type Settings = {
   aliases: CommandAlias[];
   gitlabTokens: GitlabToken[];
   githubTokens: GithubToken[];
+  apm: ApmConnection | null;
 };
 
 export function defaultSettings(): Settings {
@@ -31,6 +42,7 @@ export function defaultSettings(): Settings {
     aliases: DEFAULT_ALIASES,
     gitlabTokens: [],
     githubTokens: [],
+    apm: null,
   };
 }
 
@@ -38,7 +50,7 @@ export function getSettings(db: Db): Settings {
   const stored = db.select().from(settings).where(eq(settings.id, 1)).get();
   const { locale, ...rest } = { ...defaultSettings(), ...stored?.value };
   // A language removed since it was chosen must not break the app.
-  return { ...rest, gitlabTokens: Array.isArray(rest.gitlabTokens) ? rest.gitlabTokens : [], githubTokens: Array.isArray(rest.githubTokens) ? rest.githubTokens : [], journal: normalizeJournal(rest.journal), aliases: normalizeAliases(rest.aliases), locale: isLocale(locale) ? locale : DEFAULT_LOCALE };
+  return { ...rest, gitlabTokens: Array.isArray(rest.gitlabTokens) ? rest.gitlabTokens : [], githubTokens: Array.isArray(rest.githubTokens) ? rest.githubTokens : [], apm: rest.apm && typeof rest.apm === "object" ? rest.apm : null, journal: normalizeJournal(rest.journal), aliases: normalizeAliases(rest.aliases), locale: isLocale(locale) ? locale : DEFAULT_LOCALE };
 }
 
 export function saveSettings(db: Db, patch: Partial<Settings>) {
