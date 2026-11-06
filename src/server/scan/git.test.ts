@@ -11,7 +11,9 @@ import {
   buildWorkers,
   HISTORY_WEEKS,
   MAX_NAMED_AUTHORS,
+  parseBlame,
   parseBranches,
+  readBlame,
   parseChanges,
   parseLog,
   parseNumstat,
@@ -738,5 +740,36 @@ describe("readGitFacts", () => {
     const dir = mkdtempSync(join(tmpdir(), "pm-git-"));
     dirs.push(dir);
     await expect(readGitFacts(dir)).rejects.toThrow();
+  });
+});
+
+describe("blame", () => {
+  it("reads who last changed each line, uncommitted ones included", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first\n");
+    writeFileSync(join(dir, "a.txt"), "first\nnew line\n");
+    const blame = await readBlame(dir, "a.txt");
+    if (!blame) throw new Error("no blame");
+    const [first, last] = [blame.lines[0], blame.lines.at(-1)!];
+    expect(blame.commits[first]).toMatchObject({ subject: "first", author: expect.any(String), committed: true });
+    expect(blame.lines).toHaveLength(2);
+    expect(blame.commits[last].committed).toBe(false);
+  });
+
+  it("has nothing for an untracked file or a path outside", async () => {
+    const dir = tempRepo();
+    commit(dir, "a.txt", "first");
+    writeFileSync(join(dir, "loose.txt"), "x\n");
+    expect(await readBlame(dir, "loose.txt")).toBeNull();
+    expect(await readBlame(dir, "../a.txt")).toBeNull();
+  });
+
+  it("gives each commit's details once, for all its lines", () => {
+    const hash = "a".repeat(40);
+    const output = [`${hash} 1 1 2`, "author Ann", "author-time 100", "summary Start", "\tone", `${hash} 2 2`, "\ttwo", ""].join("\n");
+    expect(parseBlame(output)).toEqual({
+      commits: { [hash]: { hash: "aaaaaaaa", author: "Ann", at: 100_000, subject: "Start", committed: true } },
+      lines: [hash, hash],
+    });
   });
 });

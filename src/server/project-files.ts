@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import { type EnvEntry, parseEnv } from "@/lib/env-file";
+import type { CodeToken } from "./highlight";
 
 export type { EnvEntry };
 export { parseEnv };
@@ -36,6 +37,35 @@ export async function readEnvFile(projectPath: string, fileName: string): Promis
   if (!ENV_FILE.test(fileName)) return null;
   const content = await readRegularFile(join(projectPath, fileName), MAX_ENV_BYTES);
   return content === null ? null : parseEnv(content);
+}
+
+const MAX_SOURCE_BYTES = 1024 * 1024;
+
+export type SourceFile =
+  /** `tokens` is set by the caller that colors it, null when it stays plain. */
+  | { kind: "text"; content: string; sizeBytes: number; tokens?: CodeToken[][] | null }
+  | { kind: "binary" | "tooLarge"; sizeBytes: number }
+  /** Its values are secrets: the Env tab shows them, masked. */
+  | { kind: "env" }
+  | { kind: "unreadable" };
+
+/** For the file explorer, read-only. A link, or a path leading out of the project, is not read. */
+export async function readProjectSource(projectPath: string, relative: string): Promise<SourceFile> {
+  if (!isInside(relative)) return { kind: "unreadable" };
+  const clean = normalize(relative);
+  if (ENV_FILE.test(clean.split("/").pop() ?? "")) return { kind: "env" };
+  const path = join(projectPath, clean);
+  try {
+    const [realRoot, realFile, stat] = await Promise.all([realpath(projectPath), realpath(path), lstat(path)]);
+    if (!realFile.startsWith(`${realRoot}/`) || !stat.isFile()) return { kind: "unreadable" };
+    if (stat.size > MAX_SOURCE_BYTES) return { kind: "tooLarge", sizeBytes: stat.size };
+    const bytes = await readFile(path);
+    // What git itself looks at to tell a binary file.
+    if (bytes.subarray(0, 8000).includes(0)) return { kind: "binary", sizeBytes: stat.size };
+    return { kind: "text", content: bytes.toString("utf8"), sizeBytes: stat.size };
+  } catch {
+    return { kind: "unreadable" };
+  }
 }
 
 /** Regenerable or internal folders: shown so that they are known to exist, never opened. */

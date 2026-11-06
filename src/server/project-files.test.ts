@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listProjectFolder, parseEnv, readEnvFile, readFolderSizes, readProjectDoc } from "./project-files";
+import { listProjectFolder, parseEnv, readEnvFile, readFolderSizes, readProjectDoc, readProjectSource } from "./project-files";
 
 let base: string;
 let project: string;
@@ -152,5 +152,25 @@ describe("listProjectFolder", () => {
     const listing = await listProjectFolder(project, "many");
     expect(listing?.entries).toHaveLength(500);
     expect(listing?.hiddenCount).toBe(5);
+  });
+});
+
+describe("readProjectSource", () => {
+  it("reads text, and only tells what binary, large or .env files are", async () => {
+    writeFileSync(join(project, "docs", "a.ts"), "const a = 1;\n");
+    writeFileSync(join(project, "image.bin"), Buffer.from([1, 0, 2]));
+    writeFileSync(join(project, "big.txt"), "x".repeat(1024 * 1024 + 1));
+    writeFileSync(join(project, ".env.local"), "SECRET=1");
+    expect(await readProjectSource(project, "docs/a.ts")).toEqual({ kind: "text", content: "const a = 1;\n", sizeBytes: 13 });
+    expect(await readProjectSource(project, "image.bin")).toEqual({ kind: "binary", sizeBytes: 3 });
+    expect((await readProjectSource(project, "big.txt")).kind).toBe("tooLarge");
+    expect(await readProjectSource(project, ".env.local")).toEqual({ kind: "env" });
+  });
+
+  it("reads nothing outside the project, even through a link", async () => {
+    symlinkSync(join(base, "secret.txt"), join(project, "link.txt"));
+    expect(await readProjectSource(project, "../secret.txt")).toEqual({ kind: "unreadable" });
+    expect(await readProjectSource(project, "link.txt")).toEqual({ kind: "unreadable" });
+    expect(await readProjectSource(project, "docs")).toEqual({ kind: "unreadable" });
   });
 });

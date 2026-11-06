@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { isAbsolute, normalize } from "node:path";
 import { mapLimit } from "./limit";
 
 const run = promisify(execFile);
@@ -702,6 +703,44 @@ export async function readWorkingDiff(path: string): Promise<CommitFile[] | null
   const listed = others.split("\0").filter(Boolean).map((file, index) => ({ file, showPatch: index < UNTRACKED_PATCH_LIMIT }));
   const untracked = await mapLimit(listed, UNTRACKED_CONCURRENCY, ({ file, showPatch }) => readUntrackedFile(path, file, showPatch));
   return [...attachPatches(parseNumstat(numstat ?? ""), patch), ...untracked];
+}
+
+export type BlameCommit = { hash: string; author: string; at: number; subject: string; committed: boolean };
+/** `lines[i]` is the hash of the commit that last changed line i + 1. */
+export type Blame = { commits: Record<string, BlameCommit>; lines: string[] };
+
+/** From `git blame --porcelain`, where a commit's details come only with its first line. */
+export function parseBlame(output: string): Blame {
+  const commits: Record<string, BlameCommit> = {};
+  const lines: string[] = [];
+  let hash = "";
+  let line = 0;
+  for (const row of output.split("\n")) {
+    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(row);
+    if (header) {
+      [, hash] = header;
+      line = Number(header[2]);
+      commits[hash] ??= { hash: hash.slice(0, 8), author: "", at: 0, subject: "", committed: !/^0+$/.test(hash) };
+    } else if (row.startsWith("\t")) {
+      lines[line - 1] = hash;
+    } else if (hash) {
+      const space = row.indexOf(" ");
+      const key = row.slice(0, space);
+      const value = row.slice(space + 1);
+      if (key === "author") commits[hash].author = value;
+      else if (key === "author-time") commits[hash].at = Number(value) * 1000;
+      else if (key === "summary") commits[hash].subject = value;
+    }
+  }
+  return { commits, lines };
+}
+
+/** Of the file as it is on disk, uncommitted lines included. Null for an untracked file. */
+export async function readBlame(path: string, file: string): Promise<Blame | null> {
+  const clean = normalize(file);
+  if (isAbsolute(clean) || clean === ".." || clean.startsWith("../")) return null;
+  const output = await gitOptional(path, ["blame", "--porcelain", "--", clean]);
+  return output === undefined ? null : parseBlame(output);
 }
 
 /** A reference comes from the browser: it must not be able to read as an option or a range. */

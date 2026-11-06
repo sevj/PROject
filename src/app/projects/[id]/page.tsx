@@ -47,7 +47,7 @@ import { MarkdownDoc } from "./markdown-doc";
 import { readDependencies } from "@/server/dependencies";
 import { ConfigShare } from "./config-share";
 import { ProjectSites } from "./project-sites";
-import { ProjectTree } from "./project-tree";
+import { ProjectExplorer } from "./project-tree";
 import { SecurityTab } from "./security-tab";
 
 const TABS = ["general", "docker", "git", "env", "environments", "http", "claude", "security", "structure", "documentation"] as const;
@@ -93,7 +93,7 @@ function ActivityChart({ weeks, m }: { weeks: number[]; m: Messages["sheet"] }) 
 async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
   await connection();
   const { id } = await params;
-  const { doc, tab: requestedTab, git: requestedGit } = await searchParams;
+  const { doc, file, tab: requestedTab, git: requestedGit } = await searchParams;
   const tab: Tab = TABS.find((item) => item === requestedTab) ?? "general";
   const gitSection = GIT_SECTIONS.find((item) => item === requestedGit) ?? "general";
   const projectId = Number(id);
@@ -317,9 +317,19 @@ async function Sheet({ params, searchParams }: PageProps<"/projects/[id]">) {
 
           {tab === "structure" ? (
             <div className="grid gap-4">
-              <section className={CARD}>
-                {tree ? <ProjectTree projectId={row.id} listing={tree} /> : <p className="text-mut">{m.unreadableFolder}</p>}
-              </section>
+              {tree ? (
+                <ProjectExplorer
+                  projectId={row.id}
+                  listing={tree}
+                  initialFile={typeof file === "string" ? file : null}
+                  now={now}
+                  hasGit={row.hasGit}
+                />
+              ) : (
+                <section className={CARD}>
+                  <p className="text-mut">{m.unreadableFolder}</p>
+                </section>
+              )}
               {tree && row.hasGit && !row.abandoned ? <ProjectCleanup projectId={row.id} /> : null}
             </div>
           ) : null}

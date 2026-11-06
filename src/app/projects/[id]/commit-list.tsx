@@ -67,7 +67,7 @@ export function CommitFiles({ files, first }: { files: CommitFile[]; first?: str
   );
 }
 
-function CommitModal({
+export function CommitModal({
   hash,
   projectId,
   subject,

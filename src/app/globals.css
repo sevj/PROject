@@ -482,3 +482,11 @@ body {
     animation: none;
   }
 }
+
+/* Code colored by Shiki on the server: each token carries both themes' colors. */
+.code-token {
+  color: var(--dark);
+}
+:root[data-theme="light"] .code-token {
+  color: var(--light);
+}

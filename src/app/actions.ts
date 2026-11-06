@@ -16,6 +16,7 @@ import {
   setStatus,
 } from "@/server/classification";
 import { getDb } from "@/server/db/client";
+import { highlightSource } from "@/server/highlight";
 import { normalizeHost, removeGitlabToken, saveGitlabToken } from "@/server/gitlab";
 import { removeGithubToken, saveGithubToken } from "@/server/github";
 import { type DirectoryListing, listDirectories } from "@/server/directory-browser";
@@ -48,10 +49,28 @@ import {
   pullFastForward,
   switchBranch,
 } from "@/server/git-actions";
-import { type CommitFile, type CommitPage, type CommitView, readCommits, readCommitView, readStashView, readWorkingDiff } from "@/server/scan/git";
+import {
+  type Blame,
+  type CommitFile,
+  type CommitPage,
+  type CommitView,
+  readBlame,
+  readCommits,
+  readCommitView,
+  readStashView,
+  readWorkingDiff,
+} from "@/server/scan/git";
 import { type ContainerAction, composeDirectories, launch, runCompose, runContainers } from "@/server/project-actions";
 import { declareEnvVariable, restoreEnvValue, saveEnvValue } from "@/server/env-vars";
-import { type EnvEntry, listProjectFolder, readEnvFile, readFolderSizes, type TreeListing } from "@/server/project-files";
+import {
+  type EnvEntry,
+  listProjectFolder,
+  readEnvFile,
+  readFolderSizes,
+  readProjectSource,
+  type SourceFile,
+  type TreeListing,
+} from "@/server/project-files";
 import { getProject, getRegistry } from "@/server/registry";
 import {
   changeDirectory,
@@ -131,6 +150,19 @@ export async function listFolderSizes(projectId: number, relative: string): Prom
 export async function listProjectTree(projectId: number, relative: string): Promise<TreeListing | null> {
   const project = getProject(getDb(), projectId);
   return project ? listProjectFolder(project.absolutePath, String(relative)) : null;
+}
+
+/** Read-only, for the file explorer: the path comes from the browser and is checked there. */
+export async function readSourceFile(projectId: number, relative: string): Promise<SourceFile> {
+  const project = getProject(getDb(), projectId);
+  if (!project || project.row.missing) return { kind: "unreadable" };
+  const file = await readProjectSource(project.absolutePath, String(relative));
+  return file.kind === "text" ? { ...file, tokens: await highlightSource(String(relative), file.content) } : file;
+}
+
+export async function loadBlame(projectId: number, relative: string): Promise<Blame | null> {
+  const target = gitTarget(projectId);
+  return "error" in target ? null : readBlame(target.path, String(relative));
 }
 
 export async function revealEnvFile(projectId: number, fileName: string): Promise<EnvEntry[] | null> {
